@@ -27,6 +27,12 @@ const envSchema = z.object({
   CLAUDE_MAX_TOKENS:       z.string().default('512'),
   CLAUDE_TEMPERATURE:      z.string().default('0.3'),
 
+  // v1.5 dual-agent model overrides — optional, fall back to defaults in claude.service.js
+  // QUALIFIER → claude-haiku (fast/cheap analysis)
+  // CLOSER    → claude-sonnet (better persuasive copy)
+  QUALIFIER_MODEL:         z.string().optional(),
+  CLOSER_MODEL:            z.string().optional(),
+
   META_API_URL:            z.string().url().default('https://graph.facebook.com'),
   META_API_VERSION:        z.string().default('v20.0'),
 
