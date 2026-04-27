@@ -36,11 +36,11 @@ const KPIS = [
 ];
 
 const RECENT_THREADS = [
-  { id:'t1', name:'Ahmed Khan',     phone:'+92 333 4421872', preview:'BTREIT mein invest karna chahta hoon. Minimum kya hai?',     when:'2m',  handler:'AI'    },
-  { id:'t2', name:'Ayesha Malik',   phone:'+92 321 9870034', preview:'Quarterly dividend kitna milta hai?',                        when:'18m', handler:'AI'    },
-  { id:'t3', name:'Hassan Raza',    phone:'+92 300 7654129', preview:'CDC details bhejen, 4 cr ka subscription karna hai.',         when:'47m', handler:'Human' },
-  { id:'t4', name:'Fatima Sheikh',  phone:'+92 345 9001775', preview:'Mufti review certificate ka wait karti hoon.',                when:'1h',  handler:'Human' },
-  { id:'t5', name:'Bilal Ahmed',    phone:'+92 312 8866442', preview:'Board ko forward kiya hai prospectus, response next week.',  when:'2h',  handler:'AI'    },
+  { id:'t1', name:'Ahmed Khan',     phone:'+92 333 4421872', preview:'1 unit means kya? 100 sft? Itna chota?',                            when:'2m',  handler:'AI'    },
+  { id:'t2', name:'Ayesha Malik',   phone:'+92 321 9870034', preview:'PSX listing 3 saal mein? Pehle exit ka option hai?',                when:'18m', handler:'AI'    },
+  { id:'t3', name:'Hassan Raza',    phone:'+92 300 7654129', preview:'4 cr ke shop units + sharing basis ke terms confirm karwa dein.',  when:'47m', handler:'Human' },
+  { id:'t4', name:'Fatima Sheikh',  phone:'+92 345 9001775', preview:'RDA aur CDC approval ke documents ka wait karti hoon.',             when:'1h',  handler:'Human' },
+  { id:'t5', name:'Bilal Ahmed',    phone:'+92 312 8866442', preview:'Studio vs 1-bed vs fractional — return same hai ya different?',    when:'2h',  handler:'AI'    },
 ];
 
 const PIPELINE = [
