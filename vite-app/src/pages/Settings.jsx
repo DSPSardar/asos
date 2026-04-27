@@ -232,7 +232,7 @@ function WhatsAppTab({ onSave }) {
   const [sending,    setSending]      = useState(false);
   const phoneId      = '102345987612345';
   const accessToken  = 'EAAGm0PX4ZCpsBO0Z****************************************************jK7Lz2yQX';
-  const webhookUrl   = 'https://api.boulevardtower.pk/webhooks/whatsapp';
+  const webhookUrl   = 'https://api.getaisales.com/webhooks/whatsapp/{tenant_id}';
 
   const sendTest = (e) => {
     e.preventDefault();
@@ -262,7 +262,7 @@ function WhatsAppTab({ onSave }) {
           </span>
           <div className="flex-1">
             <div className="text-sm font-semibold text-emerald-300">Connected</div>
-            <div className="text-xs tabular-nums text-emerald-300/70">+92 340 0821252 · Boulevard Tower REIT</div>
+            <div className="text-xs tabular-nums text-emerald-300/70">+92 340 0821252 · Acme Co</div>
           </div>
         </div>
 
@@ -318,7 +318,7 @@ function WhatsAppTab({ onSave }) {
           </div>
         )}
         <p className="text-[11px] text-slate-500">
-          Need help connecting? <a href="mailto:support@asos.io" className="text-accent hover:underline">Contact support →</a>
+          Need help connecting? <a href="mailto:support@getaisales.com" className="text-accent hover:underline">Contact support →</a>
         </p>
       </Section>
     </>
@@ -347,7 +347,7 @@ function AITab({ onSave }) {
     <>
       <Section
         title="AI Configuration"
-        description="Tune the dual-agent (Qualifier + Closer) behavior for your tenant."
+        description="Tune the dual-agent (Qualifier + Closer) behavior. Each tenant configures their own system prompt — the example below is the Boulevard Tower REIT demo tenant."
         footer={<PrimaryButton onClick={onSave}>Save Changes</PrimaryButton>}
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -427,9 +427,9 @@ function AITab({ onSave }) {
 // TAB 3 — Team
 // ─────────────────────────────────────────────────────────────
 const TEAM = [
-  { id:'u1', name:'Saad Ali',     email:'saad@boulevardtower.pk',    role:'Admin',   lastActive:'2m ago',   avatar:'SA' },
-  { id:'u2', name:'Hira Ahmed',   email:'hira@boulevardtower.pk',    role:'Manager', lastActive:'18m ago',  avatar:'HA' },
-  { id:'u3', name:'Bilal Ahmed',  email:'bilal@boulevardtower.pk',   role:'Agent',   lastActive:'1h ago',   avatar:'BA' },
+  { id:'u1', name:'Saad Ali',     email:'saad@acme.com',    role:'Admin',   lastActive:'2m ago',   avatar:'SA' },
+  { id:'u2', name:'Hira Ahmed',   email:'hira@acme.com',    role:'Manager', lastActive:'18m ago',  avatar:'HA' },
+  { id:'u3', name:'Bilal Ahmed',  email:'bilal@acme.com',   role:'Agent',   lastActive:'1h ago',   avatar:'BA' },
 ];
 
 function TeamTab({ onSave }) {
@@ -528,7 +528,7 @@ function InviteModal({ onClose, onInvite }) {
         <div className="mt-4 space-y-3">
           <Field label="Email">
             <input required type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)}
-              placeholder="ahmed@boulevardtower.pk" className="input-dark w-full rounded-lg px-3 py-2 text-sm" />
+              placeholder="you@acme.com" className="input-dark w-full rounded-lg px-3 py-2 text-sm" />
           </Field>
           <Field label="Role">
             <select value={role} onChange={(e) => setRole(e.target.value)} className="input-dark w-full cursor-pointer rounded-lg px-3 py-2 text-sm">
@@ -680,8 +680,8 @@ function BillingTab() {
           P
         </div>
         <div className="flex-1">
-          <div className="text-sm font-semibold text-slate-100">Pro Plan · $99 / month</div>
-          <div className="text-xs text-slate-500">Renews 1 May 2026 · 3 team seats included</div>
+          <div className="text-sm font-semibold text-slate-100">Pro Plan · $149 / month</div>
+          <div className="text-xs text-slate-500">Renews 1 May 2026 · 5 WhatsApp numbers · 10 team seats</div>
         </div>
       </div>
       <PrimaryButton onClick={() => navigate('/billing')}>

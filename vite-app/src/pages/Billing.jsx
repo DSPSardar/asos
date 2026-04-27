@@ -1,83 +1,107 @@
 // src/pages/Billing.jsx — Billing & Plan (route: /billing).
-// Stripe checkout placeholders, plan compare, usage, invoices.
+// 4-tier global SaaS pricing (Starter / Growth / Pro / Agency) — mirrors getaisales-Landing.html.
 import React, { useState, useCallback } from 'react';
 import { PageHeader } from '@pages/Layout';
 
 // ─────────────────────────────────────────────────────────────
-// Plan + invoice mock data
+// Plan + invoice mock data — single source of truth: landing page
 // ─────────────────────────────────────────────────────────────
 const PLANS = [
   {
-    id:'free',
-    name:'Free',
-    monthly: 0,
-    yearly:  0,
-    tagline:'Try the AI sales bot risk-free.',
+    id:'starter',
+    name:'Starter',
+    monthly: 29,
+    yearly:  276, // mirrors landing data-y=23/mo
+    tagline:'For solo founders just starting with WhatsApp sales automation.',
     features:[
-      '100 WhatsApp messages / month',
-      '1 user, 1 WhatsApp number',
-      'Claude Haiku model',
-      'Community support',
+      '500 contacts',
+      '2,000 AI messages / month',
+      '1 WhatsApp number',
+      '1 CRM pipeline',
+      'Basic Meta Ads attribution',
+      'Email support',
+    ],
+    cta:'Downgrade',
+  },
+  {
+    id:'growth',
+    name:'Growth',
+    monthly: 79,
+    yearly:  756, // landing data-y=63/mo
+    tagline:'For small teams running active Meta Ad campaigns.',
+    features:[
+      '2,500 contacts',
+      '10,000 AI messages / month',
+      '2 WhatsApp numbers',
+      '3 CRM pipelines',
+      'Full Meta Ads + CAPI',
+      'Chat support',
     ],
     cta:'Downgrade',
   },
   {
     id:'pro',
     name:'Pro',
-    monthly: 99,
-    yearly:  990, // ~17% off
-    tagline:'For SMBs running real WhatsApp sales operations.',
+    monthly: 149,
+    yearly:  1428, // landing data-y=119/mo
+    tagline:'For sales teams scaling WhatsApp + Meta into a real revenue engine.',
     highlight:true,
+    badge:'Most Popular',
     features:[
-      '5,000 WhatsApp messages / month',
-      'Up to 5 users + roles',
-      'Claude Sonnet (default) + Haiku',
-      'Meta Ads attribution',
-      'Stripe billing webhooks',
-      'Email + WhatsApp alerts',
-      'Priority email support',
+      '10,000 contacts',
+      '50,000 AI messages / month',
+      '5 WhatsApp numbers',
+      '10 CRM pipelines',
+      'Custom AI persona',
+      'Priority support',
     ],
     cta:'Current plan',
   },
   {
-    id:'enterprise',
-    name:'Enterprise',
-    monthly: null, // custom
-    yearly:  null,
-    tagline:'For large teams with bespoke compliance and volume needs.',
+    id:'agency',
+    name:'Agency',
+    monthly: 349,
+    yearly:  3348, // landing data-y=279/mo
+    tagline:'For agencies reselling AI sales automation under their own brand.',
     features:[
-      'Unlimited WhatsApp messages',
-      'Unlimited users + SSO',
-      'Claude Opus + dedicated capacity',
-      'CRM integrations + custom webhooks',
-      'Dedicated CSM + 99.9% SLA',
-      'On-prem deployment option',
+      'Unlimited contacts',
+      '250,000 AI messages / month',
+      '25 sub-tenants',
+      'White-label dashboard',
+      'Custom integrations',
+      'Dedicated support',
     ],
-    cta:'Contact sales',
+    cta:'Upgrade to Agency',
   },
 ];
 
 const INVOICES = [
-  { id:'inv-2026-04', date:'1 Apr 2026', plan:'Pro Monthly', amount:99.00, status:'Paid' },
-  { id:'inv-2026-03', date:'1 Mar 2026', plan:'Pro Monthly', amount:99.00, status:'Paid' },
-  { id:'inv-2026-02', date:'1 Feb 2026', plan:'Pro Monthly', amount:99.00, status:'Paid' },
-  { id:'inv-2026-01', date:'1 Jan 2026', plan:'Free Trial',  amount: 0.00, status:'—' },
+  { id:'inv-2026-04', date:'1 Apr 2026', plan:'Pro Monthly', amount:149.00, status:'Paid' },
+  { id:'inv-2026-03', date:'1 Mar 2026', plan:'Pro Monthly', amount:149.00, status:'Paid' },
+  { id:'inv-2026-02', date:'1 Feb 2026', plan:'Pro Monthly', amount:149.00, status:'Paid' },
+  { id:'inv-2026-01', date:'1 Jan 2026', plan:'Pro Monthly', amount:149.00, status:'Paid' },
+  { id:'inv-2025-12', date:'1 Dec 2025', plan:'Pro Monthly', amount:149.00, status:'Paid' },
+  { id:'inv-2025-11', date:'1 Nov 2025', plan:'Pro Monthly', amount:149.00, status:'Paid' },
 ];
 
 const USAGE = {
-  aiCost:    { used: 42.18,  limit: 200,  unit: '$',   label: 'AI cost (USD)' },
-  messages:  { used: 4238,   limit: 5000, unit: '',    label: 'WhatsApp messages' },
-  leads:     { used: 247,    limit: null, unit: '',    label: 'Leads created' },
-  seats:     { used: 3,      limit: 5,    unit: '',    label: 'Team seats' },
+  aiCost:   { used: 218.42, limit: 1000,  unit: '$', label: 'AI cost (USD)' },
+  messages: { used: 32400,  limit: 50000, unit: '',  label: 'AI messages' },
+  numbers:  { used: 3,      limit: 5,     unit: '',  label: 'WhatsApp numbers' },
+  seats:    { used: 4,      limit: 10,    unit: '',  label: 'Team seats' },
 };
+
+// Demo proration: Pro $149 → Agency $349, ~13 days left in month
+const PRORATION_TODAY = 87;
 
 // ─────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────
 export default function Billing() {
-  const [cycle, setCycle]   = useState('monthly'); // 'monthly' | 'yearly'
-  const [toast, setToast]   = useState(null);
+  const [cycle, setCycle]               = useState('monthly'); // 'monthly' | 'yearly'
+  const [toast, setToast]               = useState(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [upgradeTarget, setUpgradeTarget] = useState(null); // plan object or null
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -85,15 +109,22 @@ export default function Billing() {
   }, []);
 
   const onSubscribe = (plan) => {
-    if (plan.id === 'pro') return; // current
-    if (plan.id === 'enterprise') {
-      window.location.href = 'mailto:sales@asos.io?subject=ASOS%20Enterprise%20inquiry';
+    if (plan.id === 'pro') return; // current plan
+    if (plan.id === 'agency') {
+      // Sales-led upgrade — open the upgrade modal with proration
+      setUpgradeTarget(plan);
       return;
     }
-    // FREE downgrade
-    if (confirm(`Demo: downgrade to ${plan.name}? You will lose access to Pro features at the end of this cycle.`)) {
+    // Starter / Growth = downgrade
+    if (confirm(`Demo: downgrade to ${plan.name}? You'll lose access to Pro features at the end of this cycle.`)) {
       showToast(`Plan change to ${plan.name} queued (demo)`);
     }
+  };
+
+  const onConfirmUpgrade = () => {
+    const name = upgradeTarget?.name ?? 'Agency';
+    setUpgradeTarget(null);
+    showToast(`Upgrade to ${name} confirmed (demo) · prorated $${PRORATION_TODAY} charged today`);
   };
 
   const onUpdateCard  = () => showToast('Stripe customer portal would open in production');
@@ -133,6 +164,14 @@ export default function Billing() {
           onConfirm={onCancel}
         />
       )}
+      {upgradeTarget && (
+        <UpgradeModal
+          plan={upgradeTarget}
+          proration={PRORATION_TODAY}
+          onClose={() => setUpgradeTarget(null)}
+          onConfirm={onConfirmUpgrade}
+        />
+      )}
       <Toast text={toast} />
     </>
   );
@@ -156,7 +195,7 @@ function CurrentPlanCard({ cycle, setCycle, onUpdateCard }) {
               <div className="text-[11px] uppercase tracking-wider text-emerald-400">● Active</div>
             </div>
           </div>
-          <div className="text-sm text-slate-400">$99 / month · billed monthly</div>
+          <div className="text-sm text-slate-400">$149 / month · billed monthly</div>
           <div className="mt-1 text-xs text-slate-500">Renews 1 May 2026 · auto-renew</div>
         </div>
 
@@ -174,7 +213,7 @@ function CurrentPlanCard({ cycle, setCycle, onUpdateCard }) {
             >Yearly <span className="ml-1 rounded bg-emerald-500/20 px-1 text-[9px] text-emerald-300">Save 17%</span></button>
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            Switch saves PKR equivalent ~₨ 56,000 / year on the Pro plan.
+            Switch to yearly and save $360 / year on the Pro plan.
           </p>
         </div>
 
@@ -199,7 +238,7 @@ function CurrentPlanCard({ cycle, setCycle, onUpdateCard }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Plan comparison (3-up)
+// Plan comparison (4-up)
 // ─────────────────────────────────────────────────────────────
 function PlanComparison({ cycle, onSubscribe }) {
   return (
@@ -208,7 +247,7 @@ function PlanComparison({ cycle, onSubscribe }) {
         <h2 className="text-sm font-semibold tracking-tight text-slate-100">Compare plans</h2>
         <span className="text-xs text-slate-500">Pro is your current plan</span>
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {PLANS.map((p) => <PlanCard key={p.id} plan={p} cycle={cycle} onSubscribe={() => onSubscribe(p)} />)}
       </div>
     </section>
@@ -220,16 +259,17 @@ function PlanCard({ plan, cycle, onSubscribe }) {
   const isHighlight = plan.highlight;
   const priceLabel  = price === null ? 'Custom' : price === 0 ? 'Free' : `$${price}`;
   const cycleLabel  = price === null || price === 0 ? '' : cycle === 'yearly' ? '/ year' : '/ month';
+  const isCurrent   = plan.id === 'pro';
 
   return (
     <div className={`relative flex flex-col rounded-xl border p-5 transition-all ${
       isHighlight
-        ? 'border-accent/50 bg-gradient-to-b from-accent/10 to-transparent shadow-[0_0_30px_rgba(99,102,241,0.15)]'
+        ? 'border-violet-500/60 bg-gradient-to-b from-violet-500/10 to-transparent shadow-[0_0_30px_rgba(139,92,246,0.18)]'
         : 'border-slate-800/60 bg-surface/30 hover:border-slate-700'
     }`}>
-      {isHighlight && (
+      {plan.badge && (
         <span className="absolute -top-2.5 left-5 rounded-full bg-gradient-to-r from-accent to-accent2 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white shadow-md shadow-accent/30">
-          Current
+          {plan.badge}
         </span>
       )}
       <div className="text-sm font-semibold uppercase tracking-wider text-slate-200">{plan.name}</div>
@@ -251,14 +291,16 @@ function PlanCard({ plan, cycle, onSubscribe }) {
       </ul>
 
       <button
-        disabled={isHighlight}
+        disabled={isCurrent}
         onClick={onSubscribe}
         className={`mt-5 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
-          isHighlight
+          isCurrent
             ? 'cursor-not-allowed border border-slate-700/60 bg-surface2/40 text-slate-500'
-            : plan.id === 'enterprise'
-              ? 'border border-slate-700/60 bg-transparent text-slate-200 hover:bg-surface2/60'
-              : 'bg-gradient-to-r from-accent to-accent2 text-white shadow-md shadow-accent/20 hover:scale-[1.01]'
+            : isHighlight
+              ? 'bg-gradient-to-r from-accent to-accent2 text-white shadow-md shadow-accent/20 hover:scale-[1.01]'
+              : plan.id === 'agency'
+                ? 'bg-gradient-to-r from-accent to-accent2 text-white shadow-md shadow-accent/20 hover:scale-[1.01]'
+                : 'border border-slate-700/60 bg-transparent text-slate-200 hover:bg-surface2/60'
         }`}
       >
         {plan.cta}
@@ -407,7 +449,7 @@ function DangerZone({ onCancel }) {
         <div>
           <h2 className="text-sm font-semibold text-red-300">Cancel subscription</h2>
           <p className="mt-1 text-xs leading-relaxed text-red-300/70">
-            Your Pro plan will remain active until the end of your billing cycle (30 Apr 2026). After that, your workspace will revert to the Free plan and Pro features will be paused.
+            Your Pro plan will remain active until the end of your billing cycle (30 Apr 2026). After that, your workspace will revert to the Starter plan and Pro features will be paused.
           </p>
         </div>
         <button
@@ -437,7 +479,7 @@ function ConfirmCancelModal({ onClose, onConfirm }) {
       <div onClick={(e) => e.stopPropagation()} className="glass-card w-full max-w-md rounded-2xl p-6">
         <h2 className="text-base font-semibold tracking-tight text-slate-100">Cancel Pro subscription?</h2>
         <p className="mt-2 text-xs leading-relaxed text-slate-400">
-          You'll keep Pro access until <span className="font-semibold text-slate-200">30 Apr 2026</span>. After that, your workspace falls back to the Free plan: 100 messages/month, 1 user, Haiku model only.
+          You'll keep Pro access until <span className="font-semibold text-slate-200">30 Apr 2026</span>. After that, your workspace falls back to the Starter plan: 500 contacts, 2,000 AI messages/month, 1 WhatsApp number.
         </p>
         <p className="mt-3 text-xs text-slate-500">
           Type <code className="rounded bg-surface2 px-1 py-0.5 font-mono text-red-300">CANCEL</code> below to confirm.
@@ -459,6 +501,51 @@ function ConfirmCancelModal({ onClose, onConfirm }) {
             className="rounded-lg border border-red-500/30 bg-red-500/15 px-3 py-2 text-xs font-medium text-red-300 hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Cancel my plan
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Confirm upgrade modal (Pro → Agency)
+// ─────────────────────────────────────────────────────────────
+function UpgradeModal({ plan, proration, onClose, onConfirm }) {
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const upper = plan.name.toUpperCase();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fade-in" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="glass-card w-full max-w-md rounded-2xl p-6">
+        <h2 className="text-base font-semibold tracking-tight text-slate-100">
+          Confirm upgrade to {upper} — ${plan.monthly}/month
+        </h2>
+        <p className="mt-2 text-xs leading-relaxed text-slate-400">
+          You'll be charged a prorated <span className="font-semibold text-slate-200">${proration}</span> today for the rest of this billing cycle. Starting <span className="font-semibold text-slate-200">1 May 2026</span>, you'll be billed ${plan.monthly} / month on your default card.
+        </p>
+        <ul className="mt-3 space-y-1.5 rounded-lg border border-slate-800/60 bg-surface/30 p-3 text-xs text-slate-300">
+          {plan.features.slice(0, 4).map((f, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 h-3.5 w-3.5 shrink-0">
+                <path d="M5 12l5 5L20 7" />
+              </svg>
+              {f}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-slate-700/60 bg-transparent px-3 py-2 text-xs text-slate-300 hover:bg-surface2/60">
+            Keep Pro
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-lg bg-gradient-to-r from-accent to-accent2 px-3 py-2 text-xs font-medium text-white shadow-md shadow-accent/20 hover:scale-[1.01]"
+          >
+            Confirm upgrade · ${proration} today
           </button>
         </div>
       </div>
