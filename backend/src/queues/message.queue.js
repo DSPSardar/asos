@@ -5,9 +5,9 @@ const { Queue } = require('bullmq');
 const redis = require('../config/redis');
 const logger = require('../utils/logger');
 
-const MESSAGE_QUEUE = 'asos:messages';
-const META_EVENTS_QUEUE = 'asos:meta-events';
-const SCHEDULER_QUEUE = 'asos:scheduler';
+const MESSAGE_QUEUE = 'asos-messages';
+const META_EVENTS_QUEUE = 'asos-meta-events';
+const SCHEDULER_QUEUE = 'asos-scheduler';
 
 const messageQueue = new Queue(MESSAGE_QUEUE, {
   connection: redis,

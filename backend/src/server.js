@@ -16,8 +16,12 @@ const start = async () => {
     await prisma.$connect();
     logger.info('PostgreSQL connected');
 
-    // Test Redis
-    await redis.connect();
+    // Test Redis (avoid double-connect when BullMQ already initialized it)
+    if (redis.status === 'wait') {
+      await redis.connect();
+    } else {
+      await redis.ping();
+    }
 
     const app = createApp();
     const server = app.listen(PORT, () => {

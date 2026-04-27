@@ -5,8 +5,6 @@
 #   docker compose --env-file .env.production up -d
 # ─────────────────────────────────────────────────────────────
 
-version: '3.9'
-
 services:
 
   # ── PostgreSQL ──────────────────────────────────────────────
@@ -23,6 +21,8 @@ services:
       - ./infrastructure/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - asos_internal
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-asos_user} -d ${POSTGRES_DB:-asos_db}"]
       interval: 10s
@@ -39,6 +39,8 @@ services:
       - redis_data:/data
     networks:
       - asos_internal
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
@@ -97,11 +99,6 @@ services:
         condition: service_healthy
     networks:
       - asos_internal
-    deploy:
-      replicas: 2          # Run 2 worker instances for parallel processing
-      restart_policy:
-        condition: on-failure
-        max_attempts: 5
 
   # ── DB Migration (runs once then exits) ─────────────────────
   migrate:
