@@ -5,12 +5,13 @@
 
 FROM node:22-alpine AS deps
 WORKDIR /app
-RUN apk add --no-cache libc6-compat python3 make g++
+RUN apk add --no-cache libc6-compat python3 make g++ openssl openssl-dev
 COPY package.json package-lock.json* ./
 RUN npm ci --only=production && npm cache clean --force
 
 FROM node:22-alpine AS prisma
 WORKDIR /app
+RUN apk add --no-cache openssl openssl-dev
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY prisma ./prisma
@@ -21,7 +22,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN addgroup --system --gid 1001 nodejs && \
+RUN apk add --no-cache openssl openssl-dev && \
+    addgroup --system --gid 1001 nodejs && \
     adduser  --system --uid 1001 asos
 
 COPY --from=deps    /app/node_modules       ./node_modules
@@ -34,7 +36,6 @@ COPY package.json ./
 RUN chown -R asos:nodejs /app
 USER asos
 
-# Workers don't expose ports — they only consume from Redis queue
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD node -e "require('./src/config/redis').ping().then(()=>process.exit(0)).catch(()=>process.exit(1))"
 

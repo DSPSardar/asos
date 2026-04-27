@@ -7,8 +7,8 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 
-# Install build tools for native modules
-RUN apk add --no-cache libc6-compat python3 make g++
+# Install build tools + OpenSSL for Prisma
+RUN apk add --no-cache libc6-compat python3 make g++ openssl openssl-dev
 
 COPY package.json package-lock.json* ./
 RUN npm ci --only=production && npm cache clean --force
@@ -16,6 +16,8 @@ RUN npm ci --only=production && npm cache clean --force
 # ── Stage 2: Generate Prisma client ─────────────────────────
 FROM node:22-alpine AS prisma
 WORKDIR /app
+
+RUN apk add --no-cache openssl openssl-dev
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
@@ -30,8 +32,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Create non-root user for security
-RUN addgroup --system --gid 1001 nodejs && \
+# Install OpenSSL for Prisma + create non-root user
+RUN apk add --no-cache openssl openssl-dev && \
+    addgroup --system --gid 1001 nodejs && \
     adduser  --system --uid 1001 asos
 
 # Copy production deps + prisma client
