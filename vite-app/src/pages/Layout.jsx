@@ -1,6 +1,6 @@
 // src/pages/Layout.jsx — Authenticated app shell (sidebar + outlet)
-import React, { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@stores/auth.store';
 
 const NAV = [
@@ -20,8 +20,21 @@ const SETTINGS_NAV = [
 
 export default function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, tenant, logout } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Close drawer when route changes (mobile nav tap)
+  useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
+
+  // ESC closes drawer
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setDrawerOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawerOpen]);
 
   const handleLogout = () => {
     logout();
@@ -35,9 +48,22 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg text-slate-100">
-      {/* ── Sidebar ─────────────────────────────────────────── */}
-      <aside className="flex w-60 flex-col border-r border-slate-800/60 bg-surface/40 backdrop-blur-xl">
-        {/* Logo */}
+      {/* ── Mobile drawer backdrop ──────────────────────────── */}
+      {drawerOpen && (
+        <div
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+        />
+      )}
+
+      {/* ── Sidebar (drawer < md, static ≥ md) ──────────────── */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-slate-800/60 bg-surface/95 backdrop-blur-xl transition-transform duration-200 ease-out md:static md:z-auto md:translate-x-0 md:bg-surface/40 ${
+          drawerOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {/* Logo + mobile close */}
         <div className="flex h-16 items-center gap-2 border-b border-slate-800/60 px-5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-accent2 glow-accent">
             <span className="text-sm font-bold text-white">A</span>
@@ -46,6 +72,13 @@ export default function Layout() {
             <span className="text-sm font-semibold tracking-tight">ASOS</span>
             <span className="text-[10px] uppercase tracking-wider text-slate-500">AI Sales OS</span>
           </div>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            aria-label="Close menu"
+            className="ml-auto rounded-md p-1.5 text-slate-400 transition-colors hover:bg-surface2/60 hover:text-slate-100 md:hidden"
+          >
+            <IconClose className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Primary nav */}
@@ -85,7 +118,22 @@ export default function Layout() {
       </aside>
 
       {/* ── Main content ────────────────────────────────────── */}
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Mobile top bar (hamburger + brand) — hidden ≥ md */}
+        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-800/60 bg-surface/40 px-4 backdrop-blur-xl md:hidden">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open menu"
+            className="-ml-1 rounded-md p-2 text-slate-300 transition-colors hover:bg-surface2/60 hover:text-white"
+          >
+            <IconMenu className="h-5 w-5" />
+          </button>
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-accent2 glow-accent">
+            <span className="text-xs font-bold text-white">A</span>
+          </div>
+          <span className="text-sm font-semibold tracking-tight">ASOS</span>
+        </div>
+
         <div className="flex-1 overflow-y-auto">
           <Outlet />
         </div>
@@ -154,3 +202,5 @@ function IconCard(p){ return <svg {...svgProps(p)}><rect x="2" y="5" width="20" 
 function IconRocket(p){ return <svg {...svgProps(p)}><path d="M4.5 16.5c-1.5 1.5-2 5-2 5s3.5-.5 5-2c.9-.9.9-2.4 0-3.3a2.3 2.3 0 0 0-3.3.3ZM12 15l-3-3a22 22 0 0 1 4-7c1.6-2.4 3.5-3.6 6-3.5.1 2.5-1.1 4.4-3.5 6a22 22 0 0 1-7 4ZM9 12H4l4-4M15 9h5l-4 4"/></svg>; }
 function IconChevron(p){ return <svg {...svgProps(p)}><path d="m6 9 6 6 6-6"/></svg>; }
 function IconLogout(p){ return <svg {...svgProps(p)}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>; }
+function IconMenu(p){ return <svg {...svgProps(p)}><path d="M3 6h18M3 12h18M3 18h18"/></svg>; }
+function IconClose(p){ return <svg {...svgProps(p)}><path d="M18 6 6 18M6 6l12 12"/></svg>; }

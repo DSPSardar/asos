@@ -624,6 +624,10 @@ footer{
 ::-webkit-scrollbar-thumb{background:rgba(99,102,241,.25);border-radius:4px;}
 ::-webkit-scrollbar-thumb:hover{background:rgba(99,102,241,.4);}
 
+/* ── Mobile nav (hamburger + slide-down panel) ── */
+.nav-toggle{display:none;}
+.nav-mobile{display:none;}
+
 /* ── RESPONSIVE ── */
 @media(max-width:960px){
   .features-grid,.testi-grid{grid-template-columns:1fr 1fr;}
@@ -635,8 +639,54 @@ footer{
 @media(max-width:680px){
   .container,.nav-inner,.footer-inner,.stats-grid{padding-left:20px;padding-right:20px;}
   .nav-links{display:none;}
+  .nav-toggle{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+    width:38px;height:38px;margin-left:auto;margin-right:10px;
+    background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
+    border-radius:9px;cursor:pointer;padding:0;
+    transition:background .15s, border-color .15s;
+  }
+  .nav-toggle:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.14);}
+  .nav-toggle span{
+    display:block;width:16px;height:1.5px;background:var(--t1);border-radius:1px;
+    transition:transform .2s ease, opacity .15s ease;
+  }
+  .nav-toggle.open span:nth-child(1){transform:translateY(6.5px) rotate(45deg);}
+  .nav-toggle.open span:nth-child(2){opacity:0;}
+  .nav-toggle.open span:nth-child(3){transform:translateY(-6.5px) rotate(-45deg);}
+  .nav-mobile{
+    position:fixed;top:68px;left:0;right:0;z-index:99;
+    background:rgba(5,6,13,0.96);
+    backdrop-filter:blur(20px) saturate(180%);
+    -webkit-backdrop-filter:blur(20px) saturate(180%);
+    border-bottom:1px solid rgba(255,255,255,0.08);
+    padding:12px 20px 16px;
+    flex-direction:column;gap:2px;
+    transform:translateY(-8px);opacity:0;pointer-events:none;
+    transition:transform .2s ease, opacity .2s ease;
+  }
+  .nav-mobile.open{display:flex;transform:translateY(0);opacity:1;pointer-events:auto;}
+  .nav-mobile a{
+    color:var(--t1);font-size:15px;font-weight:500;text-decoration:none;
+    padding:12px 14px;border-radius:8px;
+    transition:background .15s, color .15s;
+  }
+  .nav-mobile a:hover,.nav-mobile a:active{background:rgba(255,255,255,0.05);color:var(--t0);}
+
   .hero{padding:120px 0 60px;}
-  .hero-visual{margin-top:48px;}
+  .eyebrow{
+    font-size:13px;
+    padding:9px 14px 9px 12px;
+    border-radius:18px;
+    line-height:1.4;
+    margin-bottom:26px;
+    text-align:left;
+    max-width:100%;
+  }
+  .hero-visual{margin-top:40px;}
+  .globe-wrap{width:320px;height:320px;}
+  .globe-svg{width:300px;height:300px;}
+
   .features-grid,.pricing-grid,.testi-grid,.footer-top{grid-template-columns:1fr;}
   .stats-grid{grid-template-columns:repeat(2, 1fr);gap:0;border:none;}
   .stat{border-right:none;padding:18px;border-bottom:1px solid rgba(255,255,255,0.05);}
@@ -645,6 +695,11 @@ footer{
   .cta-form{flex-direction:column;}
   .step-row{grid-template-columns:54px 1fr;gap:16px;}
   .step-num{width:42px;height:42px;font-size:13px;}
+}
+@media(max-width:480px){
+  .globe-wrap{width:280px;height:280px;}
+  .globe-svg{width:260px;height:260px;}
+  .eyebrow{font-size:12.5px;padding:8px 12px;}
 }
 </style>
 </head>
@@ -667,9 +722,18 @@ footer{
       <a href="#pricing" class="nav-link">Pricing</a>
       <a href="#testimonials" class="nav-link">Reviews</a>
     </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="navMobile">
+      <span></span><span></span><span></span>
+    </button>
     <a href="ASOS-Auth.html" class="btn btn-primary">Start Free Trial</a>
   </div>
 </nav>
+<div class="nav-mobile" id="navMobile">
+  <a href="#features" class="nav-link">Features</a>
+  <a href="#how" class="nav-link">How it Works</a>
+  <a href="#pricing" class="nav-link">Pricing</a>
+  <a href="#testimonials" class="nav-link">Reviews</a>
+</div>
 
 <!-- ── HERO ── -->
 <section class="hero">
@@ -1363,6 +1427,22 @@ footer{
     </div>
   </div>
 </footer>
+
+<script>
+  (function(){
+    const toggle = document.getElementById('navToggle');
+    const menu   = document.getElementById('navMobile');
+    if (!toggle || !menu) return;
+    const setOpen = (open) => {
+      toggle.classList.toggle('open', open);
+      menu.classList.toggle('open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+    };
+    toggle.addEventListener('click', () => setOpen(!menu.classList.contains('open')));
+    menu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setOpen(false)));
+    window.addEventListener('resize', () => { if (window.innerWidth > 680) setOpen(false); });
+  })();
+</script>
 
 </body>
 </html>

@@ -442,7 +442,38 @@ function TeamTab({ onSave }) {
         description="Invite teammates to your workspace. Each member can be Admin, Manager, or Agent."
         footer={<PrimaryButton onClick={() => setInviting(true)}>+ Invite Member</PrimaryButton>}
       >
-        <div className="overflow-hidden rounded-lg border border-slate-800/60">
+        {/* Mobile: card stack */}
+        <ul className="space-y-2 md:hidden">
+          {members.map((m) => (
+            <li key={m.id} className="rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent/30 to-accent2/30 text-xs font-semibold">{m.avatar}</div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-slate-100">{m.name}</div>
+                    <div className="truncate text-xs text-slate-500">{m.email}</div>
+                  </div>
+                </div>
+                <button onClick={() => alert(`Demo: would remove ${m.name}`)} className="shrink-0 text-[11px] text-slate-500 transition-colors hover:text-red-400">
+                  Remove
+                </button>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <select
+                  value={m.role}
+                  onChange={(e) => setMembers(members.map((x) => x.id === m.id ? { ...x, role: e.target.value } : x))}
+                  className="input-dark cursor-pointer rounded-md px-2 py-1 text-xs"
+                >
+                  <option>Admin</option><option>Manager</option><option>Agent</option>
+                </select>
+                <span className="text-xs tabular-nums text-slate-500">{m.lastActive}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        {/* Desktop: table */}
+        <div className="hidden overflow-hidden rounded-lg border border-slate-800/60 md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-surface/40 text-left text-[10px] uppercase tracking-wider text-slate-500">
@@ -573,7 +604,28 @@ function NotificationsTab({ onSave }) {
       description="Choose which events notify you, and on which channel."
       footer={<PrimaryButton onClick={onSave}>Save Preferences</PrimaryButton>}
     >
-      <div className="overflow-hidden rounded-lg border border-slate-800/60">
+      {/* Mobile: card stack */}
+      <ul className="space-y-2 md:hidden">
+        {items.map((it) => (
+          <li key={it.key} className="rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+            <div className="text-sm font-medium text-slate-100">{it.label}</div>
+            <div className="mt-0.5 text-xs text-slate-500">{it.desc}</div>
+            <div className="mt-3 flex items-center gap-5 border-t border-slate-800/40 pt-3">
+              <div className="flex items-center gap-2">
+                <Checkbox on={prefs[it.key].email}    onChange={() => flip(it.key, 'email')} />
+                <span className="text-xs text-slate-300">Email</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox on={prefs[it.key].whatsapp} onChange={() => flip(it.key, 'whatsapp')} />
+                <span className="text-xs text-slate-300">WhatsApp</span>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop: table */}
+      <div className="hidden overflow-hidden rounded-lg border border-slate-800/60 md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-surface/40 text-left text-[10px] uppercase tracking-wider text-slate-500">

@@ -165,6 +165,8 @@ export default function Conversations() {
   const [activeId, setActiveId] = useState('c6');
   const [filter,   setFilter]   = useState('all');
   const [search,   setSearch]   = useState('');
+  // Mobile-only master/detail toggle. md+ layouts ignore this and render both panes.
+  const [mobileView, setMobileView] = useState('list');
 
   const visible = useMemo(() => {
     return THREADS.filter((t) => {
@@ -184,20 +186,31 @@ export default function Conversations() {
   const active   = THREADS.find((t) => t.id === activeId) || THREADS[0];
   const messages = MESSAGES[active.id] || FALLBACK_MESSAGES(active);
 
+  const handleSelect = (id) => {
+    setActiveId(id);
+    setMobileView('detail');
+  };
+
   return (
     <div className="flex h-full">
       <ThreadList
         threads={visible}
         activeId={activeId}
-        onSelect={setActiveId}
+        onSelect={handleSelect}
         filter={filter}
         onFilter={setFilter}
         search={search}
         onSearch={setSearch}
         totalUnread={THREADS.reduce((s, t) => s + (t.unread || 0), 0)}
+        mobileView={mobileView}
       />
-      <ConvErrorBoundary resetKey={active.id}>
-        <ConversationView thread={active} messages={messages} />
+      <ConvErrorBoundary resetKey={active.id} mobileView={mobileView}>
+        <ConversationView
+          thread={active}
+          messages={messages}
+          mobileView={mobileView}
+          onBack={() => setMobileView('list')}
+        />
       </ConvErrorBoundary>
     </div>
   );
@@ -206,7 +219,7 @@ export default function Conversations() {
 // ─────────────────────────────────────────────────────────────
 // LEFT — Thread list
 // ─────────────────────────────────────────────────────────────
-function ThreadList({ threads, activeId, onSelect, filter, onFilter, search, onSearch, totalUnread }) {
+function ThreadList({ threads, activeId, onSelect, filter, onFilter, search, onSearch, totalUnread, mobileView }) {
   const FILTERS = [
     { id:'all',    label:'All' },
     { id:'unread', label:'Unread', badge: totalUnread || null },
@@ -215,7 +228,7 @@ function ThreadList({ threads, activeId, onSelect, filter, onFilter, search, onS
   ];
 
   return (
-    <aside className="flex w-[340px] shrink-0 flex-col border-r border-slate-800/60 bg-surface/30">
+    <aside className={`${mobileView === 'list' ? 'flex' : 'hidden'} w-full shrink-0 flex-col border-r border-slate-800/60 bg-surface/30 md:flex md:w-[340px]`}>
       {/* Header */}
       <div className="border-b border-slate-800/60 px-4 py-4">
         <div className="mb-3 flex items-center justify-between">
@@ -365,8 +378,9 @@ class ConvErrorBoundary extends React.Component {
   }
   render(){
     if (this.state.err) {
+      const mv = this.props.mobileView;
       return (
-        <section className="flex min-w-0 flex-1 flex-col items-center justify-center bg-bg p-8 text-center">
+        <section className={`${mv === 'detail' ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col items-center justify-center bg-bg p-8 text-center md:flex`}>
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-5 text-sm text-red-300 max-w-md">
             <div className="font-semibold mb-1">Couldn't render this conversation</div>
             <div className="text-xs text-red-300/80">{String(this.state.err?.message || this.state.err)}</div>
@@ -382,7 +396,7 @@ class ConvErrorBoundary extends React.Component {
 // ─────────────────────────────────────────────────────────────
 // RIGHT — Conversation view
 // ─────────────────────────────────────────────────────────────
-function ConversationView({ thread, messages }) {
+function ConversationView({ thread, messages, mobileView, onBack }) {
   const [aiOn, setAiOn]   = useState(thread.handler === 'AI');
   const [draft, setDraft] = useState('');
   const scrollRef = useRef(null);
@@ -403,9 +417,16 @@ function ConversationView({ thread, messages }) {
   };
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-bg">
+    <section className={`${mobileView === 'detail' ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col bg-bg md:flex`}>
       {/* Header */}
-      <header className="flex items-center gap-3 border-b border-slate-800/60 px-6 py-3.5">
+      <header className="flex items-center gap-3 border-b border-slate-800/60 px-4 py-3.5 md:px-6">
+        <button
+          onClick={onBack}
+          aria-label="Back to conversations"
+          className="-ml-1 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-surface2/60 hover:text-slate-100 md:hidden"
+        >
+          <IconBack className="h-5 w-5" />
+        </button>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent/30 to-accent2/30 text-xs font-semibold text-slate-200">
           {initials(thread.name)}
         </div>
@@ -427,7 +448,7 @@ function ConversationView({ thread, messages }) {
       </header>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-5">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-5 md:px-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-3">
           <DateDivider label="Today" />
           {messages.map((m) => <MessageBubble key={m.id} m={m} />)}
@@ -435,7 +456,7 @@ function ConversationView({ thread, messages }) {
       </div>
 
       {/* Status bar above composer */}
-      <div className={`flex items-center justify-between border-t px-6 py-2.5 text-xs ${
+      <div className={`flex items-center justify-between gap-3 border-t px-4 py-2.5 text-xs md:px-6 ${
         aiOn
           ? 'border-accent/20 bg-accent/5 text-accent'
           : 'border-amber-400/20 bg-amber-400/5 text-amber-300'
@@ -452,7 +473,7 @@ function ConversationView({ thread, messages }) {
       </div>
 
       {/* Composer */}
-      <div className="border-t border-slate-800/60 bg-surface/40 px-6 py-3">
+      <div className="border-t border-slate-800/60 bg-surface/40 px-4 py-3 md:px-6">
         <div className="mx-auto flex max-w-3xl items-end gap-2">
           <button
             type="button"
@@ -554,3 +575,4 @@ function svgProps(p) { return { fill:'none', stroke:'currentColor', strokeWidth:
 function IconSearch(p)   { return <svg {...svgProps(p)}><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>; }
 function IconPaperclip(p){ return <svg {...svgProps(p)}><path d="M21 12.5 12.5 21a5 5 0 0 1-7-7L14 5.5a3.5 3.5 0 1 1 5 5L10.5 19a2 2 0 0 1-3-3l8-8"/></svg>; }
 function IconSend(p)     { return <svg {...svgProps(p)}><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg>; }
+function IconBack(p)     { return <svg {...svgProps(p)}><path d="m15 18-6-6 6-6"/></svg>; }
