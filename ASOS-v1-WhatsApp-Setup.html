@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASOS — WhatsApp Setup Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#030712;--surface:#0f172a;--surface2:#1e293b;--border:rgba(99,102,241,.12);--accent:#6366f1;--green:#10b981;--yellow:#f59e0b;--red:#ef4444;--cyan:#06b6d4;--purple:#8b5cf6;--text:#f1f5f9;--text2:#94a3b8;--text3:#475569;--mono:'JetBrains Mono',monospace;--font:'Space Grotesk',sans-serif;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.6;min-height:100vh;}
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(99,102,241,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,.03) 1px,transparent 1px);background-size:56px 56px;}
+
+  header{position:sticky;top:0;z-index:100;background:rgba(3,7,18,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);height:52px;display:flex;align-items:center;padding:0 2rem;gap:16px;}
+  .logo{font-family:var(--mono);font-size:13px;display:flex;align-items:center;gap:8px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);}
+
+  .layout{display:flex;max-width:1100px;margin:0 auto;gap:0;position:relative;z-index:1;}
+
+  /* ── Sidebar TOC ── */
+  .toc{width:220px;flex-shrink:0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto;padding:1.5rem 1rem;border-right:1px solid var(--border);}
+  .toc-title{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;}
+  .toc-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text3);transition:all .15s;margin-bottom:2px;border-left:2px solid transparent;}
+  .toc-item:hover{color:var(--text2);background:rgba(99,102,241,.05);}
+  .toc-item.active{color:var(--green);border-left-color:var(--green);background:rgba(16,185,129,.05);}
+  .toc-num{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:var(--mono);flex-shrink:0;}
+  .toc-item.active .toc-num{background:var(--green);color:#000;}
+  .toc-item:not(.active) .toc-num{background:var(--surface2);color:var(--text3);}
+
+  /* ── Main content ── */
+  .content{flex:1;padding:2.5rem 2.5rem 6rem;min-width:0;}
+
+  /* Hero */
+  .hero{margin-bottom:3rem;padding-bottom:2rem;border-bottom:1px solid var(--border);}
+  .eyebrow{font-size:11px;color:var(--green);letter-spacing:3px;text-transform:uppercase;font-weight:600;margin-bottom:.5rem;}
+  h1{font-size:38px;font-weight:800;letter-spacing:-1.5px;line-height:1.1;margin-bottom:1rem;}
+  h1 span{background:linear-gradient(135deg,#39d353,#06b6d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .hero-sub{font-size:15px;color:var(--text2);max-width:520px;line-height:1.7;}
+  .time-pill{display:inline-flex;align-items:center;gap:8px;margin-top:1rem;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid rgba(16,185,129,.25);color:var(--green);background:rgba(16,185,129,.06);}
+
+  /* Step card */
+  .step-card{margin-bottom:2.5rem;border-radius:16px;overflow:hidden;border:1px solid var(--border);background:var(--surface);}
+  .step-header{padding:18px 22px;display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--border);}
+  .step-badge{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:var(--mono);flex-shrink:0;}
+  .step-info{flex:1;}
+  .step-title{font-size:16px;font-weight:700;margin-bottom:2px;}
+  .step-meta{font-size:12px;color:var(--text3);display:flex;align-items:center;gap:12px;}
+  .step-body{padding:22px;}
+  .step-done-btn{font-size:11px;font-family:var(--mono);padding:5px 12px;border-radius:6px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.08);color:var(--green);cursor:pointer;transition:all .2s;font-weight:600;}
+  .step-done-btn:hover{background:rgba(16,185,129,.15);}
+  .step-done-btn.done{background:var(--green);color:#000;border-color:var(--green);}
+
+  /* Screenshots / step images */
+  .screen-mock{border-radius:10px;overflow:hidden;border:1px solid var(--border);margin:14px 0;background:var(--surface2);}
+  .screen-topbar{background:#1a1f2e;padding:8px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);}
+  .screen-dot{width:10px;height:10px;border-radius:50%;}
+  .screen-url{flex:1;background:rgba(15,23,42,.6);border-radius:4px;padding:4px 10px;font-size:11px;font-family:var(--mono);color:var(--text3);margin:0 8px;}
+  .screen-body{padding:16px;font-size:12px;}
+
+  /* Field highlight */
+  .field-box{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:rgba(30,41,59,.5);margin:8px 0;}
+  .field-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);}
+  .field-value{font-family:var(--mono);font-size:13px;color:var(--green);word-break:break-all;}
+  .field-desc{font-size:11px;color:var(--text3);}
+
+  /* Code */
+  .code{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:12px 0;}
+  .code-hd{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--border);background:rgba(30,41,59,.3);}
+  .code-lbl{font-size:11px;font-family:var(--mono);color:var(--text3);}
+  .copy-btn{font-size:11px;font-family:var(--mono);color:var(--text3);cursor:pointer;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:transparent;transition:all .15s;}
+  .copy-btn:hover{color:var(--text);border-color:rgba(99,102,241,.3);}
+  pre{padding:14px;font-size:12px;font-family:var(--mono);line-height:1.8;overflow-x:auto;color:#cdd9e5;}
+  .cmd{color:#39d353;}.str{color:#7ec699;}.cmt{color:#444c56;font-style:italic;}.kw{color:#cc99cd;}
+  .hi{color:#f59e0b;font-weight:600;}
+
+  /* Callout */
+  .callout{border-radius:10px;padding:13px 16px;margin:14px 0;font-size:13px;line-height:1.7;}
+  .callout.warn{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-left:3px solid var(--yellow);color:var(--text2);}
+  .callout.info{background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.2);border-left:3px solid var(--accent);color:var(--text2);}
+  .callout.success{background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-left:3px solid var(--green);color:var(--text2);}
+  .callout.danger{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-left:3px solid var(--red);color:var(--text2);}
+  .callout strong{color:var(--yellow);}.callout.info strong{color:#818cf8;}.callout.success strong{color:var(--green);}.callout.danger strong{color:var(--red);}
+
+  /* Inline steps */
+  .inline-steps{display:flex;flex-direction:column;gap:8px;margin:12px 0;}
+  .inline-step{display:flex;align-items:flex-start;gap:12px;padding:10px 14px;border-radius:8px;background:rgba(15,23,42,.4);border:1px solid var(--border);font-size:13px;color:var(--text2);}
+  .inline-step .n{width:22px;height:22px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:var(--mono);flex-shrink:0;color:var(--text3);}
+
+  /* Tag */
+  .tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;font-family:var(--mono);}
+  .tag.required{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.25);}
+  .tag.optional{background:rgba(99,102,241,.12);color:#818cf8;border:1px solid rgba(99,102,241,.2);}
+  .tag.auto{background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.2);}
+
+  /* Progress bar */
+  .progress-wrap{background:var(--surface2);border-radius:99px;height:6px;margin:8px 0;overflow:hidden;}
+  .progress-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--green),var(--cyan));transition:width .5s ease;box-shadow:0 0 8px rgba(16,185,129,.4);}
+
+  ::-webkit-scrollbar{width:4px;height:4px;}
+  ::-webkit-scrollbar-thumb{background:rgba(99,102,241,.3);border-radius:2px;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .content{animation:fadeIn .3s ease both;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="dot"></div> ASOS v1 — WhatsApp Setup</div>
+  <div style="margin-left:auto;font-size:12px;color:var(--text3);font-family:var(--mono)">Meta WhatsApp Cloud API · 2024</div>
+</header>
+
+<div class="layout">
+
+  <!-- TOC sidebar -->
+  <div class="toc">
+    <div class="toc-title">Steps</div>
+    <div id="toc"></div>
+    <div style="margin-top:24px;padding:12px;border-radius:10px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.15);">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Progress</div>
+      <div id="progressLabel" style="font-size:13px;font-weight:700;color:var(--green);margin-bottom:6px;">0 / 7</div>
+      <div class="progress-wrap"><div class="progress-fill" id="progressBar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="content">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="eyebrow">Integration Guide</div>
+      <h1>WhatsApp Cloud API<br><span>Setup Guide</span></h1>
+      <p class="hero-sub">Connect your ASOS backend to Meta's WhatsApp Business Platform. This is required for the AI pipeline to receive and send messages.</p>
+      <div class="time-pill">⏱ ~20 minutes · Free to set up · No monthly WA fees</div>
+    </div>
+
+    <!-- ── STEP 1: Meta App ── -->
+    <div class="step-card" id="step-1" data-step="1">
+      <div class="step-header">
+        <div class="step-badge" style="background:rgba(99,102,241,.15);color:var(--accent);">1</div>
+        <div class="step-info">
+          <div class="step-title">Create a Meta Developer App</div>
+          <div class="step-meta"><span>⏱ 5 min</span><span class="tag required">Required</span></div>
+        </div>
+        <button class="step-done-btn" onclick="markDone(this,1)">Mark done ✓</button>
+      </div>
+      <div class="step-body">
+
+        <div class="inline-steps">
+          <div class="inline-step"><div class="n">1</div><div>Go to <strong style="color:var(--text)">developers.facebook.com</strong> → Log in with your Facebook/Meta account</div></div>
+          <div class="inline-step"><div class="n">2</div><div>Click <strong style="color:var(--text)">My Apps</strong> → <strong style="color:var(--text)">Create App</strong></div></div>
+          <div class="inline-step"><div class="n">3</div><div>Select use case: <strong style="color:var(--green)">Business</strong> → Next</div></div>
+          <div class="inline-step"><div class="n">4</div><div>App name: <code style="font-family:var(--mono);color:#818cf8">ASOS - [Your Business Name]</code> · Enter your email</div></div>
+          <div class="inline-step"><div class="n">5</div><div>Connect to your <strong style="color:var(--text)">Meta Business Account</strong> (create one at business.facebook.com if needed)</div></div>
+          <div class="inline-step"><div class="n">6</div><div>Click <strong style="color:var(--green)">Create App</strong> → you'll see the App Dashboard</div></div>
+        </div>
+
+        <div class="screen-mock">
+          <div class="screen-topbar">
+            <div class="screen-dot" style="background:#ff5f57"></div>
+            <div class="screen-dot" style="background:#febc2e"></div>
+            <div class="screen-dot" style="background:#28c840"></div>
+            <div class="screen-url">developers.facebook.com/apps</div>
+          </div>
+          <div class="screen-body" style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div style="padding:12px 16px;border-radius:8px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);font-size:12px;color:#818cf8;font-weight:600;">+ Create App</div>
+            <div style="font-size:12px;color:var(--text3);padding:12px 0;max-width:360px;">After creation, find your <strong style="color:var(--text)">App ID</strong> in the top left — save it, you'll need it later.</div>
+          </div>
+        </div>
+
+        <div class="callout warn"><strong>Business Verification:</strong> For production volumes (&gt;1000 messages/day), Meta requires Business Verification. Start verification early — it can take 2–5 business days.</div>
+      </div>
+    </div>
+
+    <!-- ── STEP 2: Add WhatsApp Product ── -->
+    <div class="step-card" id="step-2" data-step="2">
+      <div class="step-header">
+        <div class="step-badge" style="background:rgba(16,185,129,.15);color:var(--green);">2</div>
+        <div class="step-info">
+          <div class="step-title">Add WhatsApp Product to Your App</div>
+          <div class="step-meta"><span>⏱ 2 min</span><span class="tag required">Required</span></div>
+        </div>
+        <button class="step-done-btn" onclick="markDone(this,2)">Mark done ✓</button>
+      </div>
+      <div class="step-body">
+        <div class="inline-steps">
+          <div class="inline-step"><div class="n">1</div><div>In your App Dashboard, scroll down to <strong style="color:var(--text)">Add Products to Your App</strong></div></div>
+          <div class="inline-step"><div class="n">2</div><div>Find <strong style="color:var(--green)">WhatsApp</strong> → click <strong style="color:var(--text)">Set Up</strong></div></div>
+          <div class="inline-step"><div class="n">3</div><div>Select or create a <strong style="color:var(--text)">WhatsApp Business Account (WABA)</strong></div></div>
+          <div class="inline-step"><div class="n">4</div><div>You'll land on the <strong style="color:var(--text)">WhatsApp → API Setup</strong> page — this is where all credentials live</div></div>
+        </div>
+
+        <div class="callout info"><strong>Test number:</strong> Meta gives you a free test phone number for development. You can send up to 5 messages to 5 verified numbers for free before going live.</div>
+      </div>
+    </div>
+
+    <!-- ── STEP 3: Get Credentials ── -->
+    <div class="step-card" id="step-3" data-step="3">
+      <div class="step-header">
+        <div class="step-badge" style="background:rgba(245,158,11,.15);color:var(--yellow);">3</div>
+        <div class="step-info">
+          <div class="step-title">Collect Your API Credentials</div>
+          <div class="step-meta"><span>⏱ 3 min</span><span class="tag required">Required</span></div>
+        </div>
+        <button class="step-done-btn" onclick="markDone(this,3)">Mark done ✓</button>
+      </div>
+      <div class="step-body">
+        <p style="color:var(--text2);font-size:13px;margin-bottom:16px;">On the WhatsApp → API Setup page, collect these 4 values:</p>
+
+        <div class="field-box">
+          <div class="field-label">Phone Number ID <span class="tag required">Required</span></div>
+          <div class="field-value">1234567890123456</div>
+          <div class="field-desc">Found under "From" section. This identifies your WA Business number in API calls.</div>
+        </div>
+
+        <div class="field-box">
+          <div class="field-label">WhatsApp Business Account ID <span class="tag auto">Auto-set</span></div>
+          <div class="field-value">9876543210987654</div>
+          <div class="field-desc">Used for campaign management and number registration.</div>
+        </div>
+
+        <div class="field-box">
+          <div class="field-label">Temporary Access Token <span class="tag required">Required for dev</span></div>
+          <div class="field-value">EAAxxxxxxxxxxxxxx...</div>
+          <div class="field-desc">⚠ Expires in 24h. Generate a Permanent Token for production (Step 4).</div>
+        </div>
+
+        <div class="field-box">
+          <div class="field-label">App Secret <span class="tag required">Required for HMAC</span></div>
+          <div class="field-value">App Settings → Basic → App Secret → Show</div>
+          <div class="field-desc">Used to verify webhook signatures. Never expose publicly.</div>
+        </div>
+
+        <div class="code">
+          <div class="code-hd"><span class="code-lbl">Add to .env.production</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="hi">WHATSAPP_API_URL</span>=https://graph.facebook.com/v20.0
+<span class="hi">WHATSAPP_APP_SECRET</span>=your_app_secret_from_basic_settings
+<span class="hi">WHATSAPP_VERIFY_TOKEN</span>=any_string_you_choose_eg_asos_webhook_2024</pre>
+        </div>
+
+        <div class="callout info"><strong>Store in ASOS Settings:</strong> After deploying, go to Dashboard → Settings → WhatsApp and paste the Phone Number ID + Access Token there. They're encrypted at rest.</div>
+      </div>
+    </div>
+
+    <!-- ── STEP 4: Permanent Token ── -->
+    <div class="step-card" id="step-4" data-step="4">
+      <div class="step-header">
+        <div class="step-badge" style="background:rgba(239,68,68,.15);color:var(--red);">4</div>
+        <div class="step-info">
+          <div class="step-title">Generate a Permanent Access Token</div>
+          <div class="step-meta"><span>⏱ 5 min</span><span class="tag required">Production only</span></div>
+        </div>
+        <button class="step-done-btn" onclick="markDone(this,4)">Mark done ✓</button>
+      </div>
+      <div class="step-body">
+        <div class="callout danger"><strong>Critical:</strong> The temporary token expires every 24 hours. For production you MUST create a System User token or it will stop working overnight.</div>
+
+        <div class="inline-steps">
+          <div class="inline-step"><div class="n">1</div><div>Go to <strong style="color:var(--text)">Meta Business Manager</strong> → business.facebook.com</div></div>
+          <div class="inline-step"><div class="n">2</div><div>Business Settings → <strong style="color:var(--text)">Users → System Users</strong></div></div>
+          <div class="inline-step"><div class="n">3</div><div>Click <strong style="color:var(--green)">Add</strong> → Name: <code style="font-family:var(--mono);color:#818cf8">ASOS API</code> · Role: <strong>Admin</strong></div></div>
+          <div class="inline-step"><div class="n">4</div><div><strong style="color:var(--text)">Add Assets</strong> → Select your WhatsApp Business Account → Full Control</div></div>
+          <div class="inline-step"><div class="n">5</div><div>Click <strong style="color:var(--green)">Generate New Token</strong> → Select your App → Grant permissions:</div></div>
+        </div>
+
+        <div style="padding:12px 14px;border-radius:8px;background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.15);font-size:12px;margin:10px 0;">
+          <div style="font-weight:700;color:var(--green);margin-bottom:8px;">Required Permissions:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <code style="font-family:var(--mono);background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:4px;padding:2px 8px;color:#818cf8;font-size:11px;">whatsapp_business_messaging</code>
+            <code style="font-family:var(--mono);background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:4px;padding:2px 8px;color:#818cf8;font-size:11px;">whatsapp_business_management</code>
+          </div>
+        </div>
+
+        <div class="inline-step" style="border-color:rgba(16,185,129,.25);background:rgba(16,185,129,.04);"><div class="n" style="background:var(--green);color:#000;border-color:var(--green);">6</div><div>Copy the generated token → save it immediately (shown only once) → paste into ASOS Settings</div></div>
+      </div>
+    </div>
+
+    <!-- ── STEP 5: Configure Webhook ── -->
+    <div class="step-card" id="step-5" data-step="5">
+      <div class="step-header">
+        <div class="step-badge" style="background:rgba(6,182,212,.15);color:var(--cyan);">5</div>
+        <div class="step-info">
+          <div class="step-title">Configure Webhook in Meta Console</div>
+          <div class="step-meta"><span>⏱ 3 min</span><span class="tag required">Required</span></div>
+        </div>
+        <button class="step-done-btn" onclick="markDone(this,5)">Mark done ✓</button>
+      </div>
+      <div class="step-body">
+        <div class="inline-steps">
+          <div class="inline-step"><div class="n">1</div><div>App Dashboard → <strong style="color:var(--text)">WhatsApp → Configuration</strong></div></div>
+          <div class="inline-step"><div class="n">2</div><div>Under <strong style="color:var(--text)">Webhook</strong>, click <strong style="color:var(--text)">Edit</strong></div></div>
+          <div class="inline-step"><div class="n">3</div><div>Callback URL — paste your server URL:</div></div>
+        </div>
+
+        <div class="field-box">
+          <div class="field-label">Callback URL</div>
+          <div class="field-value">https://api.yourdomain.com/webhooks/whatsapp</div>
+          <div class="field-desc">Replace yourdomain.com with your actual domain. Must be HTTPS.</div>
+        </div>
+
+        <div class="field-box">
+          <div class="field-label">Verify Token</div>
+          <div class="field-value">same value as WHATSAPP_VERIFY_TOKEN in .env.production</div>
+          <div class="field-desc">Must match exactly — case sensitive.</div>
+        </div>
+
+        <div class="inline-steps" style="margin-top:12px;">
+          <div class="inline-step"><div class="n">4</div><div>Click <strong style="color:var(--green)">Verify and Save</strong> — Meta will call your server and expect your verify token back</div></div>
+          <div class="inline-step"><div class="n">5</div><div>Under <strong style="color:var(--text)">Webhook Fields</strong>, click <strong style="color:var(--text)">Manage</strong> → subscribe to:</div></div>
+        </div>
+
+        <div style="padding:12px 14px;border-radius:8px;background:rgba(99,102,241,.05);border:1px solid rgba(99,102,241,.15);font-size:12px;margin:10px 0;">
+          <div style="font-weight:700;color:#818cf8;margin-bottom:8px;">Subscribe to these webhook fields:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <code style="font-family:var(--mono);background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);border-radius:4px;padding:2px 8px;color:var(--green);font-size:11px;">messages ✓</code>
+            <code style="font-family:var(--mono);background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);border-radius:4px;padding:2px 8px;color:var(--green);font-size:11px;">message_status_updates ✓</code>
+          </div>
+        </div>
+
+        <div class="code">
+          <div class="code-hd"><span class="code-lbl">Test verification manually</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd">curl</span> "<span class="str">https://api.yourdomain.com/webhooks/whatsapp</span>\
+  ?hub.mode=subscribe\
+  &hub.verify_token=<span class="hi">YOUR_VERIFY_TOKEN</span>\
+  &hub.challenge=test123"
+<span class="cmt"># Expected response: test123</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 6: Click-to-WhatsApp Ads ── -->
+    <div class="step-card" id="step-6" data-step="6">
+      <div class="step-header">
+        <div class="step-badge" style="background:rgba(139,92,246,.15);color:var(--purple);">6</div>
+        <div class="step-info">
+          <div class="step-title">Set Up Click-to-WhatsApp Meta Ads</div>
+          <div class="step-meta"><span>⏱ 5 min</span><span class="tag optional">For Meta Ads flow</span></div>
+        </div>
+        <button class="step-done-btn" onclick="markDone(this,6)">Mark done ✓</button>
+      </div>
+      <div class="step-body">
+        <p style="color:var(--text2);font-size:13px;margin-bottom:16px;">This is how ASOS captures campaign attribution — each ad click carries Meta ad IDs that get linked to the lead automatically.</p>
+
+        <div class="inline-steps">
+          <div class="inline-step"><div class="n">1</div><div>Go to <strong style="color:var(--text)">Meta Ads Manager</strong> → Create Campaign</div></div>
+          <div class="inline-step"><div class="n">2</div><div>Objective: <strong style="color:var(--green)">Leads</strong> → Ad Format: <strong style="color:var(--green)">Click to WhatsApp</strong></div></div>
+          <div class="inline-step"><div class="n">3</div><div>In Ad Creative → WhatsApp number → select your WABA phone number</div></div>
+          <div class="inline-step"><div class="n">4</div><div>Set <strong style="color:var(--text)">Pre-filled message</strong> — this is what users send when they click your ad:</div></div>
+        </div>
+
+        <div class="field-box">
+          <div class="field-label">Pre-filled WhatsApp message (suggested)</div>
+          <div class="field-value">Olá! Vi o anúncio de vocês e quero saber mais informações.</div>
+          <div class="field-desc">ASOS's AI reads this first message and begins qualification immediately. Keep it natural.</div>
+        </div>
+
+        <div class="callout success"><strong>Attribution is automatic:</strong> When a user messages via a Click-to-WhatsApp ad, Meta's webhook payload includes <code style="font-family:var(--mono)">referral.ads_campaign_id</code>, <code style="font-family:var(--mono)">ads_adset_id</code>, and <code style="font-family:var(--mono)">ads_ad_id</code>. ASOS's conversation worker extracts these and links them to the lead automatically — no extra config needed.</div>
+      </div>
+    </div>
+
+    <!-- ── STEP 7: Test End-to-End ── -->
+    <div class="step-card" id="step-7" data-step="7">
+      <div class="step-header">
+        <div class="step-badge" style="background:rgba(16,185,129,.15);color:var(--green);">7</div>
+        <div class="step-info">
+          <div class="step-title">Test End-to-End — Send Your First Message</div>
+          <div class="step-meta"><span>⏱ 2 min</span><span class="tag auto">Verification</span></div>
+        </div>
+        <button class="step-done-btn" onclick="markDone(this,7)">Mark done ✓</button>
+      </div>
+      <div class="step-body">
+        <div class="inline-steps">
+          <div class="inline-step"><div class="n">1</div><div>Add your personal number as a test number in Meta Developer Console → WhatsApp → API Setup → "To"</div></div>
+          <div class="inline-step"><div class="n">2</div><div>Open WhatsApp on your phone → message the business number: <em style="color:var(--text)">"Olá, quero testar o sistema"</em></div></div>
+          <div class="inline-step"><div class="n">3</div><div>Watch the ASOS worker logs: <code style="font-family:var(--mono);color:#818cf8">docker logs -f asos_worker</code></div></div>
+          <div class="inline-step"><div class="n">4</div><div>You should receive a Claude AI reply within a few seconds</div></div>
+          <div class="inline-step"><div class="n">5</div><div>Check ASOS Dashboard → Pipeline → a new lead should appear in NEW stage</div></div>
+          <div class="inline-step"><div class="n">6</div><div>Check ASOS Dashboard → Conversations → your conversation should be visible</div></div>
+        </div>
+
+        <div class="code">
+          <div class="code-hd"><span class="code-lbl">Watch logs during test</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmt"># Watch all services</span>
+<span class="cmd">docker compose</span> logs -f --tail=20
+
+<span class="cmt"># Expected log sequence:</span>
+<span class="str">📨 Inbound message queued  { waMessageId: "wamid.xxx" }</span>
+<span class="str">▶  Processing inbound message</span>
+<span class="str">   New contact created      { phone: "5511..." }</span>
+<span class="str">   New lead created         { leadId: "uuid..." }</span>
+<span class="str">   Claude AI decision logged { action: "continue", score: 3, status: "COLD" }</span>
+<span class="str">   WA text message sent     { waMessageId: "wamid.yyy" }</span>
+<span class="str">✅ Message processed</span></pre>
+        </div>
+
+        <div class="callout success"><strong>🎉 It works!</strong> If you see this log sequence and received a WhatsApp reply, your ASOS AI pipeline is fully operational. Every inbound message will now be automatically qualified, scored, and responded to by Claude AI.</div>
+      </div>
+    </div>
+
+    <!-- Final status -->
+    <div id="completionMsg" style="display:none;padding:24px;border-radius:16px;text-align:center;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);margin-top:1rem;">
+      <div style="font-size:32px;margin-bottom:12px;">🚀</div>
+      <div style="font-size:18px;font-weight:700;color:var(--green);margin-bottom:8px;">WhatsApp Integration Complete!</div>
+      <div style="font-size:13px;color:var(--text2);">ASOS is now receiving WhatsApp messages and responding with Claude AI. Your AI sales pipeline is live.</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const STEPS = [
+  { id:1, label:'Create Meta App' },
+  { id:2, label:'Add WhatsApp Product' },
+  { id:3, label:'Collect Credentials' },
+  { id:4, label:'Permanent Token' },
+  { id:5, label:'Configure Webhook' },
+  { id:6, label:'Click-to-WA Ads' },
+  { id:7, label:'Test End-to-End' },
+];
+
+const done = JSON.parse(localStorage.getItem('wa_setup_done') || '{}');
+
+// Build TOC
+const toc = document.getElementById('toc');
+STEPS.forEach(s => {
+  const el = document.createElement('div');
+  el.className = 'toc-item' + (done[s.id] ? ' active' : '');
+  el.id = `toc-${s.id}`;
+  el.innerHTML = `<div class="toc-num">${done[s.id] ? '✓' : s.id}</div><span>${s.label}</span>`;
+  el.onclick = () => document.getElementById(`step-${s.id}`).scrollIntoView({ behavior:'smooth', block:'start' });
+  toc.appendChild(el);
+});
+
+// Restore done state
+Object.keys(done).forEach(id => {
+  if (done[id]) {
+    const btn = document.querySelector(`[data-step="${id}"] .step-done-btn`);
+    if (btn) { btn.textContent = '✓ Done'; btn.classList.add('done'); }
+  }
+});
+
+function markDone(btn, stepId) {
+  const isDone = btn.classList.toggle('done');
+  btn.textContent = isDone ? '✓ Done' : 'Mark done ✓';
+  done[stepId] = isDone;
+  localStorage.setItem('wa_setup_done', JSON.stringify(done));
+
+  const tItem = document.getElementById(`toc-${stepId}`);
+  tItem.classList.toggle('active', isDone);
+  tItem.querySelector('.toc-num').textContent = isDone ? '✓' : stepId;
+
+  updateProgress();
+}
+
+function updateProgress() {
+  const count = Object.values(done).filter(Boolean).length;
+  document.getElementById('progressLabel').textContent = `${count} / 7`;
+  document.getElementById('progressBar').style.width = `${(count/7)*100}%`;
+  if (count === 7) document.getElementById('completionMsg').style.display = 'block';
+}
+
+function copyCode(btn) {
+  const pre = btn.closest('.code').querySelector('pre');
+  navigator.clipboard.writeText(pre.innerText).then(() => {
+    btn.textContent = '✓ Copied'; btn.style.color = '#10b981';
+    setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; }, 2000);
+  });
+}
+
+updateProgress();
+</script>
+</body>
+</html>

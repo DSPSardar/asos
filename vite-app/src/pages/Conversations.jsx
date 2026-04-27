@@ -1,0 +1,556 @@
+// src/pages/Conversations.jsx — WhatsApp-style two-pane conversations view
+import React, { useMemo, useRef, useState, useEffect } from 'react';
+
+// ─────────────────────────────────────────────────────────────
+// Style maps
+// ─────────────────────────────────────────────────────────────
+const STAGE_STYLES = {
+  NEW:       { label:'New',       cls:'bg-slate-500/15 text-slate-300 border-slate-500/30' },
+  QUALIFIED: { label:'Qualified', cls:'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' },
+  PROPOSAL:  { label:'Proposal',  cls:'bg-violet-500/15 text-violet-300 border-violet-500/30' },
+  WON:       { label:'Won',       cls:'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+  LOST:      { label:'Lost',      cls:'bg-slate-700/30 text-slate-500 border-slate-600/30' },
+};
+
+const SCORE_STYLES = {
+  HOT:  { label:'HOT',  dot:'bg-red-400',    cls:'bg-red-500/15 text-red-300 border-red-500/30' },
+  WARM: { label:'WARM', dot:'bg-amber-400',  cls:'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+  COLD: { label:'COLD', dot:'bg-sky-400',    cls:'bg-sky-500/15 text-sky-300 border-sky-500/30' },
+};
+
+// ─────────────────────────────────────────────────────────────
+// MOCK DATA — 8 threads matching the requested spec exactly:
+//   2 unread (1 msg / 3 msgs) · 1 Needs human · 2 Human takeover · 5 AI
+//   Stages: 2 New · 2 Qualifying · 2 Proposal · 1 Won · 1 Lost
+//   Scores: 3 Hot · 3 Warm · 2 Cold
+// ─────────────────────────────────────────────────────────────
+const THREADS = [
+  // 1 — REIT inquiry, freshly arrived (the "1 message unread")
+  { id:'c1', name:'Ahmed Khan',    phone:'+92 333 4421872', preview:'Assalam o alaikum, Boulevard Tower REIT mein invest karna chahta hoon. Minimum kya hai?',
+    when:'2m',  unread:1, handler:'AI',    stage:'NEW',       score:'WARM', needsHuman:false },
+
+  // 2 — Corporate treasury inquiry, went silent
+  { id:'c2', name:'Bilal Ahmed',   phone:'+92 312 8866442', preview:'Board ko forward kiya hai BTREIT prospectus, response next week.',
+    when:'2h',  unread:0, handler:'AI',    stage:'NEW',       score:'COLD', needsHuman:false },
+
+  // 3 — Consultation call booked, AI handled smoothly
+  { id:'c3', name:'Ayesha Malik',  phone:'+92 321 9870034', preview:'Kal 3 PM advisor call confirm. Looking forward.',
+    when:'18m', unread:0, handler:'AI',    stage:'QUALIFIED', score:'HOT',  needsHuman:false },
+
+  // 4 — Shariah compliance question, human took over
+  { id:'c4', name:'Fatima Sheikh', phone:'+92 345 9001775', preview:'OK sir Mufti review certificate ka wait karti hoon.',
+    when:'1h',  unread:0, handler:'Human', stage:'QUALIFIED', score:'WARM', needsHuman:false },
+
+  // 5 — Institutional pricing negotiation, human handling
+  { id:'c5', name:'Hassan Raza',   phone:'+92 300 7654129', preview:'Sir 4 cr ka subscription kab tak ho jayega? CDC details bhejen.',
+    when:'47m', unread:0, handler:'Human', stage:'PROPOSAL',  score:'HOT',  needsHuman:false },
+
+  // 6 — Remittance dispute — Needs Human (the "3 messages unread")
+  { id:'c6', name:'Usman Ali',     phone:'+92 333 7711209', preview:'Hello? Sir urgent hai, paise debit ho gaye but units allot nahi huin!',
+    when:'6h',  unread:3, handler:'AI',    stage:'PROPOSAL',  score:'WARM', needsHuman:true  },
+
+  // 7 — Closed investor thanking after subscription confirmation
+  { id:'c7', name:'Zara Iqbal',    phone:'+92 304 5512983', preview:'Subscription confirm ho gayi alhamdulillah. CDC units credit mil gayi. Shukria team!',
+    when:'5h',  unread:0, handler:'AI',    stage:'WON',       score:'HOT',  needsHuman:false },
+
+  // 8 — Cold lead, wanted physical property not REIT shares
+  { id:'c8', name:'Sana Tariq',    phone:'+92 322 4490012', preview:'I want to OWN a property, REIT shares mein interest nahi filhal.',
+    when:'3d',  unread:0, handler:'AI',    stage:'LOST',      score:'COLD', needsHuman:false },
+];
+
+// Detailed message history for every thread. Demo data; replace with real
+// API calls in a later pass. Every thread has 1–10 messages so the right
+// column never has to fall back to placeholder content.
+const MESSAGES = {
+  // c1 — Ahmed Khan: brand-new REIT inquiry, AI hasn't replied yet (the unread)
+  c1: [
+    { id:'c1m1', from:'contact', text:'Assalam o alaikum, Boulevard Tower REIT mein invest karna chahta hoon. Minimum kya hai?', ts:'14:22' },
+  ],
+
+  // c2 — Bilal Ahmed: corporate treasury inquiry, awaiting board approval
+  c2: [
+    { id:'c2m1', from:'contact', text:'Hello, hamari company treasury allocate kar rahi hai REITs mein. Bulk subscription rate available hai?',          ts:'12:10' },
+    { id:'c2m2', from:'ai',      text:'Walaikum assalam Bilal! Corporate treasury allocations ke liye special institutional unit price hai. Aap ka ticket size aur entity type please?', ts:'12:11' },
+    { id:'c2m3', from:'contact', text:'5–10 crore allocation, private limited company hai.',                                                              ts:'12:18' },
+    { id:'c2m4', from:'ai',      text:'Bohot acha. 5cr+ allocations pe institutional unit price applicable hai with 0.4% management fee waiver. Prospectus + term sheet bhej dun corporate email pe?', ts:'12:19' },
+    { id:'c2m5', from:'contact', text:'Haan PDF email kar dein, board ko present karna hai.',                                                             ts:'12:25' },
+    { id:'c2m6', from:'ai',      text:'Done — prospectus + term sheet bhej diya hai. Board ki review ke baad consultation call schedule karenge?',         ts:'12:26' },
+    { id:'c2m7', from:'contact', text:'Board ko forward kiya hai BTREIT prospectus, response next week.',                                                 ts:'12:35' },
+  ],
+
+  // c3 — Ayesha Malik: AI-smooth qualification, consultation call booked
+  c3: [
+    { id:'c3m1', from:'contact', text:'Assalam o alaikum',                                                                                                ts:'10:14' },
+    { id:'c3m2', from:'ai',      text:'Walaikum assalam Ayesha! Welcome to Boulevard Tower REIT. Aap REIT subscription ke baare mein info chahti hain ya consultation book karni hai?', ts:'10:14' },
+    { id:'c3m3', from:'contact', text:'Income generation ke liye dekh rahi hoon. Quarterly dividend kitna milta hai?',                                    ts:'10:16' },
+    { id:'c3m4', from:'ai',      text:'Bohot acha goal. BTREIT target kar raha hai 9–11% annualized dividends, paid quarterly (Mar/Jun/Sep/Dec). Plus 6–8% capital appreciation potential. Aap ka entry ticket size?', ts:'10:16' },
+    { id:'c3m5', from:'contact', text:'Around 25 lakh start karna chahti hoon.',                                                                          ts:'10:18' },
+    { id:'c3m6', from:'ai',      text:'Perfect range. 25 lakh par approximately PKR 56,000–69,000 quarterly dividend expected. Hamari licensed advisor team aap ko KYC + CDC account walkthrough degi. Tomorrow ya day-after consultation call book kar dun?', ts:'10:18' },
+    { id:'c3m7', from:'contact', text:'Kal 3 PM possible hai?',                                                                                            ts:'10:21' },
+    { id:'c3m8', from:'ai',      text:'Bilkul Ayesha! Confirmed: Kal 3:00 PM advisor call. Calendar invite + Zoom link bhej deti hoon. Subah 11 AM reminder bhi mil jayega.',         ts:'10:21' },
+  ],
+
+  // c4 — Fatima Sheikh: AI handed off to human for Shariah-compliance certification request
+  c4: [
+    { id:'c4m1', from:'contact', text:'Hello, BTREIT ke baare mein info chahiye is hafte.',                                                                ts:'11:02' },
+    { id:'c4m2', from:'ai',      text:'Hi Fatima! Bilkul, prospectus aur consultation set kar dete hain. Kis cheez se shuru karein?',                      ts:'11:02' },
+    { id:'c4m3', from:'contact', text:'Tuesday 3 PM ya Wednesday 11 AM. Lekin pehle ek question — kya REIT properly Shariah-compliant hai? Mujhe Mufti Taqi Usmani office ka latest certificate chahiye.', ts:'11:08' },
+    { id:'c4m4', from:'ai',      text:'Aap ka Shariah review request main hamare compliance lead ko forward kar deti hoon. Saad bhai please respond — Mufti certificate share kariye.', ts:'11:09' },
+    { id:'c4m5', from:'human',   text:'Hi Fatima — Saad from Boulevard Tower REIT compliance desk. Mufti Taqi Usmani office ka latest Shariah Audit Report (Q1 2026) abhi PDF mein bhej raha hoon. Quarterly review hota hai, last certified 14 March 2026.', ts:'11:18' },
+    { id:'c4m6', from:'contact', text:'OK sir Mufti review certificate ka wait karti hoon.',                                                              ts:'11:24' },
+    { id:'c4m7', from:'human',   text:'Sent. Doc receive ho jaye to confirmation karein. Tuesday 3 PM consultation slot abhi block kar diya hai aap ke naam pe.', ts:'11:25' },
+  ],
+
+  // c5 — Hassan Raza: HNW investor, Saad took over for institutional pricing
+  c5: [
+    { id:'c5m1', from:'contact', text:'Sir aap ka follow-up message mila tha. BTREIT mein significant allocation karna chahta hoon.',                       ts:'09:31' },
+    { id:'c5m2', from:'ai',      text:'Walaikum assalam Hassan bhai! Bohot acha. Aap ka ticket range kya hai? 5cr+ pe hum institutional unit pricing offer kar sakte hain.', ts:'09:31' },
+    { id:'c5m3', from:'contact', text:'Around 4 crore. Kuch flexibility possible hai management fee pe?',                                                  ts:'09:38' },
+    { id:'c5m4', from:'ai',      text:'4cr ka allocation HNW band mein aata hai. Main aap ki request hamare manager ko forward kar deta hoon. Saad bhai, please personally handle karein.', ts:'09:39' },
+    { id:'c5m5', from:'human',   text:'Hi Hassan bhai, Saad here from Boulevard Tower REIT. Aap ki ticket size consider karte hue, hum 4cr par institutional rate offer kar sakte hain — 0.5% management fee (vs standard 0.7%) and quarterly direct dividend payout.', ts:'09:48' },
+    { id:'c5m6', from:'contact', text:'Theek hai, terms acceptable hain. CDC account aur subscription instructions bhejen.',                                ts:'09:55' },
+    { id:'c5m7', from:'human',   text:'Bohot acha decision Hassan bhai. CDC investor account form + subscription instructions abhi email karta hoon. Funds settle hone ke baad units 2 working days mein allot ho jayegi.', ts:'09:57' },
+    { id:'c5m8', from:'contact', text:'Sir 4 cr ka subscription kab tak ho jayega? CDC details bhejen.',                                                   ts:'10:04' },
+  ],
+
+  // c6 — Usman Ali: subscription payment dispute, AI escalated, investor is angry
+  c6: [
+    { id:'c6m1',  from:'contact', text:'Sir maine 5,00,000 PKR transfer kiye kal BTREIT subscription account mein for unit allotment',                     ts:'09:42' },
+    { id:'c6m2',  from:'ai',      text:'Walaikum assalam Usman bhai. Subscription ke liye shukria. Aap ki transfer receipt ya bank slip share karein — main treasury team se confirmation karwati hoon.', ts:'09:43' },
+    { id:'c6m3',  from:'contact', text:'Receipt kal raat hi WhatsApp pe bheji thi.',                                                                       ts:'09:55' },
+    { id:'c6m4',  from:'ai',      text:'Jee bilkul, mil gayi. Main ne treasury ko forward kar di hai — bank reconciliation mein 10–15 minute lagte hain. Hold karein please.', ts:'09:56' },
+    { id:'c6m5',  from:'ai',      text:'Update: Treasury team ka kehna hai abhi tak fund subscription account mein reflect nahi hua. Aap apna IBFT reference share kar sakte hain?', ts:'10:14' },
+    { id:'c6m6',  from:'contact', text:'IBFT reference: HBL-9988772211. Mere account se 5 lakh debit ho chuke hain. Bank statement screenshot bhi bhej deta hoon.', ts:'10:18' },
+    { id:'c6m7',  from:'ai',      text:'Screenshot received. Reference verify ho raha hai. Is matter ko main hamare manager Saad ko escalate kar rahi hoon — woh aap ko personally call karenge next 30 minutes mein. Units allotment guarantee karenge.', ts:'10:22' },
+    { id:'c6m8',  from:'contact', text:'Refund chahiye! Account se 5 lakh debit ho gaye but units allot nahi huin! Ye kya scene hai?',                     ts:'15:01' },
+    { id:'c6m9',  from:'contact', text:'Sir please jaldi response do, NAV calculation pe loss ho raha hai mera.',                                          ts:'15:14' },
+    { id:'c6m10', from:'contact', text:'Hello? Sir urgent hai, paise debit ho gaye but units allot nahi huin!',                                            ts:'15:33' },
+  ],
+
+  // c7 — Zara Iqbal: closed investor, subscription confirmed, thanking
+  c7: [
+    { id:'c7m1', from:'contact', text:'Hi, kal subscription transfer ho gayi BTREIT account mein.',                                                        ts:'13:05' },
+    { id:'c7m2', from:'ai',      text:'Walaikum assalam Zara! Jee bilkul, subscription received and confirmed. CDC units allotment notice email aur WhatsApp dono pe bhej di hai.', ts:'13:05' },
+    { id:'c7m3', from:'contact', text:'First dividend kab tak milegi?',                                                                                    ts:'13:11' },
+    { id:'c7m4', from:'ai',      text:'First quarterly dividend 30 June 2026 ko process hogi, aap ke registered bank account mein direct credit. Pro-rata calculation hogi for the partial quarter.', ts:'13:11' },
+    { id:'c7m5', from:'contact', text:'Allahamdulillah. Bohot smooth onboarding tha aap ki team ke saath.',                                                ts:'13:18' },
+    { id:'c7m6', from:'ai',      text:'Aap ka shukria Zara! Hamare liye bohot khushi ki baat hai. Welcome to the Boulevard Tower REIT investor family!',   ts:'13:19' },
+    { id:'c7m7', from:'contact', text:'Subscription confirm ho gayi alhamdulillah. CDC units credit mil gayi. Shukria team!',                              ts:'13:22' },
+  ],
+
+  // c8 — Sana Tariq: lost lead, wanted physical property ownership not REIT shares
+  c8: [
+    { id:'c8m1', from:'contact', text:'Salam, real estate investment options dekh rahi thi.',                                                              ts:'10:30' },
+    { id:'c8m2', from:'ai',      text:'Walaikum assalam Sana! Boulevard Tower REIT through aap commercial real estate mein invest kar sakti hain — minimum 1 lakh, quarterly dividends 9–11% target, fully Shariah-compliant. Interest hai?', ts:'10:30' },
+    { id:'c8m3', from:'contact', text:'Hmm REIT shares nahi, mujhe physical property chahiye apne naam pe.',                                               ts:'10:38' },
+    { id:'c8m4', from:'ai',      text:'Samjhi Sana. REIT mein aap underlying real estate ki ownership share karti hain (paper form mein), but title aap ke naam pe individually nahi hota. Agar physical title chahiye to BTREIT fit nahi hai — but liquidity aur dividends benefit miss ho jate hain.', ts:'10:39' },
+    { id:'c8m5', from:'contact', text:'Title meray naam pe hona zaroori hai family ke liye. Plot ya flat hi sahi rahega.',                                  ts:'10:45' },
+    { id:'c8m6', from:'ai',      text:'Bilkul samajh sakti hoon. Future mein agar paper investments ya hybrid options consider karein to main aap ko BTREIT updates bhej dungi.', ts:'10:46' },
+    { id:'c8m7', from:'contact', text:'I want to OWN a property, REIT shares mein interest nahi filhal.',                                                  ts:'10:48' },
+  ],
+};
+
+// Defensive fallback — should never trigger now that every thread has explicit
+// messages, but kept so a future thread without a key still renders something.
+const FALLBACK_MESSAGES = (t) => [
+  { id:'f1', from:'contact', text:t.preview, ts:t.when },
+  { id:'f2', from:'ai',      text:'(No detailed thread for this contact yet.)', ts:t.when },
+];
+
+// ─────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────
+export default function Conversations() {
+  // Default to the Needs-Human thread so the AI→human handoff is the first thing visible
+  const [activeId, setActiveId] = useState('c6');
+  const [filter,   setFilter]   = useState('all');
+  const [search,   setSearch]   = useState('');
+
+  const visible = useMemo(() => {
+    return THREADS.filter((t) => {
+      if (filter === 'unread'   && t.unread === 0)        return false;
+      if (filter === 'ai'       && t.handler !== 'AI')    return false;
+      if (filter === 'needs'    && !t.needsHuman)         return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (!t.name.toLowerCase().includes(q) &&
+            !t.preview.toLowerCase().includes(q) &&
+            !t.phone.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [filter, search]);
+
+  const active   = THREADS.find((t) => t.id === activeId) || THREADS[0];
+  const messages = MESSAGES[active.id] || FALLBACK_MESSAGES(active);
+
+  return (
+    <div className="flex h-full">
+      <ThreadList
+        threads={visible}
+        activeId={activeId}
+        onSelect={setActiveId}
+        filter={filter}
+        onFilter={setFilter}
+        search={search}
+        onSearch={setSearch}
+        totalUnread={THREADS.reduce((s, t) => s + (t.unread || 0), 0)}
+      />
+      <ConvErrorBoundary resetKey={active.id}>
+        <ConversationView thread={active} messages={messages} />
+      </ConvErrorBoundary>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// LEFT — Thread list
+// ─────────────────────────────────────────────────────────────
+function ThreadList({ threads, activeId, onSelect, filter, onFilter, search, onSearch, totalUnread }) {
+  const FILTERS = [
+    { id:'all',    label:'All' },
+    { id:'unread', label:'Unread', badge: totalUnread || null },
+    { id:'ai',     label:'AI-handled' },
+    { id:'needs',  label:'Needs human' },
+  ];
+
+  return (
+    <aside className="flex w-[340px] shrink-0 flex-col border-r border-slate-800/60 bg-surface/30">
+      {/* Header */}
+      <div className="border-b border-slate-800/60 px-4 py-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold tracking-tight">Conversations</h2>
+          <span className="text-[11px] text-slate-500">{threads.length} of {THREADS.length}</span>
+        </div>
+        {/* Search */}
+        <div className="relative">
+          <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            placeholder="Search by name, phone, message…"
+            className="input-dark w-full rounded-lg py-2 pl-8 pr-3 text-sm placeholder-slate-600"
+          />
+        </div>
+        {/* Filter chips */}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => onFilter(f.id)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                filter === f.id
+                  ? 'border-accent/40 bg-accent/15 text-accent'
+                  : 'border-slate-700/60 bg-transparent text-slate-400 hover:bg-surface2/60 hover:text-slate-200'
+              }`}
+            >
+              {f.label}
+              {f.badge ? <span className="rounded-full bg-accent/20 px-1.5 text-[9px] font-semibold text-accent">{f.badge}</span> : null}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Thread list */}
+      <div className="flex-1 overflow-y-auto">
+        {threads.length === 0 ? (
+          <div className="px-6 py-12 text-center text-sm text-slate-500">No conversations match.</div>
+        ) : (
+          <ul>
+            {threads.map((t) => (
+              <ThreadRow key={t.id} thread={t} active={t.id === activeId} onClick={() => onSelect(t.id)} />
+            ))}
+          </ul>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function ThreadRow({ thread, active, onClick }) {
+  return (
+    <li>
+      <button
+        onClick={onClick}
+        className={`flex w-full items-start gap-3 border-l-2 px-4 py-3 text-left transition-colors ${
+          active
+            ? 'border-accent bg-accent/10'
+            : 'border-transparent hover:bg-surface2/40'
+        }`}
+      >
+        {/* Avatar */}
+        <div className="relative shrink-0">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-accent/30 to-accent2/30 text-xs font-semibold text-slate-200">
+            {initials(thread.name)}
+          </div>
+          {thread.needsHuman && (
+            <span
+              title="Needs human"
+              className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center rounded-full border-2 border-bg bg-red-500"
+            />
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={`truncate text-sm ${thread.unread ? 'font-semibold text-slate-100' : 'font-medium text-slate-200'}`}>
+              {thread.name}
+            </span>
+            <span className="ml-auto shrink-0 text-[10px] tabular-nums text-slate-500">{thread.when}</span>
+          </div>
+          <div className="mt-0.5">
+            <p className={`truncate text-xs ${thread.unread ? 'text-slate-200' : 'text-slate-500'}`}>{thread.preview}</p>
+          </div>
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <HandlerBadge handler={thread.handler} />
+            <StagePill stage={thread.stage} />
+            <ScorePill score={thread.score} />
+            {thread.unread > 0 && (
+              <span className="ml-auto rounded-full bg-accent px-1.5 text-[10px] font-bold text-white tabular-nums">
+                {thread.unread}
+              </span>
+            )}
+          </div>
+        </div>
+      </button>
+    </li>
+  );
+}
+
+function HandlerBadge({ handler }) {
+  const isAI = handler === 'AI';
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+        isAI ? 'border-accent/30 bg-accent/10 text-accent' : 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+      }`}
+    >
+      <span className={`inline-block h-1 w-1 rounded-full ${isAI ? 'bg-accent' : 'bg-amber-300'}`} />
+      {handler}
+    </span>
+  );
+}
+
+function StagePill({ stage }) {
+  const s = STAGE_STYLES[stage] || STAGE_STYLES.NEW;
+  return (
+    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${s.cls}`}>
+      {s.label}
+    </span>
+  );
+}
+
+function ScorePill({ score }) {
+  if (!score || !SCORE_STYLES[score]) return null;
+  const s = SCORE_STYLES[score];
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${s.cls}`}>
+      <span className={`inline-block h-1 w-1 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+}
+
+// Tiny error boundary so the right column never goes fully blank if a render
+// throws — shows a readable fallback with the contact name + message count.
+class ConvErrorBoundary extends React.Component {
+  constructor(p){ super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err){ return { err }; }
+  componentDidCatch(err, info){ console.error('[Conversations] right-column render crash:', err, info); }
+  componentDidUpdate(prevProps){
+    // Reset on thread change so a different thread can recover
+    if (prevProps.resetKey !== this.props.resetKey && this.state.err) this.setState({ err: null });
+  }
+  render(){
+    if (this.state.err) {
+      return (
+        <section className="flex min-w-0 flex-1 flex-col items-center justify-center bg-bg p-8 text-center">
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-5 text-sm text-red-300 max-w-md">
+            <div className="font-semibold mb-1">Couldn't render this conversation</div>
+            <div className="text-xs text-red-300/80">{String(this.state.err?.message || this.state.err)}</div>
+            <div className="mt-2 text-[11px] text-slate-500">Pick another thread, or reload the page.</div>
+          </div>
+        </section>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// RIGHT — Conversation view
+// ─────────────────────────────────────────────────────────────
+function ConversationView({ thread, messages }) {
+  const [aiOn, setAiOn]   = useState(thread.handler === 'AI');
+  const [draft, setDraft] = useState('');
+  const scrollRef = useRef(null);
+
+  // Reset toggle + draft + scroll when switching threads
+  useEffect(() => { setAiOn(thread.handler === 'AI'); setDraft(''); }, [thread.id, thread.handler]);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [thread.id]);
+
+  const onSend = () => {
+    if (!draft.trim()) return;
+    alert(`Demo: would send "${draft.trim()}" to ${thread.name}`);
+    setDraft('');
+  };
+  const onKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); }
+  };
+
+  return (
+    <section className="flex min-w-0 flex-1 flex-col bg-bg">
+      {/* Header */}
+      <header className="flex items-center gap-3 border-b border-slate-800/60 px-6 py-3.5">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent/30 to-accent2/30 text-xs font-semibold text-slate-200">
+          {initials(thread.name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-semibold text-slate-100">{thread.name}</span>
+            <StagePill stage={thread.stage} />
+            <ScorePill score={thread.score} />
+            {thread.needsHuman && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-red-300">
+                <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-red-400" />
+                Needs human
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 text-xs text-slate-500">{thread.phone}</div>
+        </div>
+        <AiToggle on={aiOn} onChange={setAiOn} />
+      </header>
+
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="mx-auto flex max-w-3xl flex-col gap-3">
+          <DateDivider label="Today" />
+          {messages.map((m) => <MessageBubble key={m.id} m={m} />)}
+        </div>
+      </div>
+
+      {/* Status bar above composer */}
+      <div className={`flex items-center justify-between border-t px-6 py-2.5 text-xs ${
+        aiOn
+          ? 'border-accent/20 bg-accent/5 text-accent'
+          : 'border-amber-400/20 bg-amber-400/5 text-amber-300'
+      }`}>
+        <div className="flex items-center gap-2">
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${aiOn ? 'bg-accent animate-pulse' : 'bg-amber-300'}`} />
+          {aiOn
+            ? 'AI is handling this conversation. Replies are auto-sent.'
+            : 'You have taken over. AI is paused for this thread.'}
+        </div>
+        <button onClick={() => setAiOn((v) => !v)} className="text-xs font-medium underline-offset-2 hover:underline">
+          {aiOn ? 'Take over →' : 'Hand back to AI →'}
+        </button>
+      </div>
+
+      {/* Composer */}
+      <div className="border-t border-slate-800/60 bg-surface/40 px-6 py-3">
+        <div className="mx-auto flex max-w-3xl items-end gap-2">
+          <button
+            type="button"
+            onClick={() => alert('Attachments coming soon.')}
+            className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-surface2 hover:text-slate-300"
+            title="Attach (coming soon)"
+          >
+            <IconPaperclip className="h-4 w-4" />
+          </button>
+          <textarea
+            rows={1}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onKey}
+            placeholder={aiOn ? 'AI is replying… type to take over' : `Message ${thread.name}…`}
+            className="input-dark flex-1 resize-none rounded-lg px-3 py-2.5 text-sm placeholder-slate-600"
+            style={{ maxHeight: 140 }}
+          />
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={!draft.trim()}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-accent to-accent2 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-accent/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+          >
+            Send
+            <IconSend className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AiToggle({ on, onChange }) {
+  return (
+    <button
+      onClick={() => onChange(!on)}
+      className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+        on
+          ? 'border-accent/40 bg-accent/15 text-accent hover:bg-accent/20'
+          : 'border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/15'
+      }`}
+      title={on ? 'AI is replying — click to take over' : 'You are replying — click to hand back to AI'}
+    >
+      <span className={`relative inline-block h-3.5 w-6 rounded-full transition-colors ${on ? 'bg-accent' : 'bg-amber-400'}`}>
+        <span className={`absolute top-0.5 inline-block h-2.5 w-2.5 rounded-full bg-white transition-transform ${on ? 'translate-x-3' : 'translate-x-0.5'}`} />
+      </span>
+      {on ? 'AI handling' : 'You handling'}
+    </button>
+  );
+}
+
+function MessageBubble({ m }) {
+  const incoming = m.from === 'contact';
+  const ai       = m.from === 'ai';
+  const human    = m.from === 'human';
+
+  return (
+    <div className={`flex w-full ${incoming ? 'justify-start' : 'justify-end'}`}>
+      <div className={`flex max-w-[78%] flex-col ${incoming ? 'items-start' : 'items-end'}`}>
+        <div
+          className={`whitespace-pre-line rounded-2xl px-3.5 py-2 text-[13.5px] leading-relaxed shadow-sm ${
+            incoming
+              ? 'rounded-tl-sm bg-surface2/80 text-slate-100'
+              : ai
+                ? 'rounded-tr-sm bg-gradient-to-br from-accent to-accent2 text-white shadow-accent/20'
+                : 'rounded-tr-sm bg-violet-500/30 text-slate-50 ring-1 ring-violet-300/20'
+          }`}
+        >
+          {m.text}
+        </div>
+        <div className="mt-1 flex items-center gap-1.5 px-1 text-[10px] text-slate-500">
+          {ai    && <span className="rounded bg-accent/15 px-1 py-px font-semibold text-accent">AI</span>}
+          {human && <span className="rounded bg-violet-300/15 px-1 py-px font-semibold text-violet-300">You</span>}
+          <span className="tabular-nums">{m.ts}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DateDivider({ label }) {
+  return (
+    <div className="my-2 flex items-center gap-3 text-[10px] uppercase tracking-wider text-slate-600">
+      <span className="h-px flex-1 bg-slate-800/60" />
+      {label}
+      <span className="h-px flex-1 bg-slate-800/60" />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// helpers + icons
+// ─────────────────────────────────────────────────────────────
+function initials(name = '') {
+  return name.split(/\s+/).slice(0, 2).map((s) => s[0]).join('').toUpperCase();
+}
+function svgProps(p) { return { fill:'none', stroke:'currentColor', strokeWidth:1.75, strokeLinecap:'round', strokeLinejoin:'round', viewBox:'0 0 24 24', ...p }; }
+function IconSearch(p)   { return <svg {...svgProps(p)}><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>; }
+function IconPaperclip(p){ return <svg {...svgProps(p)}><path d="M21 12.5 12.5 21a5 5 0 0 1-7-7L14 5.5a3.5 3.5 0 1 1 5 5L10.5 19a2 2 0 0 1-3-3l8-8"/></svg>; }
+function IconSend(p)     { return <svg {...svgProps(p)}><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg>; }

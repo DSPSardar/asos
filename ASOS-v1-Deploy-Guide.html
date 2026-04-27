@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASOS v1 — Deployment Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#030712; --surface:#0f172a; --surface2:#1e293b;
+    --border:rgba(99,102,241,0.12); --border2:rgba(99,102,241,0.25);
+    --accent:#6366f1; --accent2:#8b5cf6;
+    --green:#10b981; --yellow:#f59e0b; --red:#ef4444; --cyan:#06b6d4;
+    --text:#f1f5f9; --text2:#94a3b8; --text3:#475569;
+    --font:'Space Grotesk',sans-serif; --mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.6;}
+
+  /* Grid bg */
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(rgba(99,102,241,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.03) 1px,transparent 1px);
+    background-size:56px 56px;}
+
+  .page{max-width:900px;margin:0 auto;padding:3rem 2rem 6rem;position:relative;z-index:1;}
+
+  /* Header */
+  header{position:sticky;top:0;z-index:100;background:rgba(3,7,18,0.92);backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;gap:16px;height:52px;}
+  .logo{font-family:var(--mono);font-weight:600;font-size:13px;color:var(--text);display:flex;align-items:center;gap:10px;}
+  .logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  .header-nav{display:flex;gap:2px;margin-left:auto;}
+  .header-nav a{color:var(--text3);font-size:12px;font-family:var(--mono);text-decoration:none;padding:5px 10px;border-radius:6px;transition:all .15s;}
+  .header-nav a:hover{color:var(--text);background:var(--surface2);}
+
+  /* Hero */
+  .hero{padding:3rem 0 2rem;border-bottom:1px solid var(--border);margin-bottom:3rem;}
+  .hero-eyebrow{font-size:11px;color:var(--accent);letter-spacing:3px;text-transform:uppercase;font-weight:600;margin-bottom:.75rem;}
+  .hero-title{font-size:42px;font-weight:800;letter-spacing:-1.5px;line-height:1.1;margin-bottom:1rem;}
+  .hero-title span{background:linear-gradient(135deg,#818cf8,#a78bfa,#67e8f9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .hero-sub{font-size:15px;color:var(--text2);max-width:560px;line-height:1.7;margin-bottom:1.5rem;}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;}
+  .chip{border:1px solid var(--border2);border-radius:20px;padding:4px 12px;font-size:11px;font-family:var(--mono);color:var(--text2);}
+  .chip.g{border-color:rgba(16,185,129,.4);color:var(--green);}
+  .chip.b{border-color:rgba(99,102,241,.4);color:#818cf8;}
+  .chip.y{border-color:rgba(245,158,11,.4);color:var(--yellow);}
+
+  /* Step sections */
+  .step{display:grid;grid-template-columns:48px 1fr;gap:0;margin-bottom:3rem;}
+  .step-line{display:flex;flex-direction:column;align-items:center;padding-top:3px;}
+  .step-num{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:700;font-family:var(--mono);flex-shrink:0;position:relative;z-index:1;border:2px solid;}
+  .step-num.accent{border-color:var(--accent);color:var(--accent);background:rgba(99,102,241,.1);}
+  .step-num.green{border-color:var(--green);color:var(--green);background:rgba(16,185,129,.1);}
+  .step-num.yellow{border-color:var(--yellow);color:var(--yellow);background:rgba(245,158,11,.1);}
+  .step-num.cyan{border-color:var(--cyan);color:var(--cyan);background:rgba(6,182,212,.1);}
+  .step-num.purple{border-color:var(--accent2);color:var(--accent2);background:rgba(139,92,246,.1);}
+  .step-vert{flex:1;width:2px;background:var(--border);margin:4px 0;min-height:24px;}
+  .step:last-child .step-vert{display:none;}
+  .step-body{padding:0 0 0 20px;}
+  .step-title{font-size:18px;font-weight:700;margin-bottom:4px;margin-top:6px;}
+  .step-desc{color:var(--text2);font-size:13px;line-height:1.7;margin-bottom:16px;}
+
+  /* Code blocks */
+  .code{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:12px 0;}
+  .code-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;
+    border-bottom:1px solid var(--border);background:rgba(30,41,59,.4);}
+  .code-title{font-size:11px;font-family:var(--mono);color:var(--text3);letter-spacing:.5px;}
+  .code-copy{font-size:11px;color:var(--text3);cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid var(--border);
+    background:transparent;font-family:var(--mono);transition:all .15s;}
+  .code-copy:hover{color:var(--text);border-color:var(--border2);}
+  pre{padding:16px;font-family:var(--mono);font-size:12px;line-height:1.8;overflow-x:auto;color:#cdd9e5;}
+  .cmd{color:#39d353;}
+  .cmt{color:#444c56;font-style:italic;}
+  .kw{color:#cc99cd;}
+  .str{color:#7ec699;}
+  .env-key{color:#58a6ff;}
+  .env-val{color:#f08d49;}
+  .warn-text{color:#e3b341;}
+
+  /* Cards */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin:12px 0;}
+  .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin:12px 0;}
+  .card-title{font-size:12px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+  .card ul{list-style:none;}
+  .card ul li{font-size:12px;color:var(--text2);padding:3px 0;display:flex;align-items:flex-start;gap:6px;}
+  .card ul li::before{content:'→';color:var(--text3);flex-shrink:0;}
+
+  /* Alert / callout */
+  .callout{border-radius:10px;padding:14px 18px;margin:16px 0;font-size:13px;line-height:1.7;}
+  .callout.info{background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.2);border-left:3px solid var(--accent);color:var(--text2);}
+  .callout.warn{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-left:3px solid var(--yellow);color:var(--text2);}
+  .callout.success{background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-left:3px solid var(--green);color:var(--text2);}
+  .callout strong{color:var(--accent);}
+  .callout.warn strong{color:var(--yellow);}
+  .callout.success strong{color:var(--green);}
+
+  /* Badge */
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;font-family:var(--mono);}
+  .badge.required{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.25);}
+  .badge.optional{background:rgba(99,102,241,.12);color:#818cf8;border:1px solid rgba(99,102,241,.2);}
+
+  /* Platform cards */
+  .platform-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin:16px 0;}
+  .platform-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;transition:border-color .2s;}
+  .platform-card:hover{border-color:var(--border2);}
+  .platform-name{font-size:15px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px;}
+  .platform-desc{font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.5;}
+  .platform-pros{font-size:11px;color:var(--green);margin-bottom:6px;}
+  .platform-cons{font-size:11px;color:var(--text3);}
+  .platform-badge{font-size:10px;padding:2px 8px;border-radius:10px;font-family:var(--mono);font-weight:600;}
+  .badge-recommended{background:rgba(16,185,129,.15);color:var(--green);border:1px solid rgba(16,185,129,.25);}
+  .badge-cheap{background:rgba(245,158,11,.15);color:var(--yellow);border:1px solid rgba(245,158,11,.25);}
+  .badge-scale{background:rgba(99,102,241,.15);color:#818cf8;border:1px solid rgba(99,102,241,.25);}
+
+  /* Architecture diagram */
+  .arch{display:flex;flex-direction:column;gap:0;margin:16px 0;}
+  .arch-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .arch-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;font-family:var(--mono);white-space:nowrap;}
+  .arch-box.accent{border-color:rgba(99,102,241,.4);color:#818cf8;}
+  .arch-box.green{border-color:rgba(16,185,129,.3);color:var(--green);}
+  .arch-box.yellow{border-color:rgba(245,158,11,.3);color:var(--yellow);}
+  .arch-arrow{color:var(--text3);font-size:16px;flex-shrink:0;}
+  .arch-label{font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin:8px 0 4px;font-weight:600;}
+
+  /* Checklist */
+  .checklist{list-style:none;space-y:4px;}
+  .checklist li{display:flex;align-items:flex-start;gap:10px;padding:8px 12px;border-radius:8px;font-size:13px;
+    background:rgba(15,23,42,.4);border:1px solid var(--border);margin-bottom:6px;}
+  .checklist li .ck{width:18px;height:18px;border-radius:4px;border:2px solid var(--border2);flex-shrink:0;margin-top:1px;
+    display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;transition:all .2s;}
+  .checklist li .ck:hover{border-color:var(--accent);}
+  .checklist li.done .ck{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .checklist li.done span{text-decoration:line-through;color:var(--text3);}
+
+  /* Scrollbar */
+  ::-webkit-scrollbar{width:5px;height:5px;}
+  ::-webkit-scrollbar-thumb{background:rgba(99,102,241,.3);border-radius:3px;}
+
+  /* Animations */
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .page{animation:fadeIn .4s ease both;}
+
+  hr{border:none;border-top:1px solid var(--border);margin:2.5rem 0;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-dot"></div> ASOS v1 — Deployment Guide</div>
+  <nav class="header-nav">
+    <a href="#infra">Infrastructure</a>
+    <a href="#deploy">Deploy</a>
+    <a href="#whatsapp">WhatsApp</a>
+    <a href="#verify">Verify</a>
+    <a href="#checklist">Checklist</a>
+  </nav>
+</header>
+
+<div class="page">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-eyebrow">Production Setup</div>
+    <h1 class="hero-title">Deploy ASOS v1<br><span>to Production</span></h1>
+    <p class="hero-sub">Get your AI sales system live with a public HTTPS endpoint — required for WhatsApp webhooks and Meta attribution to work.</p>
+    <div class="chips">
+      <span class="chip g">Docker Compose</span>
+      <span class="chip b">Nginx + SSL</span>
+      <span class="chip y">WhatsApp Webhook</span>
+      <span class="chip">Ubuntu 22.04</span>
+      <span class="chip">~30 min setup</span>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <div class="arch" id="infra">
+    <div class="arch-label">Production Architecture</div>
+    <div class="arch-row">
+      <div class="arch-box accent">Meta Ads</div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box accent">WhatsApp Cloud API</div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box green">Nginx :443</div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box green">API :3000</div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box yellow">Redis Queue</div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box green">Worker × 2</div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box yellow">Claude AI</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- STEP 1: Choose Platform -->
+  <div class="step" id="step1">
+    <div class="step-line"><div class="step-num accent">1</div><div class="step-vert"></div></div>
+    <div class="step-body">
+      <div class="step-title">Choose Your Infrastructure</div>
+      <div class="step-desc">Pick one deployment target. Railway is fastest to get started; a VPS gives you full control.</div>
+
+      <div class="platform-grid">
+        <div class="platform-card">
+          <div class="platform-name">🚂 Railway <span class="platform-badge badge-recommended">Recommended</span></div>
+          <div class="platform-desc">Deploy directly from GitHub. Auto-detects Docker. Built-in PostgreSQL + Redis plugins.</div>
+          <div class="platform-pros">✓ 5 min setup · ✓ Auto SSL · ✓ Git deploys</div>
+          <div class="platform-cons">⚡ Free tier · ~$20/mo production</div>
+        </div>
+        <div class="platform-card">
+          <div class="platform-name">🌊 DigitalOcean <span class="platform-badge badge-cheap">Budget</span></div>
+          <div class="platform-desc">$6/mo Droplet. Run docker-compose on Ubuntu. Full server control.</div>
+          <div class="platform-pros">✓ Cheapest · ✓ Full control · ✓ Scalable</div>
+          <div class="platform-cons">⚡ Manual SSL setup · more config</div>
+        </div>
+        <div class="platform-card">
+          <div class="platform-name">☁ AWS / GCP <span class="platform-badge badge-scale">Scale</span></div>
+          <div class="platform-desc">EC2 + RDS + ElastiCache. Production grade, higher complexity.</div>
+          <div class="platform-pros">✓ Enterprise SLA · ✓ Global CDN</div>
+          <div class="platform-cons">⚡ Complex setup · higher cost</div>
+        </div>
+      </div>
+
+      <div class="callout info"><strong>Minimum server specs:</strong> 2 vCPU · 2GB RAM · 20GB SSD. The AI worker is the most memory-intensive component.</div>
+    </div>
+  </div>
+
+  <!-- STEP 2: VPS Setup -->
+  <div class="step" id="step2">
+    <div class="step-line"><div class="step-num green">2</div><div class="step-vert"></div></div>
+    <div class="step-body">
+      <div class="step-title">Server Setup (Ubuntu VPS)</div>
+      <div class="step-desc">SSH into your server, then run the automated setup script. Skip this step if using Railway — go to Step 4.</div>
+
+      <div class="code">
+        <div class="code-header"><span class="code-title">SSH into server</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmd">ssh</span> root@YOUR_SERVER_IP</pre>
+      </div>
+
+      <div class="code">
+        <div class="code-header"><span class="code-title">Upload project files from your machine</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmt"># Run on your LOCAL machine</span>
+<span class="cmd">rsync</span> -avz --exclude node_modules --exclude .git \
+  ./ root@YOUR_SERVER_IP:/opt/asos/</pre>
+      </div>
+
+      <div class="code">
+        <div class="code-header"><span class="code-title">Run automated setup script</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmt"># On the SERVER — replace with your actual domain</span>
+<span class="cmd">bash</span> /opt/asos/deploy/setup.sh yourdomain.com admin@yourdomain.com</pre>
+      </div>
+
+      <div class="callout warn"><strong>DNS first:</strong> Point your domain A records to the server IP before running the setup script. Certbot needs to verify domain ownership via HTTP.</div>
+    </div>
+  </div>
+
+  <!-- STEP 3: Environment -->
+  <div class="step" id="step3">
+    <div class="step-line"><div class="step-num yellow">3</div><div class="step-vert"></div></div>
+    <div class="step-body">
+      <div class="step-title">Configure Environment Variables</div>
+      <div class="step-desc">The setup script auto-generates secrets. You must manually add your API keys.</div>
+
+      <div class="code">
+        <div class="code-header"><span class="code-title">Edit production env (on server)</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmd">nano</span> /opt/asos/.env.production</pre>
+      </div>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-title">🤖 Anthropic <span class="badge required">REQUIRED</span></div>
+          <ul>
+            <li>Go to console.anthropic.com</li>
+            <li>API Keys → Create Key</li>
+            <li>Set ANTHROPIC_API_KEY</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">💬 WhatsApp <span class="badge required">REQUIRED</span></div>
+          <ul>
+            <li>developers.facebook.com</li>
+            <li>Create App → WhatsApp</li>
+            <li>Set WHATSAPP_APP_SECRET</li>
+            <li>Set WHATSAPP_VERIFY_TOKEN</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">📊 Meta Ads <span class="badge optional">Optional</span></div>
+          <ul>
+            <li>Meta Business Manager</li>
+            <li>Events Manager → Pixel</li>
+            <li>Set META_PIXEL_ID</li>
+            <li>Set META_ACCESS_TOKEN</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title">💳 Stripe <span class="badge optional">Optional</span></div>
+          <ul>
+            <li>dashboard.stripe.com</li>
+            <li>Developers → API Keys</li>
+            <li>Set STRIPE_SECRET_KEY</li>
+            <li>Set STRIPE_WEBHOOK_SECRET</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="code">
+        <div class="code-header"><span class="code-title">Key env vars to fill in</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="env-key">ANTHROPIC_API_KEY</span>=<span class="env-val">sk-ant-api03-xxxxx</span>
+<span class="env-comment"># v1.5 Dual Agent — split Qualifier (analytic) + Closer (persuasive)</span>
+<span class="env-key">QUALIFIER_MODEL</span>=<span class="env-val">claude-haiku-4-5</span>
+<span class="env-key">CLOSER_MODEL</span>=<span class="env-val">claude-3-5-sonnet-20241022</span>
+<span class="env-key">WHATSAPP_APP_SECRET</span>=<span class="env-val">your_meta_app_secret</span>
+<span class="env-key">WHATSAPP_VERIFY_TOKEN</span>=<span class="env-val">any_random_string_you_choose</span>
+<span class="env-key">ALLOWED_ORIGINS</span>=<span class="env-val">https://app.yourdomain.com</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 4: Deploy -->
+  <div class="step" id="deploy">
+    <div class="step-line"><div class="step-num cyan">4</div><div class="step-vert"></div></div>
+    <div class="step-body">
+      <div class="step-title">Start All Services</div>
+      <div class="step-desc">Docker Compose orchestrates the full stack: PostgreSQL → Redis → DB Migration → API → Workers × 2 → Nginx.</div>
+
+      <div class="code">
+        <div class="code-header"><span class="code-title">Start the full stack</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmd">cd</span> /opt/asos
+
+<span class="cmt"># Run migrations first</span>
+<span class="cmd">docker compose</span> --env-file .env.production up -d migrate
+<span class="cmd">sleep</span> 10
+
+<span class="cmt"># v1.5 Dual Agent migration — adds AiAgentLog table + Lead.humanFollowupRequired</span>
+<span class="cmd">docker exec</span> asos_api npx prisma migrate deploy
+
+<span class="cmt"># Start everything</span>
+<span class="cmd">docker compose</span> --env-file .env.production up -d
+
+<span class="cmt"># Seed demo data</span>
+<span class="cmd">docker exec</span> asos_api node prisma/seed.js
+
+<span class="cmt"># Check all containers are running</span>
+<span class="cmd">docker compose</span> ps</pre>
+      </div>
+
+      <div class="code">
+        <div class="code-header"><span class="code-title">Expected output</span></div>
+        <pre><span class="str">NAME              STATUS         PORTS</span>
+asos_postgres     Up (healthy)   5432/tcp
+asos_redis        Up (healthy)   6379/tcp
+asos_api          Up (healthy)   127.0.0.1:3000->3000/tcp
+asos_worker       Up (2)         —
+asos_nginx        Up             0.0.0.0:80->80, 0.0.0.0:443->443</pre>
+      </div>
+
+      <div class="callout success"><strong>Test your API:</strong> curl https://api.yourdomain.com/health → should return {"status":"ok"}</div>
+    </div>
+  </div>
+
+  <!-- STEP 5: WhatsApp Webhook -->
+  <div class="step" id="whatsapp">
+    <div class="step-line"><div class="step-num purple">5</div><div class="step-vert"></div></div>
+    <div class="step-body">
+      <div class="step-title">Configure WhatsApp Webhook</div>
+      <div class="step-desc">This step connects Meta's WhatsApp Cloud API to your live server. Without this, no messages will arrive.</div>
+
+      <div class="card-grid" style="grid-template-columns:1fr;">
+        <div class="card">
+          <ol style="list-style:decimal;padding-left:18px;space-y:8px;font-size:13px;color:var(--text2);display:flex;flex-direction:column;gap:10px;">
+            <li>Go to <strong style="color:var(--text)">developers.facebook.com</strong> → Your App → WhatsApp → Configuration</li>
+            <li>Under <strong style="color:var(--text)">Webhook</strong>, click <em>Edit</em></li>
+            <li>Set Callback URL: <code style="color:#818cf8;font-family:var(--mono);background:rgba(99,102,241,.1);padding:2px 6px;border-radius:4px;">https://api.yourdomain.com/webhooks/whatsapp</code></li>
+            <li>Set Verify Token: <code style="color:#818cf8;font-family:var(--mono);background:rgba(99,102,241,.1);padding:2px 6px;border-radius:4px;">same value as WHATSAPP_VERIFY_TOKEN in your .env</code></li>
+            <li>Click <strong style="color:var(--text)">Verify and Save</strong> — Meta will call your server to verify</li>
+            <li>Under <strong style="color:var(--text)">Webhook Fields</strong>, subscribe to: <code style="color:var(--green);font-family:var(--mono)">messages</code> and <code style="color:var(--green);font-family:var(--mono)">message_status_updates</code></li>
+            <li>Copy your <strong style="color:var(--text)">Phone Number ID</strong> and <strong style="color:var(--text)">Permanent Access Token</strong></li>
+            <li>In ASOS Settings → WhatsApp → paste those values and save</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="code">
+        <div class="code-header"><span class="code-title">Test webhook verification manually</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmd">curl</span> "https://api.yourdomain.com/webhooks/whatsapp\
+  ?hub.mode=subscribe\
+  &hub.verify_token=YOUR_VERIFY_TOKEN\
+  &hub.challenge=test123"
+<span class="cmt"># Should return: test123</span></pre>
+      </div>
+
+      <div class="callout warn"><strong>Common issue:</strong> If verification fails, check that WHATSAPP_VERIFY_TOKEN in .env.production exactly matches what you entered in the Meta Developer Console (case-sensitive).</div>
+    </div>
+  </div>
+
+  <!-- STEP 6: Verify -->
+  <div class="step" id="verify">
+    <div class="step-line"><div class="step-num green">6</div><div class="step-vert"></div></div>
+    <div class="step-body">
+      <div class="step-title">Verify End-to-End Flow</div>
+      <div class="step-desc">Send a test WhatsApp message to confirm the full pipeline works: Message → Webhook → Queue → Claude → Reply.</div>
+
+      <div class="code">
+        <div class="code-header"><span class="code-title">Watch live logs</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmt"># API logs</span>
+<span class="cmd">docker logs</span> -f asos_api
+
+<span class="cmt"># Worker logs (AI processing)</span>
+<span class="cmd">docker logs</span> -f asos_worker
+
+<span class="cmt"># All logs together</span>
+<span class="cmd">docker compose</span> logs -f --tail=50</pre>
+      </div>
+
+      <div class="card-grid" style="grid-template-columns:1fr;">
+        <div class="card">
+          <div class="card-title">✅ What to look for in logs</div>
+          <ul>
+            <li>📨 "Inbound message queued" — webhook received message</li>
+            <li>▶ "Processing inbound message" — worker picked up job</li>
+            <li>New contact created — CRM auto-created contact</li>
+            <li>New lead created — CRM auto-created lead</li>
+            <li>Claude AI decision logged — AI processed and scored</li>
+            <li>WA text message sent — reply sent back to WhatsApp</li>
+            <li>Meta CAPI event sent — attribution fired to Meta</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="code">
+        <div class="code-header"><span class="code-title">Useful management commands</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmt"># Restart a service</span>
+<span class="cmd">docker compose</span> restart api
+
+<span class="cmt"># Update to new code version</span>
+<span class="cmd">git pull</span>
+<span class="cmd">docker compose</span> --env-file .env.production up -d --build
+
+<span class="cmt"># Open Prisma Studio (DB GUI)</span>
+<span class="cmd">docker exec</span> -it asos_api npx prisma studio
+
+<span class="cmt"># Connect to PostgreSQL</span>
+<span class="cmd">docker exec</span> -it asos_postgres psql -U asos_user -d asos_db
+
+<span class="cmt"># Scale workers</span>
+<span class="cmd">docker compose</span> up -d --scale worker=4</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHECKLIST -->
+  <div id="checklist">
+    <h2 style="font-size:18px;font-weight:700;margin-bottom:1rem;">Pre-Launch Checklist</h2>
+    <ul class="checklist" id="checklistItems">
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>DNS A records pointing to server IP</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>SSL certificates issued (Let's Encrypt)</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>All Docker containers healthy (docker compose ps)</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>Health check passes: GET /health → {"status":"ok"}</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>ANTHROPIC_API_KEY set in .env.production</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>WHATSAPP_APP_SECRET + WHATSAPP_VERIFY_TOKEN set</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>WhatsApp webhook verified in Meta Developer Console</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>messages + message_status_updates webhook fields subscribed</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>Phone Number ID + Access Token saved in ASOS Settings</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>Test message sent → AI replied in WhatsApp</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>Lead appears in ASOS Dashboard pipeline</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>Meta CAPI Lead event visible in Events Manager</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>Seed data loaded (node prisma/seed.js)</span></li>
+      <li onclick="toggleCheck(this)"><div class="ck"></div><span>Admin login works at https://app.yourdomain.com</span></li>
+    </ul>
+
+    <div id="checkProgress" class="callout info" style="margin-top:1rem;">
+      <strong>0 / 14 complete</strong> — work through each item above
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Copy code buttons ──────────────────────────────────────────
+function copyCode(btn) {
+  const pre = btn.closest('.code').querySelector('pre');
+  const text = pre.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ Copied';
+    btn.style.color = '#10b981';
+    setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; }, 2000);
+  });
+}
+
+// ── Checklist ─────────────────────────────────────────────────
+function toggleCheck(li) {
+  li.classList.toggle('done');
+  updateProgress();
+}
+
+function updateProgress() {
+  const items = document.querySelectorAll('.checklist li');
+  const done  = document.querySelectorAll('.checklist li.done').length;
+  const total = items.length;
+  const pct   = Math.round((done / total) * 100);
+  const el    = document.getElementById('checkProgress');
+  const allDone = done === total;
+
+  el.className = `callout ${allDone ? 'success' : 'info'}`;
+  el.innerHTML = allDone
+    ? '<strong>🚀 All done! ASOS v1 is live.</strong> Your AI sales system is running in production.'
+    : `<strong>${done} / ${total} complete</strong> · ${pct}% — ${total - done} items remaining`;
+}
+
+// Persist checklist state
+const saved = JSON.parse(localStorage.getItem('asos_checklist') || '{}');
+document.querySelectorAll('.checklist li').forEach((li, i) => {
+  if (saved[i]) li.classList.add('done');
+  li.addEventListener('click', () => {
+    const state = {};
+    document.querySelectorAll('.checklist li').forEach((l, j) => { state[j] = l.classList.contains('done'); });
+    localStorage.setItem('asos_checklist', JSON.stringify(state));
+  });
+});
+updateProgress();
+</script>
+
+</body>
+</html>

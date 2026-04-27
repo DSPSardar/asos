@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>getaisales.com — Social Media Kit</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--indigo:#6366f1;--violet:#8b5cf6;--neon:#818cf8;--cyan:#67e8f9;
+  --emerald:#10b981;--amber:#f59e0b;--bg:#030712;--s1:#0f172a;--s2:#1e293b;
+  --text:#f1f5f9;--text2:#94a3b8;--text3:#475569;
+  --display:'Plus Jakarta Sans',sans-serif;--body:'Space Grotesk',sans-serif;--mono:'JetBrains Mono',monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0f172a;color:var(--text);font-family:var(--body);font-size:14px;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(99,102,241,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.03) 1px,transparent 1px);background-size:56px 56px;}
+.page{max-width:1100px;margin:0 auto;padding:3rem 2rem 6rem;position:relative;z-index:1;}
+header{background:rgba(3,7,18,0.95);border-bottom:1px solid rgba(99,102,241,0.1);height:52px;display:flex;align-items:center;padding:0 2rem;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);}
+.h-logo{font-family:var(--display);font-weight:800;font-size:14px;background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.h-meta{font-size:11px;color:var(--text3);font-family:var(--mono);}
+
+/* Section */
+.sec{margin-bottom:4rem;}
+.sec-label{font-size:10px;letter-spacing:3px;text-transform:uppercase;font-weight:700;color:var(--neon);margin-bottom:.5rem;}
+.sec-title{font-family:var(--display);font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-bottom:.5rem;}
+.sec-sub{font-size:13px;color:var(--text2);margin-bottom:2rem;}
+hr{border:none;border-top:1px solid rgba(99,102,241,0.1);margin:3rem 0;}
+
+/* Card wrapper */
+.asset-row{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:1rem;}
+.asset-wrap{display:flex;flex-direction:column;gap:8px;}
+.asset-label{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:1px;text-transform:uppercase;}
+.asset-dims{font-size:10px;font-family:var(--mono);color:rgba(99,102,241,0.6);}
+
+/* ── Logo icon shorthand ── */
+.logo-i{display:flex;align-items:center;justify-content:center;border-radius:inherit;}
+
+/* ══════════════════════════════════
+   LINKEDIN COVER — 1584 × 396
+   ══════════════════════════════════ */
+.linkedin-cover{width:792px;height:198px;border-radius:12px;overflow:hidden;position:relative;
+  background:linear-gradient(135deg,#030712 0%,#0f172a 50%,#1a1040 100%);
+  border:1px solid rgba(99,102,241,0.2);}
+.linkedin-cover .orb1{position:absolute;width:300px;height:300px;border-radius:50%;
+  background:radial-gradient(circle,rgba(99,102,241,0.18),transparent 70%);top:-80px;left:-60px;}
+.linkedin-cover .orb2{position:absolute;width:200px;height:200px;border-radius:50%;
+  background:radial-gradient(circle,rgba(139,92,246,0.12),transparent 70%);bottom:-60px;right:80px;}
+.linkedin-cover .grid{position:absolute;inset:0;
+  background-image:linear-gradient(rgba(99,102,241,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.04) 1px,transparent 1px);background-size:28px 28px;}
+.linkedin-content{position:absolute;inset:0;display:flex;align-items:center;padding:28px 40px;gap:24px;}
+.lk-icon{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 28px rgba(99,102,241,0.5);}
+.lk-text h2{font-family:var(--display);font-size:26px;font-weight:800;letter-spacing:-1px;line-height:1;
+  background:linear-gradient(135deg,#f1f5f9,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.lk-text p{font-size:12px;color:var(--text2);margin-top:6px;max-width:360px;line-height:1.5;}
+.lk-stats{margin-left:auto;display:flex;gap:28px;flex-shrink:0;}
+.lk-stat{text-align:center;}
+.lk-stat-val{font-family:var(--display);font-size:22px;font-weight:800;background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+.lk-stat-label{font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
+
+/* ══════════════════════════════════
+   TWITTER/X HEADER — 1500 × 500
+   ══════════════════════════════════ */
+.twitter-header{width:750px;height:250px;border-radius:12px;overflow:hidden;position:relative;
+  background:linear-gradient(160deg,#030712 0%,#0a0f28 60%,#06101f 100%);
+  border:1px solid rgba(99,102,241,0.2);}
+.tw-orb1{position:absolute;width:350px;height:350px;border-radius:50%;filter:blur(60px);
+  background:radial-gradient(circle,rgba(99,102,241,0.15),transparent 70%);top:-100px;right:-50px;}
+.tw-orb2{position:absolute;width:200px;height:200px;border-radius:50%;filter:blur(50px);
+  background:radial-gradient(circle,rgba(103,232,249,0.08),transparent 70%);bottom:-50px;left:100px;}
+.tw-grid{position:absolute;inset:0;
+  background-image:linear-gradient(rgba(99,102,241,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.03) 1px,transparent 1px);background-size:24px 24px;}
+.tw-content{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;}
+.tw-icon{width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;box-shadow:0 0 24px rgba(99,102,241,0.5);}
+.tw-content h2{font-family:var(--display);font-size:30px;font-weight:800;letter-spacing:-1px;
+  background:linear-gradient(135deg,#818cf8,#a78bfa,#67e8f9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+.tw-content p{font-size:12px;color:var(--text2);max-width:420px;line-height:1.5;}
+.tw-url{font-family:var(--mono);font-size:11px;color:var(--neon);
+  background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);padding:4px 12px;border-radius:20px;}
+
+/* ══════════════════════════════════
+   PROFILE AVATAR — 400 × 400
+   ══════════════════════════════════ */
+.avatar{width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 40px rgba(99,102,241,0.5);position:relative;overflow:hidden;}
+.avatar::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 30% 30%,rgba(255,255,255,0.15),transparent 60%);}
+
+/* ══════════════════════════════════
+   WHATSAPP BUSINESS PROFILE
+   ══════════════════════════════════ */
+.wa-profile{width:260px;background:#111b21;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.05);}
+.wa-header{background:#1f2c34;padding:16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,0.05);}
+.wa-avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.wa-name{font-weight:700;font-size:14px;color:#e9edef;}
+.wa-status{font-size:11px;color:#8696a0;margin-top:2px;}
+.wa-verified{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#25d366;margin-top:3px;}
+.wa-body{padding:14px;}
+.wa-desc{font-size:12px;color:#8696a0;line-height:1.5;margin-bottom:10px;}
+.wa-url{font-size:11px;color:#53bdeb;font-family:var(--mono);}
+.wa-cat{font-size:10px;color:#8696a0;margin-top:6px;text-transform:uppercase;letter-spacing:1px;}
+
+/* ══════════════════════════════════
+   INSTAGRAM POST — 1080 × 1080
+   ══════════════════════════════════ */
+.ig-post{width:320px;height:320px;border-radius:12px;overflow:hidden;position:relative;
+  background:linear-gradient(135deg,#030712,#0f172a);border:1px solid rgba(99,102,241,0.2);}
+.ig-orb{position:absolute;width:250px;height:250px;border-radius:50%;filter:blur(50px);
+  background:radial-gradient(circle,rgba(99,102,241,0.2),transparent 70%);top:-60px;right:-60px;}
+.ig-content{position:absolute;inset:0;display:flex;flex-direction:column;padding:28px;}
+.ig-tag{font-size:10px;font-family:var(--mono);color:var(--neon);letter-spacing:2px;text-transform:uppercase;margin-bottom:auto;}
+.ig-h{font-family:var(--display);font-size:26px;font-weight:800;letter-spacing:-1px;line-height:1.1;
+  background:linear-gradient(135deg,#f1f5f9,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px;}
+.ig-p{font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:16px;}
+.ig-cta{font-size:11px;font-weight:700;color:var(--neon);font-family:var(--mono);}
+.ig-logo{display:flex;align-items:center;gap:8px;margin-top:auto;}
+.ig-logo-icon{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;}
+.ig-logo-text{font-family:var(--display);font-weight:800;font-size:12px;color:var(--text);}
+
+/* ══════════════════════════════════
+   STORY — 1080 × 1920
+   ══════════════════════════════════ */
+.story{width:180px;height:320px;border-radius:16px;overflow:hidden;position:relative;
+  background:linear-gradient(180deg,#030712 0%,#0f172a 40%,#1a0a30 100%);border:1px solid rgba(99,102,241,0.2);}
+.story-orb{position:absolute;width:200px;height:200px;border-radius:50%;filter:blur(40px);
+  background:radial-gradient(circle,rgba(99,102,241,0.2),transparent 70%);top:20px;left:-40px;}
+.story-content{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;}
+.story-icon{width:56px;height:56px;border-radius:18px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 0 24px rgba(99,102,241,0.5);}
+.story-h{font-family:var(--display);font-size:18px;font-weight:800;letter-spacing:-0.5px;line-height:1.1;
+  background:linear-gradient(135deg,#f1f5f9,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px;}
+.story-p{font-size:10px;color:var(--text2);line-height:1.5;margin-bottom:16px;}
+.story-cta{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:8px 20px;border-radius:20px;font-size:11px;font-weight:700;font-family:var(--body);}
+.story-url{position:absolute;bottom:16px;font-size:9px;font-family:var(--mono);color:var(--neon);}
+
+/* Download note */
+.dl-note{font-size:11px;color:var(--text3);font-family:var(--mono);padding:8px 12px;border-radius:6px;background:rgba(99,102,241,0.05);border:1px solid rgba(99,102,241,0.1);margin-top:8px;}
+::-webkit-scrollbar{width:4px;}..::-webkit-scrollbar-thumb{background:rgba(99,102,241,.3);border-radius:2px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="h-logo">getaisales.com — Social Media Kit</div>
+  <div class="h-meta">All assets · April 2026</div>
+</header>
+
+<div class="page">
+
+  <!-- ══ LINKEDIN ══ -->
+  <div class="sec">
+    <div class="sec-label">01 — LinkedIn</div>
+    <h2 class="sec-title">LinkedIn Cover Photo</h2>
+    <p class="sec-sub">1584 × 396 px · Use on Company Page and personal profiles</p>
+
+    <div class="asset-wrap">
+      <div class="asset-label">LinkedIn Cover — 1584×396 <span class="asset-dims">(shown at 50%)</span></div>
+      <div class="linkedin-cover">
+        <div class="orb1"></div>
+        <div class="orb2"></div>
+        <div class="grid"></div>
+        <div class="linkedin-content">
+          <div class="lk-icon">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/><circle cx="12" cy="12" r="3" fill="white" opacity="0.4"/></svg>
+          </div>
+          <div class="lk-text">
+            <h2>getaisales.com</h2>
+            <p>AI-powered sales automation via WhatsApp & Meta Ads. Close deals while you sleep.</p>
+          </div>
+          <div class="lk-stats">
+            <div class="lk-stat"><div class="lk-stat-val">78%</div><div class="lk-stat-label">AI Rate</div></div>
+            <div class="lk-stat"><div class="lk-stat-val">11.1%</div><div class="lk-stat-label">Conversion</div></div>
+            <div class="lk-stat"><div class="lk-stat-val">5.68×</div><div class="lk-stat-label">ROAS</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="dl-note">📐 Actual size: 1584 × 396px · Export via browser print-to-PDF or screenshot at 2× for retina</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ══ TWITTER/X ══ -->
+  <div class="sec">
+    <div class="sec-label">02 — Twitter / X</div>
+    <h2 class="sec-title">Twitter Header + Avatar</h2>
+    <p class="sec-sub">Header: 1500 × 500 px · Avatar: 400 × 400 px</p>
+
+    <div class="asset-row">
+      <div class="asset-wrap">
+        <div class="asset-label">Twitter Header — 1500×500 <span class="asset-dims">(shown at 50%)</span></div>
+        <div class="twitter-header">
+          <div class="tw-orb1"></div>
+          <div class="tw-orb2"></div>
+          <div class="tw-grid"></div>
+          <div class="tw-content">
+            <div class="tw-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/><circle cx="12" cy="12" r="3" fill="white" opacity="0.4"/></svg>
+            </div>
+            <h2>Close deals while you sleep.</h2>
+            <p>Claude AI qualifies WhatsApp leads 24/7 · Meta Ads attribution · Built-in CRM</p>
+            <div class="tw-url">getaisales.com</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="asset-wrap">
+        <div class="asset-label">Avatar — 400×400</div>
+        <div class="avatar">
+          <svg width="60" height="60" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/>
+            <circle cx="12" cy="12" r="3" fill="white" opacity="0.5"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ══ WHATSAPP ══ -->
+  <div class="sec">
+    <div class="sec-label">03 — WhatsApp Business</div>
+    <h2 class="sec-title">WhatsApp Business Profile</h2>
+    <p class="sec-sub">Profile picture, bio and business description for your WhatsApp Business account</p>
+
+    <div class="asset-row">
+      <div class="asset-wrap">
+        <div class="asset-label">Business Profile Preview</div>
+        <div class="wa-profile">
+          <div class="wa-header">
+            <div class="wa-avatar">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/></svg>
+            </div>
+            <div>
+              <div class="wa-name">getaisales.com</div>
+              <div class="wa-verified">✓ Verified Business</div>
+            </div>
+          </div>
+          <div class="wa-body">
+            <div class="wa-desc">AI-powered sales automation via WhatsApp & Meta Ads. We help businesses close more deals with Claude AI. 🤖</div>
+            <div class="wa-url">🔗 getaisales.com</div>
+            <div class="wa-cat">Category: Software / SaaS</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="asset-wrap" style="max-width:280px;">
+        <div class="asset-label">Recommended Bio Text</div>
+        <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(99,102,241,0.12);border-radius:10px;padding:16px;font-size:12px;color:var(--text2);line-height:1.7;">
+          <strong style="color:var(--text)">Business Name:</strong> getaisales.com<br><br>
+          <strong style="color:var(--text)">Bio (139 chars):</strong><br>
+          "AI sales automation via WhatsApp. Claude AI qualifies your leads 24/7. Close more deals. Free 14-day trial → getaisales.com"<br><br>
+          <strong style="color:var(--text)">Category:</strong> Software / Technology<br>
+          <strong style="color:var(--text)">Hours:</strong> 24/7 (AI-powered)<br>
+          <strong style="color:var(--text)">Website:</strong> getaisales.com
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ══ INSTAGRAM ══ -->
+  <div class="sec">
+    <div class="sec-label">04 — Instagram / Facebook</div>
+    <h2 class="sec-title">Post + Story Templates</h2>
+    <p class="sec-sub">Square post: 1080×1080 · Story: 1080×1920</p>
+
+    <div class="asset-row">
+      <div class="asset-wrap">
+        <div class="asset-label">Square Post — 1080×1080 <span class="asset-dims">(shown at 30%)</span></div>
+        <div class="ig-post">
+          <div class="ig-orb"></div>
+          <div class="ig-content">
+            <div class="ig-tag">◎ AI Sales</div>
+            <div class="ig-h">Close deals<br>while you sleep.</div>
+            <div class="ig-p">Claude AI responds to every WhatsApp lead in under 30 seconds — qualifying, diagnosing and closing for you.</div>
+            <div class="ig-cta">→ getaisales.com</div>
+            <div class="ig-logo">
+              <div class="ig-logo-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white"/></svg>
+              </div>
+              <div class="ig-logo-text">getaisales.com</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="asset-wrap">
+        <div class="asset-label">Story — 1080×1920 <span class="asset-dims">(shown at 30%)</span></div>
+        <div class="story">
+          <div class="story-orb"></div>
+          <div class="story-content">
+            <div class="story-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/></svg>
+            </div>
+            <div class="story-h">AI Sales on WhatsApp</div>
+            <div class="story-p">Your AI closes leads 24/7 while you focus on growth.</div>
+            <div class="story-cta">Try Free 14 Days →</div>
+            <div class="story-url">getaisales.com</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="asset-wrap" style="max-width:260px;">
+        <div class="asset-label">Caption Templates</div>
+        <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(99,102,241,0.12);border-radius:10px;padding:16px;font-size:11px;color:var(--text2);line-height:1.8;display:flex;flex-direction:column;gap:16px;">
+          <div>
+            <div style="color:var(--neon);font-weight:700;margin-bottom:4px">Post #1 — Problem</div>
+            "Losing leads because you can't respond fast enough? 🔥 Our AI replies to every WhatsApp lead in under 30 seconds — 24/7. No more cold leads. #getaisales #AIAutomation"
+          </div>
+          <div>
+            <div style="color:var(--neon);font-weight:700;margin-bottom:4px">Post #2 — Result</div>
+            "From 30 to 84 closes a month — same team, same budget. Just AI working 24/7. Try getaisales.com free for 14 days. 🤖💬 #WhatsAppMarketing #SalesAI"
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ══ HASHTAG STRATEGY ══ -->
+  <div class="sec">
+    <div class="sec-label">05 — Hashtag Strategy</div>
+    <h2 class="sec-title">Recommended Hashtags</h2>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;min-width:200px;">
+        <div style="font-size:10px;color:var(--neon);font-weight:700;margin-bottom:10px;font-family:var(--mono);letter-spacing:1px">BRAND</div>
+        <div style="font-size:12px;color:var(--text2);line-height:2">#getaisales<br>#AIinSales<br>#SalesAI<br>#WhatsAppSales</div>
+      </div>
+      <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;min-width:200px;">
+        <div style="font-size:10px;color:var(--neon);font-weight:700;margin-bottom:10px;font-family:var(--mono);letter-spacing:1px">INDUSTRY</div>
+        <div style="font-size:12px;color:var(--text2);line-height:2">#SalesAutomation<br>#LeadGeneration<br>#WhatsAppMarketing<br>#MetaAds</div>
+      </div>
+      <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;min-width:200px;">
+        <div style="font-size:10px;color:var(--neon);font-weight:700;margin-bottom:10px;font-family:var(--mono);letter-spacing:1px">PAKISTAN</div>
+        <div style="font-size:12px;color:var(--text2);line-height:2">#PakistanBusiness<br>#KarachiBusiness<br>#LahoreBusiness<br>#DigitalPakistan</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

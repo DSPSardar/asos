@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>getaisales.com — AI Sales Automation via WhatsApp</title>
+<meta name="description" content="Claude AI qualifies every lead, diagnoses their problem, and sends the perfect WhatsApp message — automatically. Close deals while you sleep.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --indigo:#6366f1; --violet:#8b5cf6; --neon:#818cf8;
+  --cyan:#67e8f9; --emerald:#10b981; --amber:#f59e0b; --red:#ef4444;
+  --bg:#030712; --s1:#0f172a; --s2:#1e293b; --s3:#334155;
+  --text:#f1f5f9; --text2:#94a3b8; --text3:#475569;
+  --display:'Plus Jakarta Sans',sans-serif;
+  --body:'Space Grotesk',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--text);font-family:var(--body);overflow-x:hidden;}
+
+/* Grid bg */
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(99,102,241,0.035) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(99,102,241,0.035) 1px,transparent 1px);
+  background-size:64px 64px;}
+
+/* Orbs */
+.orb{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;}
+
+/* ── NAVBAR ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;
+  background:rgba(3,7,18,0.88);backdrop-filter:blur(16px);
+  border-bottom:1px solid rgba(99,102,241,0.1);height:64px;
+  display:flex;align-items:center;padding:0 2rem;gap:0;}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav-icon{width:38px;height:38px;border-radius:12px;flex-shrink:0;
+  background:linear-gradient(135deg,#6366f1,#8b5cf6);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 20px rgba(99,102,241,0.4);}
+.nav-name{font-family:var(--display);font-weight:800;font-size:17px;
+  background:linear-gradient(135deg,#818cf8,#a78bfa);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.nav-links{display:flex;gap:2px;margin-left:auto;margin-right:24px;}
+.nav-link{color:var(--text3);font-size:14px;font-weight:500;text-decoration:none;
+  padding:7px 14px;border-radius:8px;transition:all .15s;}
+.nav-link:hover{color:var(--text2);background:rgba(255,255,255,0.04);}
+.nav-cta{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;
+  padding:9px 20px;border-radius:10px;font-size:14px;font-weight:700;
+  text-decoration:none;white-space:nowrap;font-family:var(--body);
+  box-shadow:0 4px 16px rgba(99,102,241,0.3);transition:all .2s;border:none;cursor:pointer;}
+.nav-cta:hover{box-shadow:0 6px 24px rgba(99,102,241,0.5);transform:translateY(-1px);}
+
+/* ── SECTIONS ── */
+section{position:relative;z-index:1;}
+
+/* ── HERO ── */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;padding:100px 2rem 80px;position:relative;overflow:hidden;}
+.hero .orb.o1{width:600px;height:600px;top:-150px;left:50%;transform:translateX(-50%);
+  background:radial-gradient(circle,rgba(99,102,241,0.12),transparent 70%);}
+.hero .orb.o2{width:300px;height:300px;bottom:0;left:10%;
+  background:radial-gradient(circle,rgba(139,92,246,0.08),transparent 70%);}
+.hero .orb.o3{width:250px;height:250px;bottom:0;right:5%;
+  background:radial-gradient(circle,rgba(103,232,249,0.06),transparent 70%);}
+
+.hero-eyebrow{display:inline-flex;align-items:center;gap:8px;padding:7px 18px;
+  border-radius:20px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);
+  font-size:13px;font-weight:600;color:var(--neon);letter-spacing:.3px;margin-bottom:28px;
+  animation:fadeUp .6s ease both;}
+.hero-eyebrow-dot{width:7px;height:7px;border-radius:50%;background:var(--emerald);
+  animation:pulse 2s infinite;}
+
+.hero h1{font-family:var(--display);font-size:clamp(42px,7vw,82px);font-weight:800;
+  letter-spacing:-3px;line-height:.95;margin-bottom:24px;
+  animation:fadeUp .6s .1s ease both;opacity:0;animation-fill-mode:forwards;}
+.hero h1 .grad{background:linear-gradient(135deg,#818cf8,#a78bfa 50%,#67e8f9);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+
+.hero-sub{font-size:clamp(16px,2vw,20px);color:var(--text2);max-width:580px;margin:0 auto 40px;
+  line-height:1.7;animation:fadeUp .6s .2s ease both;opacity:0;animation-fill-mode:forwards;}
+
+.hero-cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:40px;
+  animation:fadeUp .6s .3s ease both;opacity:0;animation-fill-mode:forwards;}
+.btn-hero{display:inline-flex;align-items:center;gap:8px;padding:15px 32px;
+  border-radius:14px;font-size:16px;font-weight:700;font-family:var(--body);
+  text-decoration:none;transition:all .2s;cursor:pointer;border:none;}
+.btn-hero-primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;
+  box-shadow:0 6px 32px rgba(99,102,241,0.4);}
+.btn-hero-primary:hover{box-shadow:0 8px 40px rgba(99,102,241,0.6);transform:translateY(-2px);}
+.btn-hero-ghost{background:rgba(255,255,255,0.05);color:var(--text2);
+  border:1px solid rgba(255,255,255,0.1);}
+.btn-hero-ghost:hover{background:rgba(255,255,255,0.08);color:var(--text);}
+
+.hero-domain{font-family:var(--mono);font-size:14px;color:var(--text3);
+  animation:fadeUp .6s .35s ease both;opacity:0;animation-fill-mode:forwards;}
+.hero-domain span{color:var(--neon);}
+
+/* Hero dashboard mockup */
+.hero-mockup{margin-top:60px;position:relative;max-width:900px;width:100%;
+  animation:float 4s 1.2s ease-in-out infinite;}
+.mockup-frame{background:var(--s1);border:1px solid rgba(99,102,241,0.2);border-radius:20px;
+  overflow:hidden;box-shadow:0 40px 120px rgba(0,0,0,0.6),0 0 80px rgba(99,102,241,0.08);}
+.mockup-bar{background:rgba(15,23,42,0.9);height:44px;display:flex;align-items:center;
+  padding:0 16px;gap:8px;border-bottom:1px solid rgba(99,102,241,0.1);}
+.mockup-dot{width:10px;height:10px;border-radius:50%;}
+.mockup-url{flex:1;background:rgba(30,41,59,0.6);border-radius:6px;padding:5px 12px;
+  font-size:11px;font-family:var(--mono);color:var(--text3);margin:0 12px;}
+.mockup-body{display:flex;height:380px;}
+.mockup-sidebar{width:160px;flex-shrink:0;border-right:1px solid rgba(99,102,241,0.08);
+  padding:16px 10px;display:flex;flex-direction:column;gap:4px;}
+.mockup-nav-item{padding:8px 12px;border-radius:8px;font-size:11px;color:var(--text3);
+  display:flex;align-items:center;gap:8px;}
+.mockup-nav-item.active{background:rgba(99,102,241,0.15);color:var(--neon);}
+.mockup-nav-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.mockup-content{flex:1;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 50% 45%, #faf7f0 0%, #efeadf 70%, #e6e0d3 100%);
+  position:relative;overflow:hidden;}
+/* faint grid texture */
+.mockup-content::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(26,26,26,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26,26,26,0.04) 1px, transparent 1px);
+  background-size:32px 32px;
+  mask-image:radial-gradient(circle at center, #000 30%, transparent 70%);
+  -webkit-mask-image:radial-gradient(circle at center, #000 30%, transparent 70%);}
+
+.globe-wrap{position:relative;width:300px;height:300px;display:flex;align-items:center;justify-content:center;}
+.globe-wrap svg.globe{width:200px;height:200px;display:block;position:relative;z-index:3;
+  filter:drop-shadow(0 8px 20px rgba(26,26,26,0.18));}
+.globe-wrap svg.globe .land{fill:#1a1a1a;}
+.globe-wrap svg.globe .meridian{fill:none;stroke:#1a1a1a;stroke-width:0.4;opacity:0.28;}
+.globe-wrap svg.globe .outline{fill:#fafaf7;stroke:#1a1a1a;stroke-width:1.2;}
+.globe-wrap svg.globe .spin{animation:globeSpin 28s linear infinite;}
+@keyframes globeSpin{
+  0%{transform:translateX(0);}
+  100%{transform:translateX(-360px);}
+}
+
+/* whirl orbits */
+.whirl-ring{position:absolute;border-radius:50%;border:1px solid rgba(26,26,26,0.18);
+  top:50%;left:50%;transform:translate(-50%,-50%);}
+.whirl-ring.r1{width:230px;height:230px;border-style:dashed;
+  animation:whirlSpin 22s linear infinite;}
+.whirl-ring.r2{width:260px;height:260px;border-color:rgba(26,26,26,0.12);}
+.whirl-ring.r3{width:295px;height:295px;border-color:rgba(26,26,26,0.08);
+  border-style:dotted;}
+
+/* arcs */
+.whirl-arc{position:absolute;border-radius:50%;border:1.5px solid transparent;
+  top:50%;left:50%;transform:translate(-50%,-50%);}
+.whirl-arc.a1{width:248px;height:248px;
+  border-top-color:rgba(26,26,26,0.65);
+  border-right-color:rgba(26,26,26,0.25);
+  animation:whirlSpin 7s linear infinite;}
+.whirl-arc.a2{width:278px;height:278px;
+  border-top-color:rgba(26,26,26,0.45);
+  animation:whirlSpin 11s linear infinite reverse;}
+
+/* orbiting nodes (data points pinging the globe) */
+.orbit{position:absolute;width:248px;height:248px;top:50%;left:50%;
+  transform:translate(-50%,-50%);animation:whirlSpin 7s linear infinite;}
+.orbit .node{position:absolute;top:-5px;left:50%;width:10px;height:10px;
+  border-radius:50%;background:#1a1a1a;transform:translateX(-50%);
+  box-shadow:0 0 0 3px rgba(26,26,26,0.12);}
+.orbit.b{width:278px;height:278px;animation:whirlSpin 11s linear infinite reverse;}
+.orbit.b .node{width:7px;height:7px;background:#1a1a1a;opacity:0.6;}
+.orbit.c{width:295px;height:295px;animation:whirlSpin 17s linear infinite;}
+.orbit.c .node{width:5px;height:5px;background:#1a1a1a;opacity:0.45;
+  top:auto;bottom:-3px;}
+
+@keyframes whirlSpin{to{transform:translate(-50%,-50%) rotate(360deg);}}
+.orbit{animation-timing-function:linear;}
+
+/* caption */
+.globe-caption{position:absolute;bottom:18px;left:0;right:0;text-align:center;
+  font-family:var(--mono);font-size:9px;letter-spacing:3px;text-transform:uppercase;
+  color:rgba(26,26,26,0.45);font-weight:600;}
+.globe-caption .dot{display:inline-block;width:5px;height:5px;border-radius:50%;
+  background:#10b981;margin-right:6px;vertical-align:middle;
+  box-shadow:0 0 0 3px rgba(16,185,129,0.2);
+  animation:pulse 2s ease-in-out infinite;}
+
+/* ── STATS TICKER ── */
+.stats-strip{background:rgba(99,102,241,0.06);border-top:1px solid rgba(99,102,241,0.12);
+  border-bottom:1px solid rgba(99,102,241,0.12);padding:20px 2rem;
+  display:flex;justify-content:center;gap:0;flex-wrap:wrap;}
+.stat-item{display:flex;flex-direction:column;align-items:center;padding:0 40px;
+  border-right:1px solid rgba(99,102,241,0.12);}
+.stat-item:last-child{border-right:none;}
+.stat-val{font-family:var(--display);font-size:36px;font-weight:800;
+  background:linear-gradient(135deg,#818cf8,#a78bfa);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.stat-label{font-size:12px;color:var(--text3);font-weight:500;margin-top:2px;}
+
+/* ── FEATURES ── */
+.features{padding:100px 2rem;max-width:1100px;margin:0 auto;}
+.section-eyebrow{font-size:12px;letter-spacing:3px;text-transform:uppercase;
+  font-weight:700;color:var(--neon);margin-bottom:12px;}
+.section-h2{font-family:var(--display);font-size:clamp(32px,5vw,52px);font-weight:800;
+  letter-spacing:-2px;line-height:1;margin-bottom:16px;}
+.section-sub{font-size:16px;color:var(--text2);max-width:500px;line-height:1.7;margin-bottom:56px;}
+
+.features-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
+.feat-card{background:rgba(15,23,42,0.65);border:1px solid rgba(99,102,241,0.12);
+  border-radius:16px;padding:28px;backdrop-filter:blur(16px);
+  transition:border-color .2s,box-shadow .2s,transform .2s;}
+.feat-card:hover{border-color:rgba(99,102,241,0.3);
+  box-shadow:0 0 40px rgba(99,102,241,0.08);transform:translateY(-3px);}
+.feat-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;
+  justify-content:center;font-size:22px;margin-bottom:20px;}
+.feat-h3{font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:10px;}
+.feat-p{font-size:14px;color:var(--text2);line-height:1.7;}
+
+/* ── HOW IT WORKS ── */
+.how{padding:100px 2rem;max-width:1100px;margin:0 auto;}
+.steps{display:flex;flex-direction:column;gap:0;margin-top:40px;}
+.step-row{display:grid;grid-template-columns:60px 1fr;gap:0;position:relative;}
+.step-line-col{display:flex;flex-direction:column;align-items:center;padding-top:4px;}
+.step-circle{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:14px;font-weight:800;font-family:var(--mono);
+  flex-shrink:0;position:relative;z-index:1;border:2px solid;}
+.step-vert{width:2px;flex:1;min-height:28px;margin:4px 0;}
+.step-row:last-child .step-vert{display:none;}
+.step-body{padding:0 0 36px 20px;}
+.step-h3{font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:8px;margin-top:8px;}
+.step-p{font-size:14px;color:var(--text2);line-height:1.7;max-width:520px;}
+.step-tag{display:inline-flex;align-items:center;gap:6px;margin-top:10px;
+  padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;font-family:var(--mono);}
+
+/* ── PRICING ── */
+.pricing{padding:100px 2rem;max-width:1100px;margin:0 auto;text-align:center;}
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;
+  margin-top:48px;text-align:left;}
+.price-card{background:rgba(15,23,42,0.65);border:1px solid rgba(99,102,241,0.12);
+  border-radius:20px;padding:32px;backdrop-filter:blur(16px);
+  transition:border-color .2s,box-shadow .2s;}
+.price-card.featured{border-color:rgba(99,102,241,0.4);
+  background:rgba(99,102,241,0.08);
+  box-shadow:0 0 60px rgba(99,102,241,0.1);}
+.price-plan{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:var(--text3);font-family:var(--mono);margin-bottom:12px;}
+.price-plan.featured{color:var(--neon);}
+.price-amount{font-family:var(--display);font-size:48px;font-weight:800;letter-spacing:-2px;
+  line-height:1;margin-bottom:4px;}
+.price-per{font-size:13px;color:var(--text3);margin-bottom:24px;}
+.price-features{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:28px;}
+.price-features li{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--text2);}
+.price-features li::before{content:'✓';color:var(--emerald);font-weight:700;flex-shrink:0;}
+.btn-price-primary{display:block;width:100%;padding:13px;border-radius:12px;font-size:15px;
+  font-weight:700;font-family:var(--body);text-align:center;text-decoration:none;cursor:pointer;border:none;
+  background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;
+  box-shadow:0 4px 20px rgba(99,102,241,0.3);transition:all .2s;}
+.btn-price-primary:hover{box-shadow:0 6px 28px rgba(99,102,241,0.5);transform:translateY(-1px);}
+.btn-price-ghost{display:block;width:100%;padding:12px;border-radius:12px;font-size:15px;
+  font-weight:600;font-family:var(--body);text-align:center;text-decoration:none;cursor:pointer;
+  background:transparent;color:var(--text2);border:1px solid rgba(255,255,255,0.1);transition:all .2s;}
+.btn-price-ghost:hover{border-color:rgba(99,102,241,0.3);color:var(--text);}
+
+/* ── TESTIMONIALS ── */
+.testimonials{padding:80px 2rem;max-width:1100px;margin:0 auto;}
+.testi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:48px;}
+.testi-card{background:rgba(15,23,42,0.65);border:1px solid rgba(99,102,241,0.1);
+  border-radius:16px;padding:28px;backdrop-filter:blur(16px);}
+.testi-quote{font-size:15px;color:var(--text2);line-height:1.8;margin-bottom:20px;
+  font-style:italic;}
+.testi-author{display:flex;align-items:center;gap:12px;}
+.testi-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-weight:700;font-size:15px;color:#fff;
+  background:linear-gradient(135deg,#6366f1,#8b5cf6);flex-shrink:0;}
+.testi-name{font-size:14px;font-weight:700;color:var(--text);}
+.testi-role{font-size:11px;color:var(--text3);font-family:var(--mono);}
+.testi-stars{color:#f59e0b;font-size:12px;margin-bottom:14px;letter-spacing:2px;}
+
+/* ── CTA SECTION ── */
+.cta-section{padding:100px 2rem;text-align:center;position:relative;overflow:hidden;}
+.cta-section .orb{width:500px;height:300px;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  background:radial-gradient(ellipse,rgba(99,102,241,0.12),transparent 70%);}
+.cta-box{position:relative;z-index:1;max-width:700px;margin:0 auto;
+  background:rgba(15,23,42,0.7);border:1px solid rgba(99,102,241,0.2);
+  border-radius:24px;padding:64px 48px;backdrop-filter:blur(20px);}
+.cta-h2{font-family:var(--display);font-size:clamp(32px,5vw,52px);font-weight:800;
+  letter-spacing:-2px;line-height:1;margin-bottom:16px;}
+.cta-sub{font-size:16px;color:var(--text2);margin-bottom:36px;line-height:1.7;}
+.cta-input-row{display:flex;gap:10px;max-width:460px;margin:0 auto 16px;}
+.cta-input{flex:1;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.2);
+  border-radius:12px;padding:13px 18px;font-size:14px;color:var(--text);
+  font-family:var(--body);outline:none;transition:border-color .2s;}
+.cta-input:focus{border-color:rgba(99,102,241,0.5);box-shadow:0 0 0 3px rgba(99,102,241,0.1);}
+.cta-input::placeholder{color:var(--text3);}
+.cta-note{font-size:12px;color:var(--text3);}
+
+/* ── FOOTER ── */
+footer{border-top:1px solid rgba(99,102,241,0.08);padding:48px 2rem 32px;
+  max-width:1100px;margin:0 auto;}
+.footer-top{display:flex;justify-content:space-between;flex-wrap:wrap;gap:40px;margin-bottom:48px;}
+.footer-brand{max-width:260px;}
+.footer-logo{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.footer-desc{font-size:13px;color:var(--text3);line-height:1.7;}
+.footer-col h4{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:14px;font-family:var(--mono);}
+.footer-col a{display:block;font-size:13px;color:var(--text3);text-decoration:none;
+  margin-bottom:8px;transition:color .15s;}
+.footer-col a:hover{color:var(--neon);}
+.footer-bottom{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+  padding-top:24px;border-top:1px solid rgba(99,102,241,0.06);}
+.footer-copy{font-size:12px;color:var(--text3);font-family:var(--mono);}
+.footer-links{display:flex;gap:20px;}
+.footer-links a{font-size:12px;color:var(--text3);text-decoration:none;transition:color .15s;}
+.footer-links a:hover{color:var(--text2);}
+
+/* Animations */
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.animate-float{animation:float 4s ease-in-out infinite;}
+
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:rgba(99,102,241,.3);border-radius:2px;}
+
+@media(max-width:768px){
+  .nav-links{display:none;}
+  .stats-strip{gap:24px;}
+  .stat-item{padding:0 20px;border-right:none;}
+  .cta-input-row{flex-direction:column;}
+  .footer-top{flex-direction:column;}
+}
+</style>
+</head>
+<body>
+
+<!-- ── NAVBAR ── -->
+<nav>
+  <a href="#" class="nav-logo">
+    <div class="nav-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/>
+        <circle cx="12" cy="12" r="3" fill="white" opacity="0.4"/>
+      </svg>
+    </div>
+  </a>
+  <div class="nav-links">
+    <a href="#features" class="nav-link">Features</a>
+    <a href="#how" class="nav-link">How it Works</a>
+    <a href="#pricing" class="nav-link">Pricing</a>
+    <a href="#testimonials" class="nav-link">Reviews</a>
+  </div>
+  <a href="ASOS-Auth.html" class="nav-cta">Start Free Trial →</a>
+</nav>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="orb o1"></div>
+  <div class="orb o2"></div>
+  <div class="orb o3"></div>
+
+  <div class="hero-eyebrow">
+    <span class="hero-eyebrow-dot"></span>
+    Now live · Powered by Claude AI
+  </div>
+
+  <h1>Close deals while<br><span class="grad">you sleep.</span></h1>
+
+  <p class="hero-sub">
+    Claude AI qualifies every WhatsApp lead, diagnoses their problem, and sends the perfect reply — automatically. Your pipeline runs 24/7.
+  </p>
+
+  <div class="hero-cta-row">
+    <a href="ASOS-Auth.html" class="btn-hero btn-hero-primary">Start Free Trial — 14 Days Free →</a>
+    <a href="#how" class="btn-hero btn-hero-ghost">▶ See How It Works</a>
+  </div>
+
+  <div class="hero-domain">
+    <span>getaisales.com</span> · No credit card required
+  </div>
+
+  <!-- Dashboard mockup -->
+  <div class="hero-mockup" style="margin:0 auto;">
+    <div class="mockup-frame">
+      <div class="mockup-bar">
+        <div class="mockup-dot" style="background:#ff5f57"></div>
+        <div class="mockup-dot" style="background:#febc2e"></div>
+        <div class="mockup-dot" style="background:#28c840"></div>
+        <div class="mockup-url">app.getaisales.com/dashboard</div>
+        <div style="width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);"></div>
+      </div>
+      <div class="mockup-body">
+        <div class="mockup-sidebar">
+          <div style="display:flex;align-items:center;gap:8px;padding:8px;margin-bottom:8px;">
+            <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white"/></svg>
+            </div>
+            <span style="font-size:11px;font-weight:700;color:#818cf8;font-family:var(--mono)">getaisales</span>
+          </div>
+          <div class="mockup-nav-item active"><span class="mockup-nav-dot"></span>Dashboard</div>
+          <div class="mockup-nav-item"><span class="mockup-nav-dot"></span>Pipeline</div>
+          <div class="mockup-nav-item"><span class="mockup-nav-dot"></span>Conversations</div>
+          <div class="mockup-nav-item"><span class="mockup-nav-dot"></span>AI Insights</div>
+          <div class="mockup-nav-item"><span class="mockup-nav-dot"></span>Ads</div>
+          <div class="mockup-nav-item"><span class="mockup-nav-dot"></span>Analytics</div>
+          <div style="margin-top:auto;padding:10px;border-radius:8px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.15);">
+            <div style="font-size:9px;color:#10b981;font-weight:700;font-family:var(--mono);">◎ AI Active</div>
+            <div style="font-size:9px;color:var(--text3);margin-top:3px;">3 conversations</div>
+          </div>
+        </div>
+        <div class="mockup-content">
+          <div class="globe-wrap">
+            <div class="whirl-ring r3"></div>
+            <div class="whirl-ring r2"></div>
+            <div class="whirl-ring r1"></div>
+            <div class="whirl-arc a2"></div>
+            <div class="whirl-arc a1"></div>
+            <div class="orbit"><div class="node"></div></div>
+            <div class="orbit b"><div class="node"></div></div>
+            <div class="orbit c"><div class="node"></div></div>
+            <svg class="globe" viewBox="-110 -110 220 220" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <clipPath id="globeClip"><circle cx="0" cy="0" r="100"/></clipPath>
+                <g id="continents">
+                  <!-- North America -->
+                  <path d="M -88,-58 L -76,-62 L -64,-58 L -54,-50 L -48,-40 L -52,-30 L -46,-22 L -38,-18 L -34,-10 L -40,-4 L -50,-6 L -58,-14 L -68,-16 L -78,-26 L -86,-38 L -90,-48 Z"/>
+                  <!-- Central America -->
+                  <path d="M -50,-6 L -44,2 L -36,8 L -32,16 L -28,18 L -30,12 L -38,4 L -44,-2 Z"/>
+                  <!-- South America -->
+                  <path d="M -34,18 L -26,22 L -22,32 L -22,46 L -26,58 L -32,68 L -38,72 L -42,66 L -42,54 L -38,40 L -36,28 Z"/>
+                  <!-- Greenland -->
+                  <path d="M -28,-72 L -18,-76 L -10,-70 L -12,-62 L -22,-58 L -30,-64 Z"/>
+                  <!-- Iceland -->
+                  <path d="M -16,-54 L -10,-56 L -8,-52 L -14,-50 Z"/>
+                  <!-- Western Europe -->
+                  <path d="M -8,-46 L 0,-50 L 8,-48 L 14,-44 L 18,-38 L 12,-32 L 4,-30 L -4,-34 L -8,-40 Z"/>
+                  <!-- UK / Ireland -->
+                  <path d="M -8,-50 L -4,-54 L 0,-50 L -2,-44 L -8,-44 Z"/>
+                  <!-- Scandinavia -->
+                  <path d="M 6,-60 L 16,-62 L 22,-54 L 18,-46 L 10,-48 L 4,-54 Z"/>
+                  <!-- North Africa -->
+                  <path d="M -4,-26 L 8,-26 L 20,-22 L 26,-14 L 28,-4 L 22,4 L 14,8 L 6,4 L -2,-2 L -6,-14 Z"/>
+                  <!-- Sub-Saharan / South Africa -->
+                  <path d="M 6,4 L 18,8 L 24,18 L 22,30 L 16,38 L 8,42 L 0,36 L -2,24 L 0,12 Z"/>
+                  <!-- Madagascar -->
+                  <path d="M 30,22 L 34,26 L 34,34 L 30,36 L 28,30 Z"/>
+                  <!-- Arabia -->
+                  <path d="M 22,-22 L 32,-20 L 38,-12 L 36,-4 L 28,-2 L 22,-8 L 22,-16 Z"/>
+                  <!-- Russia / Northern Asia -->
+                  <path d="M 22,-62 L 40,-66 L 60,-66 L 78,-62 L 90,-58 L 86,-50 L 70,-46 L 50,-46 L 32,-48 L 24,-54 Z"/>
+                  <!-- Central Asia / China -->
+                  <path d="M 38,-46 L 60,-44 L 76,-38 L 80,-28 L 74,-20 L 60,-18 L 46,-22 L 38,-30 L 36,-40 Z"/>
+                  <!-- Middle East / Iran -->
+                  <path d="M 28,-22 L 38,-22 L 44,-16 L 42,-8 L 34,-8 L 28,-14 Z"/>
+                  <!-- India -->
+                  <path d="M 44,-14 L 52,-12 L 56,-4 L 54,6 L 48,10 L 42,4 L 42,-6 Z"/>
+                  <!-- Southeast Asia -->
+                  <path d="M 60,-12 L 70,-10 L 76,-2 L 70,4 L 62,4 L 58,-4 Z"/>
+                  <!-- Indonesia / Philippines (archipelago dots) -->
+                  <path d="M 64,8 L 72,8 L 76,12 L 72,16 L 64,14 Z"/>
+                  <path d="M 80,4 L 86,6 L 86,12 L 82,12 Z"/>
+                  <path d="M 78,-8 L 84,-8 L 84,-2 L 78,-2 Z"/>
+                  <!-- Japan -->
+                  <path d="M 86,-32 L 92,-30 L 92,-22 L 88,-22 Z"/>
+                  <!-- Australia -->
+                  <path d="M 64,28 L 80,26 L 92,30 L 96,38 L 90,46 L 78,48 L 66,46 L 60,38 Z"/>
+                  <!-- Tasmania -->
+                  <path d="M 80,52 L 86,52 L 86,58 L 80,58 Z"/>
+                  <!-- New Zealand -->
+                  <path d="M 100,42 L 106,42 L 106,52 L 100,52 Z"/>
+                </g>
+              </defs>
+              <!-- sphere fill + outline -->
+              <circle class="outline" cx="0" cy="0" r="100"/>
+              <g clip-path="url(#globeClip)">
+                <!-- meridians -->
+                <ellipse class="meridian" cx="0" cy="0" rx="30" ry="100"/>
+                <ellipse class="meridian" cx="0" cy="0" rx="60" ry="100"/>
+                <ellipse class="meridian" cx="0" cy="0" rx="90" ry="100"/>
+                <line class="meridian" x1="-100" y1="0" x2="100" y2="0"/>
+                <ellipse class="meridian" cx="0" cy="-50" rx="86.6" ry="14"/>
+                <ellipse class="meridian" cx="0" cy="50" rx="86.6" ry="14"/>
+                <ellipse class="meridian" cx="0" cy="-75" rx="66.1" ry="9"/>
+                <ellipse class="meridian" cx="0" cy="75" rx="66.1" ry="9"/>
+                <!-- spinning continents (duplicated for seamless loop) -->
+                <g class="spin">
+                  <g class="land"><use href="#continents"/></g>
+                  <g class="land" transform="translate(180,0)"><use href="#continents"/></g>
+                  <g class="land" transform="translate(360,0)"><use href="#continents"/></g>
+                </g>
+              </g>
+            </svg>
+            <div class="globe-caption"><span class="dot"></span>AI &middot; ALWAYS ON &middot; GLOBAL</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── STATS ── -->
+<div class="stats-strip">
+  <div class="stat-item">
+    <div class="stat-val">78%</div>
+    <div class="stat-label">AI Handling Rate</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-val">11.1%</div>
+    <div class="stat-label">Conversion Rate</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-val">5.68×</div>
+    <div class="stat-label">Average ROAS</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-val">&lt;30s</div>
+    <div class="stat-label">AI Response Time</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-val">24/7</div>
+    <div class="stat-label">Always On</div>
+  </div>
+</div>
+
+<!-- ── FEATURES ── -->
+<section id="features">
+  <div class="features">
+    <div class="section-eyebrow">Features</div>
+    <h2 class="section-h2">Everything your sales<br>team needs — automated.</h2>
+    <p class="section-sub">One platform that turns Meta Ads traffic into WhatsApp conversations, qualifies leads with AI, and closes deals.</p>
+
+    <div class="features-grid">
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(99,102,241,0.15);">◎</div>
+        <h3 class="feat-h3">Claude AI Engine</h3>
+        <p class="feat-p">The most advanced AI model qualifies leads, diagnoses problems, and crafts personalised sales messages. Feels 100% human.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(16,185,129,0.15);">💬</div>
+        <h3 class="feat-h3">WhatsApp Automation</h3>
+        <p class="feat-p">Every inbound WhatsApp message gets a qualified AI response in under 30 seconds — 24/7, even while you sleep.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(245,158,11,0.15);">⬗</div>
+        <h3 class="feat-h3">Meta Ads Attribution</h3>
+        <p class="feat-p">Server-side Conversions API tracks every lead back to the exact ad that generated it. Know your true ROAS, not just clicks.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(139,92,246,0.15);">◈</div>
+        <h3 class="feat-h3">Built-in CRM</h3>
+        <p class="feat-p">Full Kanban pipeline, lead scoring, conversation history, activity timeline and agent management — all in one place.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(103,232,249,0.1);">◐</div>
+        <h3 class="feat-h3">AI Insights Dashboard</h3>
+        <p class="feat-p">Claude analyses your entire pipeline and tells you exactly what to fix — response speed, BANT gaps, closing opportunities.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(239,68,68,0.12);">🏢</div>
+        <h3 class="feat-h3">Multi-tenant SaaS</h3>
+        <p class="feat-p">Each business gets their own isolated workspace, WhatsApp number, AI persona, and analytics — white-label ready.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── HOW IT WORKS ── -->
+<section id="how" style="background:rgba(99,102,241,0.03);border-top:1px solid rgba(99,102,241,0.08);border-bottom:1px solid rgba(99,102,241,0.08);">
+  <div class="how">
+    <div class="section-eyebrow">How It Works</div>
+    <h2 class="section-h2">From ad click to<br>closed deal — automated.</h2>
+
+    <div class="steps">
+      <div class="step-row">
+        <div class="step-line-col">
+          <div class="step-circle" style="border-color:#6366f1;color:#6366f1;background:rgba(99,102,241,0.1)">1</div>
+          <div class="step-vert" style="background:rgba(99,102,241,0.15)"></div>
+        </div>
+        <div class="step-body">
+          <h3 class="step-h3">Customer clicks your Meta Ad</h3>
+          <p class="step-p">Your Click-to-WhatsApp ad fires. The customer lands in your WhatsApp Business chat. Campaign attribution (ad ID, adset, campaign) is captured automatically.</p>
+          <span class="step-tag" style="background:rgba(99,102,241,0.1);color:#818cf8;border:1px solid rgba(99,102,241,0.2)">⬗ Meta Ads</span>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-line-col">
+          <div class="step-circle" style="border-color:#8b5cf6;color:#8b5cf6;background:rgba(139,92,246,0.1)">2</div>
+          <div class="step-vert" style="background:rgba(139,92,246,0.15)"></div>
+        </div>
+        <div class="step-body">
+          <h3 class="step-h3">Claude AI takes over instantly</h3>
+          <p class="step-p">Within 30 seconds, Claude replies with a personalised message in your brand voice. It asks qualification questions naturally — budget, need, timeline, authority.</p>
+          <span class="step-tag" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.2)">◎ Claude AI</span>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-line-col">
+          <div class="step-circle" style="border-color:#10b981;color:#10b981;background:rgba(16,185,129,0.1)">3</div>
+          <div class="step-vert" style="background:rgba(16,185,129,0.15)"></div>
+        </div>
+        <div class="step-body">
+          <h3 class="step-h3">Lead is scored and CRM updated</h3>
+          <p class="step-p">Every response updates the lead's score (HOT / WARM / COLD), stage in the pipeline, and BANT qualification data — automatically, in real time.</p>
+          <span class="step-tag" style="background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.2)">◈ CRM</span>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-line-col">
+          <div class="step-circle" style="border-color:#f59e0b;color:#f59e0b;background:rgba(245,158,11,0.1)">4</div>
+          <div class="step-vert" style="background:rgba(245,158,11,0.15)"></div>
+        </div>
+        <div class="step-body">
+          <h3 class="step-h3">HOT leads handed to your agent</h3>
+          <p class="step-p">When the AI detects buying intent, it alerts your sales agent instantly and transfers the conversation with a full context brief — no cold handoffs.</p>
+          <span class="step-tag" style="background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)">🔥 Handoff</span>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-line-col">
+          <div class="step-circle" style="border-color:#ef4444;color:#ef4444;background:rgba(239,68,68,0.1)">5</div>
+        </div>
+        <div class="step-body">
+          <h3 class="step-h3">Deal closed. Meta CAPI fires.</h3>
+          <p class="step-p">On every close, a server-side Purchase event fires to Meta Conversions API — feeding the algorithm real revenue data to optimise your next campaign.</p>
+          <span class="step-tag" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2)">✓ Closed Won</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PRICING ── -->
+<section id="pricing">
+  <div class="pricing">
+    <div class="section-eyebrow" style="text-align:center">Pricing</div>
+    <h2 class="section-h2">Simple, transparent pricing.</h2>
+    <p class="section-sub" style="margin:0 auto 0">No surprise fees. Cancel anytime. Start free for 14 days.</p>
+
+    <div class="pricing-grid">
+      <!-- Free -->
+      <div class="price-card">
+        <div class="price-plan">Starter</div>
+        <div class="price-amount">$0</div>
+        <div class="price-per">/ month · 14-day trial</div>
+        <ul class="price-features">
+          <li>Up to 100 contacts</li>
+          <li>1,000 AI messages / month</li>
+          <li>1 WhatsApp number</li>
+          <li>Basic CRM pipeline</li>
+          <li>Meta Ads attribution</li>
+          <li>Email support</li>
+        </ul>
+        <a href="ASOS-Auth.html" class="btn-price-ghost">Get Started Free</a>
+      </div>
+      <!-- Pro -->
+      <div class="price-card featured">
+        <div class="price-plan featured">Pro <span style="background:rgba(99,102,241,0.2);color:#818cf8;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px;">Most Popular</span></div>
+        <div class="price-amount" style="background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">$297</div>
+        <div class="price-per">/ month · billed monthly</div>
+        <ul class="price-features">
+          <li>Up to 5,000 contacts</li>
+          <li>50,000 AI messages / month</li>
+          <li>3 WhatsApp numbers</li>
+          <li>Full CRM + AI Insights</li>
+          <li>Meta Ads + CAPI attribution</li>
+          <li>Stripe billing integration</li>
+          <li>Priority support</li>
+          <li>Custom AI persona</li>
+        </ul>
+        <a href="ASOS-Auth.html" class="btn-price-primary">Start Pro Trial →</a>
+      </div>
+      <!-- Enterprise -->
+      <div class="price-card">
+        <div class="price-plan">Enterprise</div>
+        <div class="price-amount">$997</div>
+        <div class="price-per">/ month · custom contracts</div>
+        <ul class="price-features">
+          <li>Unlimited contacts</li>
+          <li>Unlimited AI messages</li>
+          <li>Unlimited WhatsApp numbers</li>
+          <li>White-label dashboard</li>
+          <li>Multi-tenant SaaS reselling</li>
+          <li>Dedicated account manager</li>
+          <li>SLA + onboarding support</li>
+          <li>Custom integrations</li>
+        </ul>
+        <a href="ASOS-Auth.html" class="btn-price-ghost">Contact Sales</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── TESTIMONIALS ── -->
+<section id="testimonials">
+  <div class="testimonials">
+    <div class="section-eyebrow">Reviews</div>
+    <h2 class="section-h2">Trusted by sales teams<br>across Pakistan.</h2>
+
+    <div class="testi-grid">
+      <div class="testi-card">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-quote">"We went from closing 30 leads a month to 84 — with the same team. The AI handles qualification perfectly and only brings us the hot ones."</p>
+        <div class="testi-author">
+          <div class="testi-avatar">AK</div>
+          <div>
+            <div class="testi-name">Ahmed Khan</div>
+            <div class="testi-role">CEO · Karachi Digital</div>
+          </div>
+        </div>
+      </div>
+      <div class="testi-card">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-quote">"The Meta Ads ROAS attribution is game-changing. We finally know which campaigns actually close deals, not just generate clicks."</p>
+        <div class="testi-author">
+          <div class="testi-avatar">SF</div>
+          <div>
+            <div class="testi-name">Sara Farooq</div>
+            <div class="testi-role">Marketing Director · Lahore Ventures</div>
+          </div>
+        </div>
+      </div>
+      <div class="testi-card">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-quote">"Set it up in one afternoon. By Eid week, the AI was handling 200+ conversations daily while we focused on closing. Remarkable."</p>
+        <div class="testi-author">
+          <div class="testi-avatar">BH</div>
+          <div>
+            <div class="testi-name">Bilal Hussain</div>
+            <div class="testi-role">Founder · Islamabad Growth Co.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ── -->
+<section class="cta-section">
+  <div class="orb"></div>
+  <div class="cta-box">
+    <div class="section-eyebrow" style="justify-content:center;display:flex">14-day free trial</div>
+    <h2 class="cta-h2">Ready to close deals<br><span style="background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">while you sleep?</span></h2>
+    <p class="cta-sub">Join hundreds of businesses automating their sales with AI. No credit card required.</p>
+    <div class="cta-input-row">
+      <input class="cta-input" type="email" placeholder="you@company.com">
+      <a href="ASOS-Auth.html" class="btn-hero btn-hero-primary" style="white-space:nowrap;font-size:14px;padding:13px 24px;">Get Started →</a>
+    </div>
+    <div class="cta-note">getaisales.com · Free 14 days · No credit card · Cancel anytime</div>
+  </div>
+</section>
+
+<!-- ── FOOTER ── -->
+<div style="border-top:1px solid rgba(99,102,241,0.08)">
+  <footer>
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="footer-logo">
+          <div class="nav-icon" style="width:32px;height:32px;border-radius:10px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/>
+            </svg>
+          </div>
+          <span style="font-family:var(--display);font-weight:800;font-size:15px;background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">getaisales.com</span>
+        </div>
+        <p class="footer-desc">AI-powered sales automation via WhatsApp and Meta Ads. Close deals while you sleep.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="#features">Features</a>
+        <a href="#how">How it Works</a>
+        <a href="#pricing">Pricing</a>
+        <a href="ASOS-Dashboard.html">Dashboard</a>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <a href="#">About</a>
+        <a href="#">Blog</a>
+        <a href="#">Careers</a>
+        <a href="#">Contact</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Cookie Policy</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-copy">© 2026 getaisales.com · All rights reserved</div>
+      <div class="footer-links">
+        <a href="#">Twitter</a>
+        <a href="#">LinkedIn</a>
+        <a href="#">WhatsApp</a>
+      </div>
+    </div>
+  </footer>
+</div>
+
+</body>
+</html>

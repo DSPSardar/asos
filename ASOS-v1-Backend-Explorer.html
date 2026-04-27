@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASOS v1 — Backend Codebase</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --surface: #0f1419;
+    --surface2: #141b24;
+    --surface3: #1c2635;
+    --border: #1e2d3d;
+    --border2: #2a3f55;
+    --accent: #f97316;
+    --green: #39d353;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --cyan: #39c5cf;
+    --yellow: #e3b341;
+    --red: #ff7b72;
+    --text: #cdd9e5;
+    --text2: #768390;
+    --text3: #444c56;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-ui: 'Syne', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    height: 48px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+
+  .logo {
+    font-family: var(--font-ui);
+    font-weight: 800;
+    font-size: 15px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo-badge {
+    background: var(--accent);
+    color: #000;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+    font-family: var(--font-mono);
+  }
+
+  .topbar-divider { width: 1px; height: 24px; background: var(--border2); }
+
+  .topbar-stats {
+    display: flex;
+    gap: 20px;
+    font-size: 11px;
+    color: var(--text2);
+  }
+
+  .stat { display: flex; align-items: center; gap: 5px; }
+  .stat-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .stat-val { color: var(--text); font-weight: 600; }
+
+  .topbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(57,211,83,0.1);
+    border: 1px solid rgba(57,211,83,0.25);
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── LAYOUT ── */
+  .workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-section {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text3);
+    padding: 8px 16px 4px;
+  }
+
+  .tree-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 16px;
+    cursor: pointer;
+    color: var(--text2);
+    font-size: 12px;
+    border-left: 2px solid transparent;
+    transition: all 0.1s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tree-item:hover { background: var(--surface2); color: var(--text); }
+  .tree-item.active { background: rgba(249,115,22,0.08); color: var(--accent); border-left-color: var(--accent); }
+  .tree-item.dir { color: var(--blue); font-weight: 500; }
+  .tree-item.dir:hover { color: var(--blue); }
+  .tree-item .indent { display: inline-block; }
+
+  .file-icon { font-size: 12px; flex-shrink: 0; }
+
+  /* ── MAIN PANEL ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* ── TABS ── */
+  .tab-bar {
+    height: 36px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    padding: 0 8px;
+    gap: 2px;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 4px 4px 0 0;
+    font-size: 11px;
+    color: var(--text2);
+    cursor: pointer;
+    white-space: nowrap;
+    border: 1px solid transparent;
+    border-bottom: none;
+    transition: all 0.1s;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tab:hover { color: var(--text); background: var(--surface2); }
+  .tab.active { color: var(--text); background: var(--bg); border-color: var(--border); }
+  .tab .close-btn { opacity: 0.4; font-size: 14px; line-height: 1; cursor: pointer; flex-shrink: 0; }
+  .tab:hover .close-btn { opacity: 0.8; }
+
+  /* ── CODE AREA ── */
+  .code-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+    position: relative;
+  }
+
+  .file-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px 8px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .file-path {
+    font-size: 11px;
+    color: var(--text2);
+  }
+
+  .file-path span { color: var(--text); }
+
+  .file-badges { display: flex; gap: 6px; margin-left: auto; }
+
+  .badge {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .badge-green  { background: rgba(57,211,83,0.1);  color: var(--green);  border: 1px solid rgba(57,211,83,0.2); }
+  .badge-blue   { background: rgba(88,166,255,0.1); color: var(--blue);   border: 1px solid rgba(88,166,255,0.2); }
+  .badge-purple { background: rgba(188,140,255,0.1);color: var(--purple); border: 1px solid rgba(188,140,255,0.2); }
+  .badge-orange { background: rgba(249,115,22,0.1); color: var(--accent); border: 1px solid rgba(249,115,22,0.2); }
+  .badge-cyan   { background: rgba(57,197,207,0.1); color: var(--cyan);   border: 1px solid rgba(57,197,207,0.2); }
+  .badge-yellow { background: rgba(227,179,65,0.1); color: var(--yellow); border: 1px solid rgba(227,179,65,0.2); }
+
+  pre {
+    padding: 16px 20px;
+    font-size: 12.5px;
+    line-height: 1.7;
+    overflow-x: auto;
+    counter-reset: line;
+    font-family: var(--font-mono);
+  }
+
+  pre code { display: block; }
+
+  /* Syntax highlighting */
+  .kw  { color: #cc99cd; }     /* keywords */
+  .fn  { color: #6fc3df; }     /* functions */
+  .str { color: #7ec699; }     /* strings */
+  .cmt { color: #555f6e; font-style: italic; } /* comments */
+  .num { color: #f08d49; }     /* numbers */
+  .cls { color: #f8c555; }     /* class names */
+  .prp { color: #cdd9e5; }     /* properties */
+  .pun { color: #cdd9e5; }     /* punctuation */
+  .imp { color: #58a6ff; }     /* imports */
+
+  /* ── OVERVIEW PANEL ── */
+  .overview {
+    padding: 24px;
+    overflow-y: auto;
+    height: 100%;
+  }
+
+  .overview-title {
+    font-family: var(--font-ui);
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .overview-sub {
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 24px;
+  }
+
+  .overview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .kpi-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .kpi-label { font-size: 10px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+  .kpi-value { font-size: 28px; font-weight: 700; font-family: var(--font-ui); }
+  .kpi-desc  { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+  .flow-diagram {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .flow-title { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text3); margin-bottom: 14px; font-weight: 600; }
+
+  .flow-steps {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .flow-step {
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .flow-step.accent { border-color: rgba(249,115,22,0.4); color: var(--accent); }
+  .flow-step.green  { border-color: rgba(57,211,83,0.3);  color: var(--green); }
+  .flow-step.blue   { border-color: rgba(88,166,255,0.3); color: var(--blue); }
+  .flow-step.purple { border-color: rgba(188,140,255,0.3);color: var(--purple); }
+  .flow-step.cyan   { border-color: rgba(57,197,207,0.3); color: var(--cyan); }
+
+  .flow-arrow { color: var(--text3); padding: 0 2px; font-size: 14px; }
+
+  .file-list-overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 8px;
+  }
+
+  .file-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .file-card:hover { border-color: var(--accent); }
+  .file-card-name { font-size: 12px; color: var(--text); font-weight: 500; margin-bottom: 2px; }
+  .file-card-path { font-size: 10px; color: var(--text3); }
+  .file-card-desc { font-size: 11px; color: var(--text2); margin-top: 4px; line-height: 1.4; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text3);
+    text-align: center;
+    gap: 8px;
+  }
+
+  .welcome-icon { font-size: 48px; margin-bottom: 8px; }
+  .welcome-title { font-family: var(--font-ui); font-size: 18px; color: var(--text2); font-weight: 700; }
+  .welcome-sub { font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">ASOS <span class="logo-badge">v1 BACKEND</span></div>
+  <div class="topbar-divider"></div>
+  <div class="topbar-stats">
+    <div class="stat"><span class="stat-dot" style="background:var(--green)"></span>Files <span class="stat-val">32</span></div>
+    <div class="stat"><span class="stat-dot" style="background:var(--blue)"></span>Endpoints <span class="stat-val">~55</span></div>
+    <div class="stat"><span class="stat-dot" style="background:var(--purple)"></span>DB Tables <span class="stat-val">10</span></div>
+    <div class="stat"><span class="stat-dot" style="background:var(--accent)"></span>Modules <span class="stat-val">10</span></div>
+  </div>
+  <div class="topbar-right">
+    <div class="status-pill"><div class="status-dot"></div>Backend Complete</div>
+  </div>
+</div>
+
+<div class="workspace">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Overview</div>
+      <div class="tree-item active" onclick="showOverview(this)">📊 <span>Project Overview</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Root</div>
+      <div class="tree-item" onclick="showFile(this,'package')" data-file="package">📦 <span>package.json</span></div>
+      <div class="tree-item" onclick="showFile(this,'env')" data-file="env">🔒 <span>.env.example</span></div>
+      <div class="tree-item" onclick="showFile(this,'readme')" data-file="readme">📖 <span>README.md</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Prisma</div>
+      <div class="tree-item" onclick="showFile(this,'schema')" data-file="schema">🐘 <span>schema.prisma</span></div>
+      <div class="tree-item" onclick="showFile(this,'seed')" data-file="seed">🌱 <span>seed.js</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">src/config</div>
+      <div class="tree-item" onclick="showFile(this,'envjs')" data-file="envjs">⚙️ <span>env.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'database')" data-file="database">🗄️ <span>database.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'redis')" data-file="redis">🔴 <span>redis.js</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">src/core</div>
+      <div class="tree-item" onclick="showFile(this,'app')" data-file="app">🚀 <span>app.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'server')" data-file="server">🌐 <span>server.js</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">src/middleware</div>
+      <div class="tree-item" onclick="showFile(this,'authmw')" data-file="authmw">🔐 <span>auth.middleware.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'tenantmw')" data-file="tenantmw">🏢 <span>tenant.middleware.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'errormw')" data-file="errormw">⚠️ <span>error.middleware.js</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">src/services</div>
+      <div class="tree-item" onclick="showFile(this,'claude')" data-file="claude">🤖 <span>claude.service.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'whatsapp')" data-file="whatsapp">💬 <span>whatsapp.service.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'meta')" data-file="meta">📊 <span>meta.service.js</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">src/workers + queues</div>
+      <div class="tree-item" onclick="showFile(this,'worker')" data-file="worker">⚡ <span>conversation.worker.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'queue')" data-file="queue">📨 <span>message.queue.js</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">src/webhooks</div>
+      <div class="tree-item" onclick="showFile(this,'wahook')" data-file="wahook">🔔 <span>whatsapp.webhook.js</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">src/modules</div>
+      <div class="tree-item" onclick="showFile(this,'authsvc')" data-file="authsvc">🔑 <span>auth/auth.service.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'leadssvc')" data-file="leadssvc">🎯 <span>leads/leads.service.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'convsvc')" data-file="convsvc">💬 <span>conversations/conversations.service.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'campsvc')" data-file="campsvc">📢 <span>campaigns/campaigns.service.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'analyticsvc')" data-file="analyticsvc">📈 <span>analytics/analytics.service.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'aisvc')" data-file="aisvc">🧠 <span>ai-config/aiConfig.service.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'adminsvc')" data-file="adminsvc">👑 <span>admin/admin.service.js</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">src/utils</div>
+      <div class="tree-item" onclick="showFile(this,'logger')" data-file="logger">📝 <span>logger.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'response')" data-file="response">📤 <span>response.js</span></div>
+      <div class="tree-item" onclick="showFile(this,'crypto')" data-file="crypto">🔒 <span>crypto.js</span></div>
+    </div>
+  </div>
+
+  <!-- MAIN PANEL -->
+  <div class="main">
+    <div class="tab-bar" id="tabBar"></div>
+
+    <div class="code-area" id="codeArea">
+      <div id="overviewPanel" class="overview">
+        <div class="overview-title">ASOS v1 — Backend Complete</div>
+        <div class="overview-sub">32 files · 10 modules · ~55 API endpoints · Multi-tenant PostgreSQL + Claude AI + WhatsApp Cloud API</div>
+
+        <div class="overview-grid">
+          <div class="kpi-card"><div class="kpi-label">Source Files</div><div class="kpi-value" style="color:var(--green)">32</div><div class="kpi-desc">Production-ready modules</div></div>
+          <div class="kpi-card"><div class="kpi-label">API Endpoints</div><div class="kpi-value" style="color:var(--blue)">~55</div><div class="kpi-desc">Across 10 route groups</div></div>
+          <div class="kpi-card"><div class="kpi-label">DB Tables</div><div class="kpi-value" style="color:var(--purple)">10</div><div class="kpi-desc">Multi-tenant Prisma schema</div></div>
+          <div class="kpi-card"><div class="kpi-label">AI Actions</div><div class="kpi-value" style="color:var(--accent)">3</div><div class="kpi-desc">continue · handoff · close</div></div>
+          <div class="kpi-card"><div class="kpi-label">Lines of Code</div><div class="kpi-value" style="color:var(--cyan)">~3k</div><div class="kpi-desc">Clean, modular, documented</div></div>
+          <div class="kpi-card"><div class="kpi-label">Security Layers</div><div class="kpi-value" style="color:var(--yellow)">5</div><div class="kpi-desc">JWT·RBAC·HMAC·RLS·AES-256</div></div>
+        </div>
+
+        <div class="flow-diagram">
+          <div class="flow-title">Core Message Processing Flow</div>
+          <div class="flow-steps">
+            <div class="flow-step accent">Meta Ad Click</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">WA Message</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step blue">Webhook Ingress</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">BullMQ Queue</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step green">CRM Resolution</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step purple">Claude AI</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step cyan">WA Reply</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step accent">Meta CAPI</div>
+          </div>
+        </div>
+
+        <div class="flow-title" style="margin-bottom:12px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);font-weight:600;">Key Files — Click to explore</div>
+        <div class="file-list-overview">
+          <div class="file-card" onclick="showFile(document.querySelector('[data-file=claude]'),'claude')">
+            <div>🤖</div>
+            <div>
+              <div class="file-card-name">claude.service.js</div>
+              <div class="file-card-path">src/services/</div>
+              <div class="file-card-desc">AI engine. Builds prompt, calls Anthropic API, parses structured JSON response (status/score/reply/action).</div>
+            </div>
+          </div>
+          <div class="file-card" onclick="showFile(document.querySelector('[data-file=worker]'),'worker')">
+            <div>⚡</div>
+            <div>
+              <div class="file-card-name">conversation.worker.js</div>
+              <div class="file-card-path">src/workers/</div>
+              <div class="file-card-desc">BullMQ worker. Orchestrates the full lead → AI → CRM → WhatsApp → Meta pipeline.</div>
+            </div>
+          </div>
+          <div class="file-card" onclick="showFile(document.querySelector('[data-file=schema]'),'schema')">
+            <div>🐘</div>
+            <div>
+              <div class="file-card-name">schema.prisma</div>
+              <div class="file-card-path">prisma/</div>
+              <div class="file-card-desc">Full multi-tenant PostgreSQL schema — 10 tables, all enums, all relations and indexes.</div>
+            </div>
+          </div>
+          <div class="file-card" onclick="showFile(document.querySelector('[data-file=wahook]'),'wahook')">
+            <div>🔔</div>
+            <div>
+              <div class="file-card-name">whatsapp.webhook.js</div>
+              <div class="file-card-path">src/webhooks/</div>
+              <div class="file-card-desc">Receives WA Cloud API events, verifies HMAC, deduplicates, publishes to queue.</div>
+            </div>
+          </div>
+          <div class="file-card" onclick="showFile(document.querySelector('[data-file=authsvc]'),'authsvc')">
+            <div>🔑</div>
+            <div>
+              <div class="file-card-name">auth.service.js</div>
+              <div class="file-card-path">src/modules/auth/</div>
+              <div class="file-card-desc">Register tenant + user, login, JWT + refresh token management with bcrypt.</div>
+            </div>
+          </div>
+          <div class="file-card" onclick="showFile(document.querySelector('[data-file=analyticsvc]'),'analyticsvc')">
+            <div>📈</div>
+            <div>
+              <div class="file-card-name">analytics.service.js</div>
+              <div class="file-card-path">src/modules/analytics/</div>
+              <div class="file-card-desc">Dashboard KPIs, funnel conversion, revenue timeline, AI performance metrics.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="filePanel" style="display:none;">
+        <div class="file-header" id="fileHeader"></div>
+        <pre id="codeContent"><code id="codeEl"></code></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const FILES = {
+  package: {
+    name: 'package.json', path: 'backend/', badge: 'badge-blue', badgeText: 'Config',
+    content: `<span class="pun">{</span>
+  <span class="str">"name"</span><span class="pun">:</span> <span class="str">"asos-backend"</span><span class="pun">,</span>
+  <span class="str">"version"</span><span class="pun">:</span> <span class="str">"1.0.0"</span><span class="pun">,</span>
+  <span class="str">"scripts"</span><span class="pun">:</span> <span class="pun">{</span>
+    <span class="str">"start"</span><span class="pun">:</span>      <span class="str">"node src/server.js"</span><span class="pun">,</span>
+    <span class="str">"dev"</span><span class="pun">:</span>        <span class="str">"nodemon src/server.js"</span><span class="pun">,</span>
+    <span class="str">"worker"</span><span class="pun">:</span>     <span class="str">"node src/workers/conversation.worker.js"</span><span class="pun">,</span>
+    <span class="str">"db:migrate"</span><span class="pun">:</span> <span class="str">"prisma migrate deploy"</span><span class="pun">,</span>
+    <span class="str">"db:seed"</span><span class="pun">:</span>    <span class="str">"node prisma/seed.js"</span>
+  <span class="pun">},</span>
+  <span class="str">"dependencies"</span><span class="pun">:</span> <span class="pun">{</span>
+    <span class="str">"@anthropic-ai/sdk"</span><span class="pun">:</span> <span class="str">"^0.24.0"</span><span class="pun">,</span>   <span class="cmt">// Claude AI</span>
+    <span class="str">"@prisma/client"</span><span class="pun">:</span>    <span class="str">"^5.14.0"</span><span class="pun">,</span>   <span class="cmt">// PostgreSQL ORM</span>
+    <span class="str">"bullmq"</span><span class="pun">:</span>            <span class="str">"^5.7.0"</span><span class="pun">,</span>    <span class="cmt">// Job queue</span>
+    <span class="str">"express"</span><span class="pun">:</span>           <span class="str">"^4.19.2"</span><span class="pun">,</span>   <span class="cmt">// HTTP server</span>
+    <span class="str">"helmet"</span><span class="pun">:</span>            <span class="str">"^7.1.0"</span><span class="pun">,</span>    <span class="cmt">// Security headers</span>
+    <span class="str">"ioredis"</span><span class="pun">:</span>           <span class="str">"^5.4.1"</span><span class="pun">,</span>    <span class="cmt">// Redis client</span>
+    <span class="str">"jsonwebtoken"</span><span class="pun">:</span>      <span class="str">"^9.0.2"</span><span class="pun">,</span>    <span class="cmt">// JWT auth</span>
+    <span class="str">"bcryptjs"</span><span class="pun">:</span>          <span class="str">"^2.4.3"</span><span class="pun">,</span>    <span class="cmt">// Password hashing</span>
+    <span class="str">"zod"</span><span class="pun">:</span>               <span class="str">"^3.23.8"</span><span class="pun">,</span>   <span class="cmt">// Schema validation</span>
+    <span class="str">"pino"</span><span class="pun">:</span>              <span class="str">"^9.2.0"</span>      <span class="cmt">// Structured logging</span>
+  <span class="pun">}</span>
+<span class="pun">}</span>`
+  },
+
+  claude: {
+    name: 'claude.service.js', path: 'src/services/', badge: 'badge-purple', badgeText: 'AI Engine · Core',
+    content: `<span class="cmt">// ─────────────────────────────────────────────────────────────
+// Claude AI Engine — The brain of ASOS
+// Receives conversation context → returns structured JSON decision
+// ─────────────────────────────────────────────────────────────</span>
+
+<span class="kw">const</span> <span class="cls">Anthropic</span> <span class="pun">=</span> <span class="fn">require</span><span class="pun">(</span><span class="str">'@anthropic-ai/sdk'</span><span class="pun">);</span>
+
+<span class="cmt">// Every response from Claude MUST follow this schema:</span>
+<span class="cmt">// {</span>
+<span class="cmt">//   reply:             "WhatsApp message to send"</span>
+<span class="cmt">//   leadStatus:        "HOT" | "WARM" | "COLD"</span>
+<span class="cmt">//   score:             1-10</span>
+<span class="cmt">//   stage:             "NEW" | "QUALIFYING" | "DIAGNOSED" | "PROPOSED" | "CLOSED_WON" | "CLOSED_LOST"</span>
+<span class="cmt">//   problemDiagnosis:  "Lead's core problem"</span>
+<span class="cmt">//   salesFix:          "How our product solves it"</span>
+<span class="cmt">//   urgencyTrigger:    "Scarcity/deadline element"</span>
+<span class="cmt">//   action:            "continue" | "handoff" | "close"</span>
+<span class="cmt">//   qualificationData: { budget, authority, need, timeline }</span>
+<span class="cmt">// }</span>
+
+<span class="kw">const</span> <span class="fn">processMessage</span> <span class="pun">=</span> <span class="kw">async</span> <span class="pun">({</span> tenantId<span class="pun">,</span> lead<span class="pun">,</span> contact<span class="pun">,</span> newMessage<span class="pun">,</span> messageHistory <span class="pun">})</span> <span class="pun">=></span> <span class="pun">{</span>
+  <span class="cmt">// 1. Load tenant AI config from DB</span>
+  <span class="kw">const</span> aiConfig <span class="pun">=</span> <span class="kw">await</span> prisma<span class="pun">.</span><span class="fn">aiConfig</span><span class="pun">.</span><span class="fn">findUnique</span><span class="pun">({</span> where<span class="pun">:</span> <span class="pun">{</span> tenantId <span class="pun">}</span> <span class="pun">});</span>
+
+  <span class="cmt">// 2. Build system prompt with tenant persona + BANT criteria</span>
+  <span class="kw">const</span> systemPrompt <span class="pun">=</span> <span class="fn">buildSystemPrompt</span><span class="pun">(</span>aiConfig<span class="pun">,</span> lead<span class="pun">,</span> contact<span class="pun">);</span>
+
+  <span class="cmt">// 3. Call Claude with full conversation history</span>
+  <span class="kw">const</span> response <span class="pun">=</span> <span class="kw">await</span> client<span class="pun">.</span>messages<span class="pun">.</span><span class="fn">create</span><span class="pun">({</span>
+    model<span class="pun">:</span>      aiConfig<span class="pun">.</span>model<span class="pun">,</span>       <span class="cmt">// claude-3-5-sonnet-20241022</span>
+    max_tokens<span class="pun">:</span> aiConfig<span class="pun">.</span>maxTokens<span class="pun">,</span>  <span class="cmt">// 512 — concise WA messages</span>
+    temperature<span class="pun">:</span>aiConfig<span class="pun">.</span>temperature<span class="pun">,</span> <span class="cmt">// 0.3 — consistent, professional</span>
+    system<span class="pun">:</span>     systemPrompt<span class="pun">,</span>
+    messages<span class="pun">:</span>   <span class="pun">[...</span>historyMessages<span class="pun">,</span> <span class="pun">{</span> role<span class="pun">:</span> <span class="str">'user'</span><span class="pun">,</span> content<span class="pun">:</span> newMessage <span class="pun">}],</span>
+  <span class="pun">});</span>
+
+  <span class="cmt">// 4. Parse JSON → validate → sanitise → return</span>
+  <span class="kw">const</span> parsed <span class="pun">=</span> <span class="cls">JSON</span><span class="pun">.</span><span class="fn">parse</span><span class="pun">(</span>rawResponse<span class="pun">.</span><span class="fn">match</span><span class="pun">(</span><span class="str">/\\{[\\s\\S]*\\}/</span><span class="pun">)[</span><span class="num">0</span><span class="pun">]);</span>
+
+  <span class="cmt">// 5. Update token usage for billing</span>
+  <span class="kw">await</span> prisma<span class="pun">.</span>subscription<span class="pun">.</span><span class="fn">update</span><span class="pun">({</span>
+    where<span class="pun">:</span> <span class="pun">{</span> tenantId <span class="pun">},</span>
+    data<span class="pun">:</span>  <span class="pun">{</span> aiTokensUsed<span class="pun">:</span> <span class="pun">{</span> increment<span class="pun">:</span> tokensUsed <span class="pun">}</span> <span class="pun">},</span>
+  <span class="pun">});</span>
+
+  <span class="kw">return</span> parsed<span class="pun">;</span>
+<span class="pun">};</span>`
+  },
+
+  worker: {
+    name: 'conversation.worker.js', path: 'src/workers/', badge: 'badge-orange', badgeText: 'BullMQ · Core Orchestrator',
+    content: `<span class="cmt">// ─────────────────────────────────────────────────────────────
+// Conversation Worker — Processes every inbound WA message
+// This is the central orchestrator of the entire system
+// ─────────────────────────────────────────────────────────────</span>
+
+<span class="kw">const</span> processInboundMessage <span class="pun">=</span> <span class="kw">async</span> <span class="pun">(</span>job<span class="pun">)</span> <span class="pun">=></span> <span class="pun">{</span>
+
+  <span class="cmt">// ── Step 1: Load tenant credentials ─────────────</span>
+  <span class="kw">const</span> tenant <span class="pun">=</span> <span class="kw">await</span> prisma<span class="pun">.</span>tenant<span class="pun">.</span><span class="fn">findUnique</span><span class="pun">({</span> where<span class="pun">:</span> <span class="pun">{</span> id<span class="pun">:</span> tenantId <span class="pun">}</span> <span class="pun">});</span>
+
+  <span class="cmt">// ── Step 2: Mark WA message as read ─────────────</span>
+  whatsappService<span class="pun">.</span><span class="fn">markAsRead</span><span class="pun">(</span>tenant<span class="pun">,</span> waMessageId<span class="pun">).</span><span class="fn">catch</span><span class="pun">(() =></span> <span class="pun">{});</span>
+
+  <span class="cmt">// ── Step 3: Resolve / create Contact ────────────</span>
+  <span class="kw">let</span> contact <span class="pun">=</span> <span class="kw">await</span> prisma<span class="pun">.</span>contact<span class="pun">.</span><span class="fn">findUnique</span><span class="pun">({</span>
+    where<span class="pun">:</span> <span class="pun">{</span> tenantId_phone<span class="pun">:</span> <span class="pun">{</span> tenantId<span class="pun">,</span> phone <span class="pun">}</span> <span class="pun">},</span>
+  <span class="pun">});</span>
+  <span class="kw">if</span> <span class="pun">(!</span>contact<span class="pun">)</span> contact <span class="pun">=</span> <span class="kw">await</span> prisma<span class="pun">.</span>contact<span class="pun">.</span><span class="fn">create</span><span class="pun">({</span> data<span class="pun">:</span> <span class="pun">{</span> tenantId<span class="pun">,</span> phone<span class="pun">,</span> name <span class="pun">}</span> <span class="pun">});</span>
+
+  <span class="cmt">// ── Step 4: Resolve / create Lead ───────────────</span>
+  <span class="kw">let</span> lead <span class="pun">=</span> <span class="kw">await</span> prisma<span class="pun">.</span>lead<span class="pun">.</span><span class="fn">findFirst</span><span class="pun">({</span>
+    where<span class="pun">:</span> <span class="pun">{</span> tenantId<span class="pun">,</span> contactId<span class="pun">:</span> contact<span class="pun">.</span>id<span class="pun">,</span> stage<span class="pun">:</span> <span class="pun">{</span> notIn<span class="pun">:</span> <span class="pun">[</span><span class="str">'CLOSED_WON'</span><span class="pun">,</span> <span class="str">'CLOSED_LOST'</span><span class="pun">]</span> <span class="pun">}</span> <span class="pun">},</span>
+  <span class="pun">});</span>
+  <span class="kw">if</span> <span class="pun">(!</span>lead<span class="pun">)</span> <span class="pun">{</span>
+    lead <span class="pun">=</span> <span class="kw">await</span> prisma<span class="pun">.</span>lead<span class="pun">.</span><span class="fn">create</span><span class="pun">({</span> data<span class="pun">:</span> <span class="pun">{</span> tenantId<span class="pun">,</span> contactId<span class="pun">:</span> contact<span class="pun">.</span>id<span class="pun">,</span> <span class="pun">...</span>adAttribution <span class="pun">}</span> <span class="pun">});</span>
+    metaService<span class="pun">.</span><span class="fn">trackLead</span><span class="pun">(</span>tenant<span class="pun">,</span> phone<span class="pun">,</span> lead<span class="pun">.</span>id<span class="pun">).</span><span class="fn">catch</span><span class="pun">(() =></span> <span class="pun">{});</span>  <span class="cmt">// Fire Meta event</span>
+  <span class="pun">}</span>
+
+  <span class="cmt">// ── Step 5–6: Persist inbound message ───────────</span>
+  <span class="kw">await</span> prisma<span class="pun">.</span>message<span class="pun">.</span><span class="fn">create</span><span class="pun">({</span> data<span class="pun">:</span> <span class="pun">{</span> tenantId<span class="pun">,</span> conversationId<span class="pun">,</span> direction<span class="pun">:</span> <span class="str">'INBOUND'</span><span class="pun">,</span> sender<span class="pun">:</span> <span class="str">'CONTACT'</span><span class="pun">,</span> content <span class="pun">}</span> <span class="pun">});</span>
+
+  <span class="cmt">// ── Step 7: Call Claude AI ───────────────────────</span>
+  <span class="kw">const</span> aiResult <span class="pun">=</span> <span class="kw">await</span> claudeService<span class="pun">.</span><span class="fn">processMessage</span><span class="pun">({</span>
+    tenantId<span class="pun">,</span> lead<span class="pun">,</span> contact<span class="pun">,</span> newMessage<span class="pun">:</span> content<span class="pun">,</span> messageHistory<span class="pun">,</span>
+  <span class="pun">});</span>
+
+  <span class="cmt">// ── Step 8: Update CRM ──────────────────────────</span>
+  <span class="kw">await</span> prisma<span class="pun">.</span>lead<span class="pun">.</span><span class="fn">update</span><span class="pun">({</span>
+    where<span class="pun">:</span> <span class="pun">{</span> id<span class="pun">:</span> lead<span class="pun">.</span>id <span class="pun">},</span>
+    data<span class="pun">:</span>  <span class="pun">{</span> stage<span class="pun">:</span> aiResult<span class="pun">.</span>stage<span class="pun">,</span> scoreLabel<span class="pun">:</span> aiResult<span class="pun">.</span>leadStatus<span class="pun">,</span> aiScore<span class="pun">:</span> aiResult<span class="pun">.</span>score <span class="pun">*</span> <span class="num">10</span> <span class="pun">},</span>
+  <span class="pun">});</span>
+
+  <span class="cmt">// ── Step 9: Route by AI action ──────────────────</span>
+  <span class="kw">if</span> <span class="pun">(</span>aiResult<span class="pun">.</span>action <span class="pun">===</span> <span class="str">'handoff'</span><span class="pun">)</span>  <span class="kw">return</span> <span class="fn">handleHandoff</span><span class="pun">(...);</span>
+  <span class="kw">if</span> <span class="pun">(</span>aiResult<span class="pun">.</span>action <span class="pun">===</span> <span class="str">'close'</span><span class="pun">)</span>    metaService<span class="pun">.</span><span class="fn">trackPurchase</span><span class="pun">(...);</span>
+
+  <span class="cmt">// ── Step 10: Send AI reply via WhatsApp ─────────</span>
+  <span class="kw">await</span> whatsappService<span class="pun">.</span><span class="fn">sendText</span><span class="pun">(</span>tenant<span class="pun">,</span> phone<span class="pun">,</span> aiResult<span class="pun">.</span>reply<span class="pun">);</span>
+<span class="pun">};</span>`
+  },
+
+  schema: {
+    name: 'schema.prisma', path: 'prisma/', badge: 'badge-green', badgeText: 'PostgreSQL · 10 Tables',
+    content: `<span class="cmt">// Multi-tenant PostgreSQL schema — all tables carry tenant_id</span>
+
+<span class="kw">model</span> <span class="cls">Tenant</span> <span class="pun">{</span>
+  id              <span class="cls">String</span>      <span class="fn">@id</span> <span class="fn">@default</span><span class="pun">(</span><span class="fn">uuid</span><span class="pun">())</span>
+  slug            <span class="cls">String</span>      <span class="fn">@unique</span>
+  waPhoneId       <span class="cls">String</span><span class="pun">?</span>     <span class="cmt">// WA Cloud API Phone Number ID</span>
+  waAccessToken   <span class="cls">String</span><span class="pun">?</span>     <span class="cmt">// AES-256-GCM encrypted</span>
+  metaPixelId     <span class="cls">String</span><span class="pun">?</span>     <span class="cmt">// For Conversions API</span>
+  aiConfig        <span class="cls">AiConfig</span><span class="pun">?</span>
+  subscription    <span class="cls">Subscription</span><span class="pun">?</span>
+<span class="pun">}</span>
+
+<span class="kw">model</span> <span class="cls">Lead</span> <span class="pun">{</span>
+  id                <span class="cls">String</span>    <span class="fn">@id</span> <span class="fn">@default</span><span class="pun">(</span><span class="fn">uuid</span><span class="pun">())</span>
+  tenantId          <span class="cls">String</span>    <span class="cmt">// Multi-tenant isolation key</span>
+  stage             <span class="cls">LeadStage</span> <span class="fn">@default</span><span class="pun">(</span>NEW<span class="pun">)</span>
+  scoreLabel        <span class="cls">LeadScore</span> <span class="fn">@default</span><span class="pun">(</span>COLD<span class="pun">)</span>
+  aiScore           <span class="cls">Int</span>       <span class="fn">@default</span><span class="pun">(</span><span class="num">0</span><span class="pun">)</span>  <span class="cmt">// 0-100</span>
+  qualificationData <span class="cls">Json</span>      <span class="cmt">// BANT + AI diagnosis</span>
+  metaAdId          <span class="cls">String</span><span class="pun">?</span>   <span class="cmt">// Attribution</span>
+<span class="pun">}</span>
+
+<span class="kw">model</span> <span class="cls">AiConfig</span> <span class="pun">{</span>
+  tenantId              <span class="cls">String</span>  <span class="fn">@unique</span>
+  systemPrompt          <span class="cls">String</span>  <span class="cmt">// AI persona + instructions</span>
+  qualificationCriteria <span class="cls">Json</span>    <span class="cmt">// BANT questions array</span>
+  closingScript         <span class="cls">String</span><span class="pun">?</span>
+  handoffTriggers       <span class="cls">Json</span>    <span class="cmt">// Keywords → human escalation</span>
+  model                 <span class="cls">String</span>  <span class="fn">@default</span><span class="pun">(</span><span class="str">"claude-3-5-sonnet-20241022"</span><span class="pun">)</span>
+  temperature           <span class="cls">Float</span>   <span class="fn">@default</span><span class="pun">(</span><span class="num">0.3</span><span class="pun">)</span>
+<span class="pun">}</span>
+
+<span class="cmt">// Full tables: tenants, users, contacts, leads, conversations,</span>
+<span class="cmt">// messages, campaigns, ads_tracking, activities, ai_configs, subscriptions</span>`
+  },
+
+  authsvc: {
+    name: 'auth.service.js', path: 'src/modules/auth/', badge: 'badge-cyan', badgeText: 'JWT · bcrypt · Multi-tenant',
+    content: `<span class="cmt">// Register: creates Tenant + User + AiConfig + Subscription in one transaction</span>
+<span class="kw">const</span> register <span class="pun">=</span> <span class="kw">async</span> <span class="pun">({</span> tenantName<span class="pun">,</span> tenantSlug<span class="pun">,</span> email<span class="pun">,</span> password<span class="pun">,</span> fullName <span class="pun">})</span> <span class="pun">=></span> <span class="pun">{</span>
+  <span class="kw">const</span> result <span class="pun">=</span> <span class="kw">await</span> prisma<span class="pun">.</span><span class="fn">$transaction</span><span class="pun">(</span><span class="kw">async</span> <span class="pun">(</span>tx<span class="pun">)</span> <span class="pun">=></span> <span class="pun">{</span>
+    <span class="kw">const</span> tenant <span class="pun">=</span> <span class="kw">await</span> tx<span class="pun">.</span>tenant<span class="pun">.</span><span class="fn">create</span><span class="pun">({</span> data<span class="pun">:</span> <span class="pun">{</span> slug<span class="pun">:</span> tenantSlug<span class="pun">,</span> name<span class="pun">:</span> tenantName<span class="pun">,</span> plan<span class="pun">:</span> <span class="str">'FREE'</span> <span class="pun">}</span> <span class="pun">});</span>
+    <span class="kw">const</span> user   <span class="pun">=</span> <span class="kw">await</span> tx<span class="pun">.</span>user<span class="pun">.</span><span class="fn">create</span><span class="pun">({</span> data<span class="pun">:</span> <span class="pun">{</span> tenantId<span class="pun">:</span> tenant<span class="pun">.</span>id<span class="pun">,</span> email<span class="pun">,</span> role<span class="pun">:</span> <span class="str">'TENANT_ADMIN'</span> <span class="pun">}</span> <span class="pun">});</span>
+    <span class="kw">await</span> tx<span class="pun">.</span>aiConfig<span class="pun">.</span><span class="fn">create</span><span class="pun">({</span> data<span class="pun">:</span> <span class="pun">{</span> tenantId<span class="pun">:</span> tenant<span class="pun">.</span>id<span class="pun">,</span> systemPrompt<span class="pun">:</span> defaultPrompt <span class="pun">}</span> <span class="pun">});</span>
+    <span class="kw">await</span> tx<span class="pun">.</span>subscription<span class="pun">.</span><span class="fn">create</span><span class="pun">({</span> data<span class="pun">:</span> <span class="pun">{</span> tenantId<span class="pun">:</span> tenant<span class="pun">.</span>id<span class="pun">,</span> plan<span class="pun">:</span> <span class="str">'FREE'</span><span class="pun">,</span> status<span class="pun">:</span> <span class="str">'TRIALING'</span> <span class="pun">}</span> <span class="pun">});</span>
+    <span class="kw">return</span> <span class="pun">{</span> tenant<span class="pun">,</span> user <span class="pun">};</span>
+  <span class="pun">});</span>
+
+  <span class="kw">const</span> accessToken  <span class="pun">=</span> <span class="fn">generateAccessToken</span><span class="pun">(</span>user<span class="pun">.</span>id<span class="pun">,</span> tenant<span class="pun">.</span>id<span class="pun">,</span> user<span class="pun">.</span>role<span class="pun">);</span>  <span class="cmt">// 15 min JWT</span>
+  <span class="kw">const</span> refreshToken <span class="pun">=</span> <span class="fn">generateRefreshToken</span><span class="pun">(</span>user<span class="pun">.</span>id<span class="pun">);</span>                       <span class="cmt">// 7 day, hashed in DB</span>
+  <span class="kw">return</span> <span class="pun">{</span> accessToken<span class="pun">,</span> refreshToken<span class="pun">,</span> user<span class="pun">,</span> tenant <span class="pun">};</span>
+<span class="pun">};</span>
+
+<span class="cmt">// Login → validates password → issues tokens → updates lastLoginAt</span>
+<span class="kw">const</span> login <span class="pun">=</span> <span class="kw">async</span> <span class="pun">({</span> email<span class="pun">,</span> password <span class="pun">})</span> <span class="pun">=></span> <span class="pun">{</span>
+  <span class="kw">const</span> valid <span class="pun">=</span> <span class="kw">await</span> bcrypt<span class="pun">.</span><span class="fn">compare</span><span class="pun">(</span>password<span class="pun">,</span> user<span class="pun">.</span>passwordHash<span class="pun">);</span>
+  <span class="kw">if</span> <span class="pun">(!</span>valid<span class="pun">)</span> <span class="kw">throw</span> <span class="cls">Error</span><span class="pun">(</span><span class="str">'Invalid credentials'</span><span class="pun">);</span>
+  <span class="cmt">// Returns { accessToken, refreshToken, user, tenant }</span>
+<span class="pun">};</span>`
+  },
+
+  analyticsvc: {
+    name: 'analytics.service.js', path: 'src/modules/analytics/', badge: 'badge-yellow', badgeText: 'Dashboard Engine',
+    content: `<span class="cmt">// Overview KPIs — leads, revenue, AI performance, conversion rate</span>
+<span class="kw">const</span> getOverview <span class="pun">=</span> <span class="kw">async</span> <span class="pun">(</span>tenantId<span class="pun">,</span> <span class="pun">{</span> from<span class="pun">,</span> to <span class="pun">})</span> <span class="pun">=></span> <span class="pun">{</span>
+  <span class="kw">const</span> <span class="pun">[</span>totalLeads<span class="pun">,</span> hotLeads<span class="pun">,</span> closedWon<span class="pun">,</span> totalMessages<span class="pun">,</span> aiMessages<span class="pun">,</span> revenueData<span class="pun">]</span>
+    <span class="pun">=</span> <span class="kw">await</span> <span class="cls">Promise</span><span class="pun">.</span><span class="fn">all</span><span class="pun">([</span>
+      prisma<span class="pun">.</span>lead<span class="pun">.</span><span class="fn">count</span><span class="pun">({</span> where <span class="pun">}),</span>
+      prisma<span class="pun">.</span>lead<span class="pun">.</span><span class="fn">count</span><span class="pun">({</span> where<span class="pun">:</span> <span class="pun">{</span> <span class="pun">...</span>where<span class="pun">,</span> scoreLabel<span class="pun">:</span> <span class="str">'HOT'</span> <span class="pun">}</span> <span class="pun">}),</span>
+      prisma<span class="pun">.</span>lead<span class="pun">.</span><span class="fn">count</span><span class="pun">({</span> where<span class="pun">:</span> <span class="pun">{</span> <span class="pun">...</span>where<span class="pun">,</span> stage<span class="pun">:</span> <span class="str">'CLOSED_WON'</span> <span class="pun">}</span> <span class="pun">}),</span>
+      prisma<span class="pun">.</span>message<span class="pun">.</span><span class="fn">count</span><span class="pun">({</span> where<span class="pun">:</span> <span class="pun">{</span> tenantId<span class="pun">,</span> sentAt<span class="pun">:</span> range <span class="pun">}</span> <span class="pun">}),</span>
+      prisma<span class="pun">.</span>message<span class="pun">.</span><span class="fn">count</span><span class="pun">({</span> where<span class="pun">:</span> <span class="pun">{</span> tenantId<span class="pun">,</span> sender<span class="pun">:</span> <span class="str">'AI'</span><span class="pun">,</span> sentAt<span class="pun">:</span> range <span class="pun">}</span> <span class="pun">}),</span>
+      prisma<span class="pun">.</span>lead<span class="pun">.</span><span class="fn">aggregate</span><span class="pun">({</span> _sum<span class="pun">:</span> <span class="pun">{</span> dealValue<span class="pun">:</span> <span class="kw">true</span> <span class="pun">},</span> where<span class="pun">:</span> <span class="pun">{</span> stage<span class="pun">:</span> <span class="str">'CLOSED_WON'</span> <span class="pun">}</span> <span class="pun">}),</span>
+    <span class="pun">]);</span>
+
+  <span class="kw">return</span> <span class="pun">{</span>
+    leads<span class="pun">:</span>          <span class="pun">{</span> total<span class="pun">:</span> totalLeads<span class="pun">,</span> hot<span class="pun">:</span> hotLeads<span class="pun">,</span> closedWon <span class="pun">},</span>
+    revenue<span class="pun">:</span>        <span class="pun">{</span> total<span class="pun">:</span> revenueData<span class="pun">.</span>_sum<span class="pun">.</span>dealValue <span class="pun">},</span>
+    conversionRate<span class="pun">:</span> <span class="pun">((</span>closedWon <span class="pun">/</span> totalLeads<span class="pun">) *</span> <span class="num">100</span><span class="pun">).</span><span class="fn">toFixed</span><span class="pun">(</span><span class="num">1</span><span class="pun">)</span> <span class="pun">+</span> <span class="str">'%'</span><span class="pun">,</span>
+    aiHandlingRate<span class="pun">:</span> <span class="pun">((</span>aiMessages <span class="pun">/</span> totalMessages<span class="pun">) *</span> <span class="num">100</span><span class="pun">).</span><span class="fn">toFixed</span><span class="pun">(</span><span class="num">1</span><span class="pun">)</span> <span class="pun">+</span> <span class="str">'%'</span><span class="pun">,</span>
+  <span class="pun">};</span>
+<span class="pun">};</span>
+
+<span class="cmt">// Also includes: getFunnel, getRevenue, getAIPerformance, getAgentPerformance, getMessageVolume</span>`
+  },
+};
+
+// Default snippets for files without full content
+const DEFAULT_SNIPPETS = {
+  env: { name: '.env.example', path: 'backend/', badge: 'badge-orange', badgeText: 'Config' },
+  readme: { name: 'README.md', path: 'backend/', badge: 'badge-blue', badgeText: 'Documentation' },
+  seed: { name: 'seed.js', path: 'prisma/', badge: 'badge-green', badgeText: 'Dev Seeder' },
+  envjs: { name: 'env.js', path: 'src/config/', badge: 'badge-cyan', badgeText: 'Zod Validation' },
+  database: { name: 'database.js', path: 'src/config/', badge: 'badge-green', badgeText: 'Prisma Singleton' },
+  redis: { name: 'redis.js', path: 'src/config/', badge: 'badge-red', badgeText: 'IORedis' },
+  app: { name: 'app.js', path: 'src/', badge: 'badge-orange', badgeText: 'Express Factory' },
+  server: { name: 'server.js', path: 'src/', badge: 'badge-orange', badgeText: 'HTTP Entrypoint' },
+  authmw: { name: 'auth.middleware.js', path: 'src/middleware/', badge: 'badge-cyan', badgeText: 'JWT Guard' },
+  tenantmw: { name: 'tenant.middleware.js', path: 'src/middleware/', badge: 'badge-cyan', badgeText: 'Tenant Guard' },
+  errormw: { name: 'error.middleware.js', path: 'src/middleware/', badge: 'badge-yellow', badgeText: 'Global Error Handler' },
+  whatsapp: { name: 'whatsapp.service.js', path: 'src/services/', badge: 'badge-green', badgeText: 'WA Cloud API' },
+  meta: { name: 'meta.service.js', path: 'src/services/', badge: 'badge-blue', badgeText: 'CAPI Attribution' },
+  queue: { name: 'message.queue.js', path: 'src/queues/', badge: 'badge-purple', badgeText: 'BullMQ' },
+  wahook: { name: 'whatsapp.webhook.js', path: 'src/webhooks/', badge: 'badge-orange', badgeText: 'HMAC · Dedup · Queue' },
+  leadssvc: { name: 'leads.service.js', path: 'src/modules/leads/', badge: 'badge-orange', badgeText: 'CRM Core' },
+  convsvc: { name: 'conversations.service.js', path: 'src/modules/conversations/', badge: 'badge-cyan', badgeText: 'Inbox + AI Toggle' },
+  campsvc: { name: 'campaigns.service.js', path: 'src/modules/campaigns/', badge: 'badge-purple', badgeText: 'Meta Ads Sync' },
+  aisvc: { name: 'aiConfig.service.js', path: 'src/modules/ai-config/', badge: 'badge-purple', badgeText: 'Claude Config' },
+  adminsvc: { name: 'admin.service.js', path: 'src/modules/admin/', badge: 'badge-yellow', badgeText: 'Superadmin' },
+  logger: { name: 'logger.js', path: 'src/utils/', badge: 'badge-blue', badgeText: 'Pino' },
+  response: { name: 'response.js', path: 'src/utils/', badge: 'badge-blue', badgeText: 'Std Response' },
+  crypto: { name: 'crypto.js', path: 'src/utils/', badge: 'badge-cyan', badgeText: 'AES-256-GCM' },
+};
+
+let openTabs = [];
+let activeFile = null;
+
+function showOverview(el) {
+  document.querySelectorAll('.tree-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('overviewPanel').style.display = 'block';
+  document.getElementById('filePanel').style.display = 'none';
+  activeFile = null;
+}
+
+function showFile(el, fileKey) {
+  if (!el) return;
+  const info = FILES[fileKey] || DEFAULT_SNIPPETS[fileKey];
+  if (!info) return;
+
+  document.querySelectorAll('.tree-item').forEach(i => i.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  document.getElementById('overviewPanel').style.display = 'none';
+  document.getElementById('filePanel').style.display = 'block';
+
+  // File header
+  document.getElementById('fileHeader').innerHTML = `
+    <span class="file-path">backend/<span>${info.path}</span><span>${info.name}</span></span>
+    <div class="file-badges"><span class="badge ${info.badge}">${info.badgeText}</span></div>
+  `;
+
+  // Code content
+  const codeEl = document.getElementById('codeEl');
+  if (FILES[fileKey]?.content) {
+    codeEl.innerHTML = FILES[fileKey].content;
+  } else {
+    codeEl.innerHTML = `<span class="cmt">// ${info.path}${info.name}\n// View the source file for full implementation\n// All files are written to backend/ in the project filesystem</span>\n\n<span class="cmt">// File summary: ${info.badgeText}</span>`;
+  }
+
+  // Manage tabs
+  if (!openTabs.includes(fileKey)) {
+    openTabs.push(fileKey);
+    if (openTabs.length > 8) openTabs.shift();
+    renderTabs();
+  }
+  activeFile = fileKey;
+  renderTabs();
+}
+
+function renderTabs() {
+  const bar = document.getElementById('tabBar');
+  bar.innerHTML = openTabs.map(key => {
+    const info = FILES[key] || DEFAULT_SNIPPETS[key];
+    const isActive = key === activeFile;
+    return `<div class="tab ${isActive ? 'active' : ''}" onclick="showFile(document.querySelector('[data-file=${key}]'),'${key}')">
+      ${info?.name || key}
+      <span class="close-btn" onclick="closeTab(event,'${key}')">×</span>
+    </div>`;
+  }).join('');
+}
+
+function closeTab(e, key) {
+  e.stopPropagation();
+  openTabs = openTabs.filter(k => k !== key);
+  if (activeFile === key) {
+    if (openTabs.length) showFile(document.querySelector(`[data-file=${openTabs[openTabs.length-1]}]`), openTabs[openTabs.length-1]);
+    else showOverview(document.querySelector('.tree-item'));
+  } else renderTabs();
+}
+</script>
+
+
+<!-- Tweaks mount point -->
+<div id="tweaks-root"></div>
+
+<!-- React + Babel for tweaks panel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="frontend/tweaks-panel.jsx"></script>
+
+<script type="text/babel">
+// ── Tweak definitions ────────────────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "midnight",
+  "density": "cozy",
+  "syntax": "dracula"
+}/*EDITMODE-END*/;
+
+// ── Theme palettes — change entire color atmosphere ──────────────────
+const THEMES = {
+  midnight: {
+    '--bg':      '#0a0e14', '--surface': '#0f1419', '--surface2': '#141b24',
+    '--surface3':'#1c2635', '--border':  '#1e2d3d', '--border2':  '#2a3f55',
+    '--accent':  '#f97316', '--text':    '#cdd9e5', '--text2':    '#768390', '--text3': '#444c56',
+    '--green':   '#39d353', '--blue':    '#58a6ff', '--purple':   '#bc8cff',
+    '--cyan':    '#39c5cf', '--yellow':  '#e3b341', '--red':      '#ff7b72',
+    name: 'Midnight',
+  },
+  terminal: {
+    '--bg':      '#000000', '--surface': '#0a0a0a', '--surface2': '#111111',
+    '--surface3':'#1a1a1a', '--border':  '#1f2b1f', '--border2':  '#2a3d2a',
+    '--accent':  '#00ff41', '--text':    '#c8ffc8', '--text2':    '#6bab6b', '--text3': '#2e4a2e',
+    '--green':   '#00ff41', '--blue':    '#00d4ff', '--purple':   '#bf5fff',
+    '--cyan':    '#00ffcc', '--yellow':  '#ffff00', '--red':      '#ff4444',
+    name: 'Terminal',
+  },
+  obsidian: {
+    '--bg':      '#0c0a0a', '--surface': '#141010', '--surface2': '#1c1818',
+    '--surface3':'#262020', '--border':  '#2e2828', '--border2':  '#3d3535',
+    '--accent':  '#e8b44b', '--text':    '#e8dfd0', '--text2':    '#8c7e70', '--text3': '#4a3e38',
+    '--green':   '#a8cc8c', '--blue':    '#88b4e7', '--purple':   '#c58fdb',
+    '--cyan':    '#80d4c4', '--yellow':  '#e8b44b', '--red':      '#e07070',
+    name: 'Obsidian',
+  },
+};
+
+// ── Density presets — reshape information architecture ───────────────
+const DENSITIES = {
+  compact: { '--code-size': '11px', '--code-lh': '1.55', '--pre-pad': '12px 16px', '--item-pad': '3px 16px', name: 'Compact' },
+  cozy:    { '--code-size': '12.5px', '--code-lh': '1.7', '--pre-pad': '16px 20px', '--item-pad': '4px 16px', name: 'Cozy'    },
+  spacious:{ '--code-size': '14px', '--code-lh': '1.9', '--pre-pad': '24px 28px', '--item-pad': '6px 16px', name: 'Spacious' },
+};
+
+// ── Syntax palettes — change how code reads ──────────────────────────
+const SYNTAX = {
+  oceanic: {
+    '--syn-kw':   '#cc99cd', '--syn-fn': '#6fc3df', '--syn-str': '#7ec699',
+    '--syn-cmt':  '#555f6e', '--syn-num': '#f08d49', '--syn-cls': '#f8c555', name: 'Oceanic',
+  },
+  dracula: {
+    '--syn-kw':   '#ff79c6', '--syn-fn': '#50fa7b', '--syn-str': '#f1fa8c',
+    '--syn-cmt':  '#6272a4', '--syn-num': '#bd93f9', '--syn-cls': '#8be9fd', name: 'Dracula',
+  },
+  nord: {
+    '--syn-kw':   '#81a1c1', '--syn-fn': '#88c0d0', '--syn-str': '#a3be8c',
+    '--syn-cmt':  '#4c566a', '--syn-num': '#b48ead', '--syn-cls': '#ebcb8b', name: 'Nord',
+  },
+};
+
+// ── Apply tokens to :root ────────────────────────────────────────────
+const applyTokens = (tokens) => {
+  const root = document.documentElement;
+  Object.entries(tokens).forEach(([k, v]) => {
+    if (k !== 'name') root.style.setProperty(k, v);
+  });
+};
+
+// ── Wire density tokens to actual CSS ───────────────────────────────
+const applyDensity = (preset) => {
+  applyTokens(preset);
+  // Also directly patch elements that need live updates
+  document.querySelectorAll('pre').forEach(el => {
+    el.style.fontSize  = preset['--code-size'];
+    el.style.lineHeight = preset['--code-lh'];
+    el.style.padding    = preset['--pre-pad'];
+  });
+  document.querySelectorAll('.tree-item').forEach(el => {
+    el.style.padding = preset['--item-pad'];
+  });
+};
+
+// ── Wire syntax tokens to actual CSS ────────────────────────────────
+const applySyntax = (preset) => {
+  const map = {
+    '--syn-kw':  '.kw',  '--syn-fn':  '.fn', '--syn-str': '.str',
+    '--syn-cmt': '.cmt', '--syn-num': '.num', '--syn-cls': '.cls',
+  };
+  const sheet = document.getElementById('syn-override-sheet') || (() => {
+    const s = document.createElement('style');
+    s.id = 'syn-override-sheet';
+    document.head.appendChild(s);
+    return s;
+  })();
+  sheet.textContent = Object.entries(map).map(([token, cls]) =>
+    `${cls} { color: ${preset[token]} !important; }`
+  ).join('\n');
+};
+
+// ── Tweaks panel component ───────────────────────────────────────────
+const ExplorerTweaks = () => {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  // Apply on change
+  React.useEffect(() => {
+    const theme = THEMES[tweaks.theme]    || THEMES.midnight;
+    const dens  = DENSITIES[tweaks.density] || DENSITIES.cozy;
+    const syn   = SYNTAX[tweaks.syntax]   || SYNTAX.oceanic;
+    applyTokens(theme);
+    applyDensity(dens);
+    applySyntax(syn);
+  }, [tweaks]);
+
+  return (
+    <TweaksPanel>
+      <TweakSection label="Theme">
+        <TweakRadio
+          id="theme"
+          value={tweaks.theme}
+          onChange={v => setTweak('theme', v)}
+          options={[
+            { value:'midnight', label:'🌙 Midnight',  desc:'Dark navy · orange accent' },
+            { value:'terminal', label:'💻 Terminal',  desc:'Hacker green · pure black' },
+            { value:'obsidian', label:'🪨 Obsidian',  desc:'Near-black · warm amber' },
+          ]}
+        />
+      </TweakSection>
+
+      <TweakSection label="Information Density">
+        <TweakRadio
+          id="density"
+          value={tweaks.density}
+          onChange={v => setTweak('density', v)}
+          options={[
+            { value:'compact',  label:'◫ Compact',  desc:'See more code at once' },
+            { value:'cozy',     label:'◻ Cozy',     desc:'Comfortable reading' },
+            { value:'spacious', label:'□ Spacious', desc:'Maximum legibility' },
+          ]}
+        />
+      </TweakSection>
+
+      <TweakSection label="Syntax Style">
+        <TweakRadio
+          id="syntax"
+          value={tweaks.syntax}
+          onChange={v => setTweak('syntax', v)}
+          options={[
+            { value:'oceanic', label:'🌊 Oceanic', desc:'Warm & high contrast' },
+            { value:'dracula', label:'🧛 Dracula', desc:'Vivid pink & green' },
+            { value:'nord',    label:'❄ Nord',    desc:'Cool blue-grey tones' },
+          ]}
+        />
+      </TweakSection>
+    </TweaksPanel>
+  );
+};
+
+// Mount
+ReactDOM.createRoot(document.getElementById('tweaks-root')).render(<ExplorerTweaks />);
+</script>
+
+</body>
+</html>

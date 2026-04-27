@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>getaisales.com — Email Templates</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--indigo:#6366f1;--violet:#8b5cf6;--neon:#818cf8;--emerald:#10b981;
+  --bg:#030712;--s1:#0f172a;--text:#f1f5f9;--text2:#94a3b8;--text3:#475569;
+  --display:'Plus Jakarta Sans',sans-serif;--body:'Space Grotesk',sans-serif;--mono:'JetBrains Mono',monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0f172a;color:var(--text);font-family:var(--body);}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(99,102,241,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.03) 1px,transparent 1px);background-size:56px 56px;}
+.page{max-width:1100px;margin:0 auto;padding:3rem 2rem 6rem;position:relative;z-index:1;}
+header{background:rgba(3,7,18,0.95);border-bottom:1px solid rgba(99,102,241,0.1);height:52px;display:flex;align-items:center;padding:0 2rem;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);}
+.h-logo{font-family:var(--display);font-weight:800;font-size:14px;background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.h-meta{font-size:11px;color:var(--text3);font-family:var(--mono);}
+
+.sec{margin-bottom:4rem;}
+.sec-label{font-size:10px;letter-spacing:3px;text-transform:uppercase;font-weight:700;color:var(--neon);margin-bottom:.5rem;}
+.sec-title{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:-0.5px;margin-bottom:.5rem;}
+.sec-sub{font-size:13px;color:var(--text2);margin-bottom:2rem;}
+hr{border:none;border-top:1px solid rgba(99,102,241,0.1);margin:3rem 0;}
+.tab-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.tab-btn{padding:6px 14px;border-radius:8px;border:1px solid rgba(99,102,241,0.2);background:transparent;color:var(--text2);font-size:12px;font-family:var(--body);cursor:pointer;transition:all .15s;}
+.tab-btn:hover,.tab-btn.active{background:rgba(99,102,241,0.15);color:var(--neon);border-color:rgba(99,102,241,0.3);}
+
+/* ── EMAIL MOCK WRAPPER ── */
+.email-preview{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;}
+.email-client{background:#1a1a2e;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);}
+.email-client-bar{background:#0d0d1a;padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,0.04);}
+.email-client-dot{width:8px;height:8px;border-radius:50%;}
+.email-client-title{font-size:10px;color:#555;font-family:var(--mono);margin-left:auto;}
+
+/* ── EMAIL BODY (inline-style based for email clients) ── */
+.email-body{font-family:'Helvetica Neue',Arial,sans-serif;background:#ffffff;max-width:600px;}
+.email-header-section{background:linear-gradient(135deg,#030712,#0f172a);padding:32px 40px 28px;text-align:center;}
+.email-logo-wrap{display:inline-flex;align-items:center;gap:10px;margin-bottom:4px;}
+.email-logo-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:inline-flex;align-items:center;justify-content:center;}
+.email-logo-text{font-family:'Helvetica Neue',Arial,sans-serif;font-weight:800;font-size:18px;background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.email-tagline{font-size:11px;color:#64748b;letter-spacing:1px;font-family:'Helvetica Neue',Arial,sans-serif;}
+.email-content{padding:36px 40px;background:#ffffff;}
+.email-h1{font-family:'Helvetica Neue',Arial,sans-serif;font-size:24px;font-weight:800;color:#1e293b;margin-bottom:12px;letter-spacing:-0.5px;line-height:1.2;}
+.email-p{font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;color:#475569;line-height:1.7;margin-bottom:16px;}
+.email-cta-wrap{text-align:center;margin:28px 0;}
+.email-cta{display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#ffffff;padding:14px 32px;border-radius:10px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:700;text-decoration:none;letter-spacing:-0.2px;}
+.email-divider{border:none;border-top:1px solid #f1f5f9;margin:24px 0;}
+.email-feature-row{display:flex;gap:0;margin:20px 0;}
+.email-feature{flex:1;text-align:center;padding:0 12px;}
+.email-feature-val{font-family:'Helvetica Neue',Arial,sans-serif;font-size:22px;font-weight:800;color:#6366f1;}
+.email-feature-label{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;color:#94a3b8;margin-top:3px;}
+.email-sig{background:#f8fafc;padding:24px 40px;border-top:1px solid #f1f5f9;}
+.email-sig-name{font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;font-weight:700;color:#1e293b;margin-bottom:2px;}
+.email-sig-role{font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;color:#64748b;}
+.email-sig-links{margin-top:8px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;color:#6366f1;}
+.email-footer-sec{background:#030712;padding:20px 40px;text-align:center;}
+.email-footer-text{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;color:#475569;line-height:1.6;}
+.email-footer-link{color:#6366f1;text-decoration:none;}
+
+/* Code panel */
+.code-panel{background:#030712;border:1px solid rgba(99,102,241,0.1);border-radius:10px;overflow:hidden;}
+.code-panel-header{background:rgba(15,23,42,0.8);padding:8px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(99,102,241,0.1);}
+.code-panel-title{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:1px;}
+.copy-code-btn{font-size:10px;font-family:var(--mono);color:var(--text3);background:transparent;border:1px solid rgba(99,102,241,0.2);border-radius:4px;padding:3px 8px;cursor:pointer;transition:all .15s;}
+.copy-code-btn:hover{color:var(--neon);}
+.code-content{padding:16px;font-family:var(--mono);font-size:11px;color:#94a3b8;line-height:1.8;max-height:300px;overflow-y:auto;}
+.code-content .hl{color:#818cf8;}
+
+/* Template selector */
+.template-nav{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;}
+.t-tab{padding:7px 16px;border-radius:8px;font-size:12px;font-weight:600;font-family:var(--body);cursor:pointer;border:1px solid rgba(99,102,241,0.2);background:transparent;color:var(--text2);transition:all .15s;}
+.t-tab:hover{color:var(--neon);}
+.t-tab.active{background:rgba(99,102,241,0.15);color:var(--neon);border-color:rgba(99,102,241,0.35);}
+
+.copied-toast{position:fixed;bottom:24px;right:24px;z-index:999;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);color:#10b981;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;}
+.copied-toast.show{opacity:1;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-thumb{background:rgba(99,102,241,.3);border-radius:2px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="h-logo">getaisales.com — Email Templates</div>
+  <div class="h-meta">4 templates · HTML + plain text</div>
+</header>
+
+<div class="page">
+
+  <!-- Template tabs -->
+  <div class="template-nav" id="templateNav">
+    <button class="t-tab active" onclick="showTemplate(0,this)">Welcome Email</button>
+    <button class="t-tab" onclick="showTemplate(1,this)">Trial Reminder</button>
+    <button class="t-tab" onclick="showTemplate(2,this)">HOT Lead Alert</button>
+    <button class="t-tab" onclick="showTemplate(3,this)">Email Signature</button>
+  </div>
+
+  <!-- ══ TEMPLATE 0: WELCOME ══ -->
+  <div id="tpl-0" class="email-preview">
+    <div>
+      <div class="sec-label">01 — Welcome / Onboarding</div>
+      <h2 class="sec-title">Welcome to getaisales.com</h2>
+      <p class="sec-sub">Sent immediately after signup · Subject: "Welcome to getaisales.com — Let's set up your AI 🤖"</p>
+      <div class="email-client">
+        <div class="email-client-bar">
+          <div class="email-client-dot" style="background:#ff5f57"></div>
+          <div class="email-client-dot" style="background:#febc2e"></div>
+          <div class="email-client-dot" style="background:#28c840"></div>
+          <div class="email-client-title">INBOX · Welcome to getaisales.com</div>
+        </div>
+        <div class="email-body">
+          <!-- Header -->
+          <div class="email-header-section">
+            <div class="email-logo-wrap">
+              <div class="email-logo-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/></svg>
+              </div>
+              <span class="email-logo-text">getaisales.com</span>
+            </div>
+          </div>
+          <!-- Content -->
+          <div class="email-content">
+            <div class="email-h1">Welcome, {first_name}! 🎉<br>Your AI is ready.</div>
+            <p class="email-p">You've joined <strong>getaisales.com</strong> — the AI sales system that qualifies every WhatsApp lead while you sleep. Your 14-day free trial starts today.</p>
+            <p class="email-p"><strong>Here's what happens next:</strong></p>
+            <p class="email-p">1. <strong>Connect WhatsApp</strong> — takes 5 minutes<br>2. <strong>Configure your AI persona</strong> — set your tone &amp; BANT criteria<br>3. <strong>Link your Meta Ads</strong> — for attribution<br>4. <strong>Send your first message</strong> — watch Claude AI respond</p>
+            <div class="email-cta-wrap">
+              <a href="https://app.getaisales.com/dashboard" class="email-cta">Set Up My AI →</a>
+            </div>
+            <hr class="email-divider">
+            <div class="email-feature-row">
+              <div class="email-feature"><div class="email-feature-val">78%</div><div class="email-feature-label">AI handling rate</div></div>
+              <div class="email-feature"><div class="email-feature-val">&lt;30s</div><div class="email-feature-label">AI response time</div></div>
+              <div class="email-feature"><div class="email-feature-val">5.68×</div><div class="email-feature-label">Average ROAS</div></div>
+            </div>
+            <hr class="email-divider">
+            <p class="email-p" style="font-size:13px;color:#94a3b8">Need help? Reply to this email or visit our setup guide at getaisales.com/setup</p>
+          </div>
+          <!-- Signature -->
+          <div class="email-sig">
+            <div class="email-sig-name">The getaisales.com Team</div>
+            <div class="email-sig-role">AI Sales Automation · getaisales.com</div>
+            <div class="email-sig-links">support@getaisales.com · getaisales.com</div>
+          </div>
+          <!-- Footer -->
+          <div class="email-footer-sec">
+            <div class="email-footer-text">
+              © 2026 getaisales.com · <a href="#" class="email-footer-link">Unsubscribe</a> · <a href="#" class="email-footer-link">Privacy Policy</a><br>
+              You received this because you signed up at getaisales.com
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-label" style="margin-top:44px">Subject Lines</div>
+      <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(99,102,241,0.12);border-radius:10px;padding:16px;font-size:12px;color:var(--text2);line-height:2;margin-bottom:16px;">
+        <div style="color:var(--emerald);font-size:10px;font-weight:700;margin-bottom:6px;font-family:var(--mono)">A/B TEST SUBJECTS</div>
+        ✉ "Welcome to getaisales.com — Your AI is ready 🤖"<br>
+        ✉ "{first_name}, your AI sales assistant is online"<br>
+        ✉ "Start closing more deals today — setup takes 5 min"<br>
+        ✉ "🎉 Your 14-day free trial just started"
+      </div>
+
+      <div class="code-panel">
+        <div class="code-panel-header">
+          <span class="code-panel-title">Plain Text Version</span>
+          <button class="copy-code-btn" onclick="copyText('plain-welcome')">Copy</button>
+        </div>
+        <div class="code-content" id="plain-welcome">
+Subject: Welcome to getaisales.com — Your AI is ready 🤖
+
+Hi {first_name},
+
+Welcome to getaisales.com! Your 14-day free trial has started.
+
+Next steps:
+1. Connect WhatsApp → app.getaisales.com/settings/whatsapp
+2. Configure your AI persona → app.getaisales.com/ai-settings
+3. Link your Meta Ads → app.getaisales.com/settings/meta
+4. Your AI will start responding to leads within minutes
+
+KEY STATS:
+- AI responds in under 30 seconds
+- 78% of conversations handled automatically
+- Average ROAS: 5.68×
+
+Setup guide: getaisales.com/setup
+Support: support@getaisales.com
+
+— The getaisales.com Team
+getaisales.com
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TEMPLATE 1: TRIAL REMINDER ══ -->
+  <div id="tpl-1" class="email-preview" style="display:none">
+    <div>
+      <div class="sec-label">02 — Trial Reminder</div>
+      <h2 class="sec-title">Trial Ending Soon</h2>
+      <p class="sec-sub">Sent 3 days before trial ends · Subject: "Your AI trial ends in 3 days — upgrade to keep it going"</p>
+      <div class="email-client">
+        <div class="email-client-bar">
+          <div class="email-client-dot" style="background:#ff5f57"></div>
+          <div class="email-client-dot" style="background:#febc2e"></div>
+          <div class="email-client-dot" style="background:#28c840"></div>
+          <div class="email-client-title">INBOX · Trial ending in 3 days</div>
+        </div>
+        <div class="email-body">
+          <div class="email-header-section" style="background:linear-gradient(135deg,#1a0a30,#0f172a)">
+            <div class="email-logo-wrap">
+              <div class="email-logo-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/></svg></div>
+              <span class="email-logo-text">getaisales.com</span>
+            </div>
+          </div>
+          <div class="email-content">
+            <div class="email-h1">⏰ Your trial ends in<br>3 days, {first_name}.</div>
+            <p class="email-p">Your AI has been working hard during your trial. Here's what happened while you were busy:</p>
+            <div style="background:#f8fafc;border-radius:10px;padding:20px;margin:16px 0;border-left:3px solid #6366f1;">
+              <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:10px;">Your Trial Results</div>
+              <div style="font-size:13px;color:#475569;line-height:2;">
+                💬 Conversations handled: <strong style="color:#6366f1">{conversations_count}</strong><br>
+                🔥 HOT leads identified: <strong style="color:#ef4444">{hot_leads}</strong><br>
+                ✓ Deals closed by AI: <strong style="color:#10b981">{closed_count}</strong><br>
+                ⏱ Avg response time: <strong style="color:#6366f1">28 seconds</strong>
+              </div>
+            </div>
+            <p class="email-p">Upgrade to <strong>Pro</strong> to keep your AI running and never miss another lead.</p>
+            <div class="email-cta-wrap">
+              <a href="https://app.getaisales.com/billing" class="email-cta" style="background:linear-gradient(135deg,#ef4444,#f97316)">Upgrade Now — Keep My AI →</a>
+            </div>
+            <p class="email-p" style="font-size:12px;color:#94a3b8;text-align:center">Pro plan from $297/month · Cancel anytime</p>
+          </div>
+          <div class="email-sig">
+            <div class="email-sig-name">The getaisales.com Team</div>
+            <div class="email-sig-role">AI Sales Automation · getaisales.com</div>
+          </div>
+          <div class="email-footer-sec">
+            <div class="email-footer-text">© 2026 getaisales.com · <a href="#" class="email-footer-link">Unsubscribe</a></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:44px">
+      <div class="sec-label">Upgrade CTA Variants</div>
+      <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(99,102,241,0.12);border-radius:10px;padding:16px;font-size:12px;color:var(--text2);line-height:2;">
+        🔴 "Upgrade Now — Keep My AI →"<br>
+        🟠 "Don't lose your AI — Upgrade in 1 click"<br>
+        🟡 "Your leads won't wait. Keep the AI running."<br>
+        🟢 "Pro plan: $297/mo · Cancel anytime"
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TEMPLATE 2: HOT LEAD ALERT ══ -->
+  <div id="tpl-2" class="email-preview" style="display:none">
+    <div>
+      <div class="sec-label">03 — HOT Lead Alert</div>
+      <h2 class="sec-title">Agent Notification Email</h2>
+      <p class="sec-sub">Sent instantly when AI detects a HOT lead and hands off to agent</p>
+      <div class="email-client">
+        <div class="email-client-bar">
+          <div class="email-client-dot" style="background:#ff5f57"></div>
+          <div class="email-client-dot" style="background:#febc2e"></div>
+          <div class="email-client-dot" style="background:#28c840"></div>
+          <div class="email-client-title">INBOX 🔥 HOT Lead — Action Required</div>
+        </div>
+        <div class="email-body">
+          <div class="email-header-section" style="background:linear-gradient(135deg,#1a0505,#0f172a)">
+            <div class="email-logo-wrap">
+              <div class="email-logo-icon" style="background:linear-gradient(135deg,#ef4444,#f97316)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/></svg></div>
+              <span class="email-logo-text">getaisales.com</span>
+            </div>
+          </div>
+          <div class="email-content">
+            <div style="background:#fef2f2;border-radius:10px;padding:16px;margin-bottom:20px;border-left:3px solid #ef4444;text-align:center;">
+              <div style="font-size:28px;margin-bottom:4px">🔥</div>
+              <div style="font-size:16px;font-weight:800;color:#991b1b;">HOT Lead Alert</div>
+              <div style="font-size:12px;color:#b91c1c;margin-top:4px">Action required — respond within 5 minutes</div>
+            </div>
+            <div class="email-h1">{lead_name} is ready to buy.</div>
+            <p class="email-p">Claude AI has qualified this lead and handed off for human closing. Here's the brief:</p>
+            <div style="background:#f8fafc;border-radius:10px;padding:20px;margin:16px 0;">
+              <div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">Lead Brief</div>
+              <table style="width:100%;font-size:13px;color:#475569;border-collapse:collapse;">
+                <tr><td style="padding:5px 0;font-weight:600;color:#1e293b;width:130px">Name</td><td>{lead_name}</td></tr>
+                <tr><td style="padding:5px 0;font-weight:600;color:#1e293b">Phone</td><td>{lead_phone}</td></tr>
+                <tr><td style="padding:5px 0;font-weight:600;color:#1e293b">AI Score</td><td style="color:#ef4444;font-weight:700">{ai_score}/100 — HOT 🔥</td></tr>
+                <tr><td style="padding:5px 0;font-weight:600;color:#1e293b">Budget</td><td>{budget}</td></tr>
+                <tr><td style="padding:5px 0;font-weight:600;color:#1e293b">Need</td><td>{need}</td></tr>
+                <tr><td style="padding:5px 0;font-weight:600;color:#1e293b">Timeline</td><td>{timeline}</td></tr>
+                <tr><td style="padding:5px 0;font-weight:600;color:#1e293b">Campaign</td><td>{campaign_name}</td></tr>
+                <tr><td style="padding:5px 0;font-weight:600;color:#1e293b">Handoff reason</td><td>{handoff_reason}</td></tr>
+              </table>
+            </div>
+            <div class="email-cta-wrap">
+              <a href="https://app.getaisales.com/conversations/{conversation_id}" class="email-cta" style="background:linear-gradient(135deg,#ef4444,#dc2626)">Open Conversation →</a>
+            </div>
+            <p class="email-p" style="font-size:12px;color:#94a3b8;text-align:center">Leads responded to within 5 minutes are 9× more likely to convert.</p>
+          </div>
+          <div class="email-sig">
+            <div class="email-sig-name">getaisales.com AI Engine</div>
+            <div class="email-sig-role">Automated alert · Do not reply to this email</div>
+          </div>
+          <div class="email-footer-sec"><div class="email-footer-text">© 2026 getaisales.com · <a href="#" class="email-footer-link">Manage Alerts</a></div></div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:44px">
+      <div class="sec-label">Variables Reference</div>
+      <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(99,102,241,0.12);border-radius:10px;padding:16px;font-size:11px;color:var(--text2);line-height:2;font-family:var(--mono);">
+        <span style="color:var(--neon)">{lead_name}</span> — Contact full name<br>
+        <span style="color:var(--neon)">{lead_phone}</span> — WhatsApp number<br>
+        <span style="color:var(--neon)">{ai_score}</span> — 0-100 qualification score<br>
+        <span style="color:var(--neon)">{budget}</span> — Identified budget<br>
+        <span style="color:var(--neon)">{need}</span> — Lead's core problem<br>
+        <span style="color:var(--neon)">{timeline}</span> — Purchase timeline<br>
+        <span style="color:var(--neon)">{campaign_name}</span> — Source campaign<br>
+        <span style="color:var(--neon)">{handoff_reason}</span> — Why AI handed off<br>
+        <span style="color:var(--neon)">{conversation_id}</span> — Direct link to chat
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TEMPLATE 3: SIGNATURE ══ -->
+  <div id="tpl-3" style="display:none">
+    <div class="sec-label">04 — Email Signature</div>
+    <h2 class="sec-title">Team Email Signatures</h2>
+    <p class="sec-sub">Use in Gmail, Outlook or any email client. Three variants below.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;">
+
+      <!-- Signature 1: Full -->
+      <div>
+        <div class="sec-label" style="margin-bottom:8px">Full Signature</div>
+        <div style="background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;">
+          <div style="padding:20px 24px;font-family:'Helvetica Neue',Arial,sans-serif;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:2px solid #6366f1;">
+              <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/></svg>
+              </div>
+              <div>
+                <div style="font-size:15px;font-weight:800;color:#1e293b;">{Your Name}</div>
+                <div style="font-size:12px;color:#64748b;">{Your Role} · getaisales.com</div>
+              </div>
+            </div>
+            <div style="font-size:12px;color:#64748b;line-height:1.8;">
+              📧 {email}@getaisales.com<br>
+              📱 +{your_phone}<br>
+              🌐 <a href="https://getaisales.com" style="color:#6366f1;text-decoration:none;">getaisales.com</a><br>
+              <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block;">AI-powered sales automation via WhatsApp</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signature 2: Minimal -->
+      <div>
+        <div class="sec-label" style="margin-bottom:8px">Minimal Signature</div>
+        <div style="background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;">
+          <div style="padding:20px 24px;font-family:'Helvetica Neue',Arial,sans-serif;">
+            <div style="font-size:14px;font-weight:800;color:#1e293b;margin-bottom:2px">{Your Name}</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:8px">{Your Role}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <div style="width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white"/></svg>
+              </div>
+              <span style="font-size:12px;font-weight:700;color:#6366f1;">getaisales.com</span>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;">AI Sales Automation</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signature 3: With CTA -->
+      <div>
+        <div class="sec-label" style="margin-bottom:8px">With CTA Banner</div>
+        <div style="background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;">
+          <div style="padding:20px 24px;font-family:'Helvetica Neue',Arial,sans-serif;">
+            <div style="font-size:14px;font-weight:800;color:#1e293b;margin-bottom:2px">{Your Name}</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:12px">{Your Role} · getaisales.com</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:12px;">
+              📧 {email}@getaisales.com · 🌐 <a href="https://getaisales.com" style="color:#6366f1;text-decoration:none;">getaisales.com</a>
+            </div>
+            <div style="background:linear-gradient(135deg,#030712,#0f172a);border-radius:8px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;">
+              <div style="font-size:11px;color:#94a3b8;line-height:1.4;">Close deals while<br>you sleep with AI</div>
+              <a href="https://getaisales.com" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;">Try Free →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="copied-toast" id="copiedToast">Copied!</div>
+
+<script>
+function showTemplate(index, btn) {
+  [0,1,2,3].forEach(i => {
+    const el = document.getElementById('tpl-'+i);
+    if (el) el.style.display = i === index ? (i === 3 ? 'block' : 'grid') : 'none';
+  });
+  document.querySelectorAll('.t-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function copyText(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  navigator.clipboard.writeText(el.innerText).then(() => {
+    const t = document.getElementById('copiedToast');
+    t.textContent = 'Copied to clipboard!';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  });
+}
+</script>
+</body>
+</html>

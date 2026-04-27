@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact — getaisales.com</title>
+<meta name="description" content="Talk to sales, get support, or say hi. We respond fast — usually within an hour during business hours.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="getaisales-shell.css">
+</head>
+<body>
+<div id="site-nav"></div>
+
+<section class="page-head">
+  <div class="container">
+    <div class="page-eyebrow">Get in touch</div>
+    <h1 class="page-h1">We're here when <span class="grad">you need us.</span></h1>
+    <p class="page-sub">Sales, support, partnerships, press — pick the channel that fits, or send us a note and we'll route it for you.</p>
+  </div>
+</section>
+
+<section class="section-pad">
+  <div class="container">
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-eyebrow">Sales</div>
+        <div class="card-h3">Talk to a human</div>
+        <p class="card-p">Want a demo, custom pricing, or have a deal &gt; 10 seats? Book a 20-minute call with our team.</p>
+        <a class="card-link" href="mailto:sales@getaisales.com">sales@getaisales.com →</a>
+      </div>
+      <div class="card">
+        <div class="card-eyebrow">Support</div>
+        <div class="card-h3">Get help, fast</div>
+        <p class="card-p">Something broken? Login issue? We monitor support 7 days a week with median first response under an hour.</p>
+        <a class="card-link" href="mailto:support@getaisales.com">support@getaisales.com →</a>
+      </div>
+      <div class="card">
+        <div class="card-eyebrow">Press &amp; partnerships</div>
+        <div class="card-h3">Work with us</div>
+        <p class="card-p">Building something complementary, writing a piece, or interested in being a launch partner? Let's chat.</p>
+        <a class="card-link" href="mailto:hello@getaisales.com">hello@getaisales.com →</a>
+      </div>
+    </div>
+
+    <div class="prose" style="margin-top:64px;">
+      <h2>Or drop us a note</h2>
+      <p>Use the form below and we'll route your message to the right team. We respond to most messages within one business hour.</p>
+    </div>
+
+    <form class="card" style="max-width:680px;margin:24px auto 0;" onsubmit="event.preventDefault();this.querySelector('button').textContent='Sent ✓';this.querySelector('button').disabled=true;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--t3);margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase;font-family:var(--mono);">Name</label>
+          <input required type="text" placeholder="Your full name" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:var(--t1);font-family:var(--body);font-size:14px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--t3);margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase;font-family:var(--mono);">Email</label>
+          <input required type="email" placeholder="you@company.com" style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:var(--t1);font-family:var(--body);font-size:14px;">
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--t3);margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase;font-family:var(--mono);">What's this about?</label>
+        <select style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:var(--t1);font-family:var(--body);font-size:14px;">
+          <option>Sales / pricing inquiry</option>
+          <option>Technical support</option>
+          <option>Partnership / press</option>
+          <option>Careers</option>
+          <option>Something else</option>
+        </select>
+      </div>
+      <div style="margin-bottom:18px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--t3);margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase;font-family:var(--mono);">Message</label>
+        <textarea required rows="5" placeholder="Tell us what you need..." style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:var(--t1);font-family:var(--body);font-size:14px;resize:vertical;"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;">Send message</button>
+    </form>
+  </div>
+</section>
+<div id="site-footer"></div>
+<script src="getaisales-shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>getaisales.com — Brand Kit</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* ── Core Brand Palette ── */
+  --indigo-500: #6366f1;
+  --indigo-400: #818cf8;
+  --violet-500: #8b5cf6;
+  --violet-400: #a78bfa;
+  --cyan-400:   #67e8f9;
+  --emerald:    #10b981;
+  --amber:      #f59e0b;
+  --red:        #ef4444;
+
+  /* ── Surfaces ── */
+  --bg:       #030712;
+  --surface:  #0f172a;
+  --surface2: #1e293b;
+  --surface3: #334155;
+
+  /* ── Text ── */
+  --text:  #f1f5f9;
+  --text2: #94a3b8;
+  --text3: #475569;
+
+  /* ── Typography ── */
+  --font-display: 'Plus Jakarta Sans', sans-serif;
+  --font-body:    'Space Grotesk', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--font-body); font-size:14px; }
+
+/* Grid background */
+body::before {
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(99,102,241,0.04) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(99,102,241,0.04) 1px,transparent 1px);
+  background-size:56px 56px;
+}
+
+.page { max-width:1100px; margin:0 auto; padding:4rem 2rem 8rem; position:relative; z-index:1; }
+
+/* ── Header ── */
+header {
+  position:sticky;top:0;z-index:100;
+  background:rgba(3,7,18,0.95);backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(99,102,241,0.12);
+  height:52px;display:flex;align-items:center;padding:0 2rem;
+  justify-content:space-between;
+}
+.hdr-logo { font-family:var(--font-display);font-weight:800;font-size:15px;
+  background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;background-clip:text; }
+.hdr-meta { font-size:11px;color:var(--text3);font-family:var(--font-mono); }
+
+/* ── Section ── */
+section { margin-bottom:5rem; }
+.section-label { font-size:10px;letter-spacing:3px;text-transform:uppercase;
+  font-weight:700;color:var(--indigo-400);margin-bottom:.75rem; }
+.section-title { font-family:var(--font-display);font-size:32px;font-weight:800;
+  letter-spacing:-1px;margin-bottom:.5rem;line-height:1.1; }
+.section-sub { font-size:14px;color:var(--text2);margin-bottom:2rem;max-width:560px;line-height:1.7; }
+hr.divider { border:none;border-top:1px solid rgba(99,102,241,0.1);margin:4rem 0; }
+
+/* ── LOGO SECTION ── */
+.logo-showcase {
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;
+  margin-bottom:2rem;
+}
+.logo-card {
+  border-radius:16px;padding:40px;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:16px;min-height:160px;
+}
+.logo-card.dark  { background:var(--surface);border:1px solid rgba(99,102,241,0.15); }
+.logo-card.light { background:#F8F8F8;border:1px solid rgba(0,0,0,0.08); }
+.logo-card.black { background:#000;border:1px solid rgba(255,255,255,0.08); }
+.logo-card.indigo{ background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none; }
+
+.logo-mark {
+  display:flex;align-items:center;gap:12px;
+}
+.logo-icon {
+  width:44px;height:44px;border-radius:14px;
+  background:linear-gradient(135deg,#6366f1,#8b5cf6);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 28px rgba(99,102,241,0.5);flex-shrink:0;
+}
+.logo-icon svg { width:24px;height:24px; }
+.logo-wordmark { display:flex;flex-direction:column;gap:1px; }
+.logo-name { font-family:var(--font-display);font-weight:800;font-size:20px;
+  letter-spacing:-0.5px;line-height:1; }
+.logo-tld { font-family:var(--font-mono);font-size:11px;font-weight:500;
+  letter-spacing:1px;opacity:0.7; }
+
+/* On dark bg */
+.logo-card.dark  .logo-name { color:#f1f5f9; }
+.logo-card.dark  .logo-tld  { color:var(--indigo-400); }
+.logo-card.black .logo-name { color:#f1f5f9; }
+.logo-card.black .logo-tld  { color:var(--indigo-400); }
+/* On light bg */
+.logo-card.light .logo-name { color:#1C1C1E; }
+.logo-card.light .logo-tld  { color:#6366f1; }
+.logo-card.light .logo-icon { box-shadow:0 4px 20px rgba(99,102,241,0.3); }
+/* On indigo bg */
+.logo-card.indigo .logo-name { color:#fff; }
+.logo-card.indigo .logo-tld  { color:rgba(255,255,255,0.7); }
+.logo-card.indigo .logo-icon { background:rgba(255,255,255,0.2);box-shadow:none;border:1px solid rgba(255,255,255,0.3); }
+
+.logo-card-label { font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  font-family:var(--font-mono);margin-top:4px; }
+.logo-card.dark  .logo-card-label { color:var(--text3); }
+.logo-card.light .logo-card-label { color:#8E8E93; }
+.logo-card.black .logo-card-label { color:#444; }
+.logo-card.indigo .logo-card-label { color:rgba(255,255,255,0.5); }
+
+/* ── FAVICON ── */
+.favicon-row { display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:2rem; }
+.fav-item { display:flex;flex-direction:column;align-items:center;gap:8px; }
+.fav-item span { font-size:10px;color:var(--text3);font-family:var(--font-mono);letter-spacing:1px; }
+
+/* ── COLOUR PALETTE ── */
+.palette-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px; }
+.swatch {
+  border-radius:12px;overflow:hidden;
+  border:1px solid rgba(255,255,255,0.06);
+  transition:transform 0.15s;cursor:pointer;
+}
+.swatch:hover { transform:scale(1.03); }
+.swatch-color { height:80px;display:flex;align-items:center;justify-content:center; }
+.swatch-check { opacity:0;font-size:20px;transition:opacity 0.2s; }
+.swatch:hover .swatch-check { opacity:0.8; }
+.swatch-info { background:var(--surface);padding:10px 12px; }
+.swatch-name { font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px; }
+.swatch-hex  { font-size:10px;font-family:var(--font-mono);color:var(--text3); }
+.swatch-role { font-size:9px;color:var(--text3);margin-top:1px;letter-spacing:0.3px; }
+
+/* ── TYPOGRAPHY ── */
+.type-showcase { display:grid;grid-template-columns:1fr 1fr;gap:24px; }
+.type-card { background:var(--surface);border:1px solid rgba(99,102,241,0.1);border-radius:12px;padding:24px; }
+.type-label { font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);
+  font-family:var(--font-mono);margin-bottom:12px; }
+.type-sample-display { font-family:var(--font-display);font-weight:800;font-size:36px;
+  letter-spacing:-1px;line-height:1;margin-bottom:8px;
+  background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;background-clip:text; }
+.type-sample-body { font-family:var(--font-body);font-size:15px;color:var(--text2);line-height:1.7;margin-bottom:8px; }
+.type-sample-mono { font-family:var(--font-mono);font-size:12px;color:var(--indigo-400); }
+.type-meta { font-size:11px;color:var(--text3);font-family:var(--font-mono); }
+
+/* ── GRADIENT SHOWCASE ── */
+.gradient-row { display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:2rem; }
+.grad-card { height:100px;border-radius:12px;display:flex;align-items:flex-end;padding:14px;
+  position:relative;overflow:hidden; }
+.grad-label { font-size:11px;font-weight:600;color:rgba(255,255,255,0.9);font-family:var(--font-mono); }
+.grad-val   { font-size:9px;color:rgba(255,255,255,0.5);font-family:var(--font-mono);margin-top:2px; }
+
+/* ── COMPONENTS PREVIEW ── */
+.comp-row { display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:1.5rem; }
+.btn-primary-brand {
+  display:inline-flex;align-items:center;gap:8px;padding:12px 24px;
+  border-radius:12px;font-size:14px;font-weight:700;
+  background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;
+  border:none;cursor:pointer;font-family:var(--font-body);
+  box-shadow:0 4px 24px rgba(99,102,241,0.35);transition:all 0.2s;
+}
+.btn-primary-brand:hover { box-shadow:0 6px 32px rgba(99,102,241,0.5);transform:translateY(-1px); }
+.btn-secondary-brand {
+  display:inline-flex;align-items:center;gap:8px;padding:11px 22px;
+  border-radius:12px;font-size:14px;font-weight:600;
+  background:rgba(99,102,241,0.1);color:var(--indigo-400);
+  border:1px solid rgba(99,102,241,0.25);cursor:pointer;font-family:var(--font-body);
+  transition:all 0.2s;
+}
+.btn-secondary-brand:hover { background:rgba(99,102,241,0.18); }
+.btn-ghost-brand {
+  display:inline-flex;align-items:center;gap:8px;padding:11px 22px;
+  border-radius:12px;font-size:14px;font-weight:600;
+  background:transparent;color:var(--text2);
+  border:1px solid rgba(255,255,255,0.08);cursor:pointer;font-family:var(--font-body);
+  transition:all 0.2s;
+}
+.badge-brand {
+  display:inline-flex;align-items:center;gap:6px;padding:4px 12px;
+  border-radius:20px;font-size:11px;font-weight:700;font-family:var(--font-mono);
+}
+.badge-ai     { background:rgba(99,102,241,0.15);color:var(--indigo-400);border:1px solid rgba(99,102,241,0.25); }
+.badge-hot    { background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.25); }
+.badge-live   { background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25); }
+.badge-new    { background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.25); }
+
+/* ── LOGO CLEARSPACE + DON'T DO ── */
+.dont-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:2rem; }
+.dont-card {
+  border-radius:12px;padding:24px;display:flex;flex-direction:column;align-items:center;
+  gap:12px;background:var(--surface);border:1px solid rgba(239,68,68,0.15);
+}
+.dont-x { font-size:11px;font-weight:700;color:#ef4444;letter-spacing:1px;text-transform:uppercase; }
+.dont-desc { font-size:11px;color:var(--text3);text-align:center; }
+
+/* ── HERO MOCK ── */
+.hero-mock {
+  border-radius:20px;overflow:hidden;border:1px solid rgba(99,102,241,0.2);
+  background:linear-gradient(135deg,rgba(15,23,42,0.9),rgba(7,11,23,0.95));
+  padding:60px 40px;text-align:center;position:relative;margin-bottom:2rem;
+}
+.hero-mock::before {
+  content:'';position:absolute;top:-80px;left:50%;transform:translateX(-50%);
+  width:400px;height:300px;
+  background:radial-gradient(ellipse,rgba(99,102,241,0.15),transparent 70%);
+  pointer-events:none;
+}
+.hero-eyebrow {
+  display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:20px;
+  background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);
+  font-size:12px;font-weight:600;color:var(--indigo-400);letter-spacing:0.5px;
+  margin-bottom:24px;
+}
+.hero-h1 {
+  font-family:var(--font-display);font-size:52px;font-weight:800;
+  letter-spacing:-2px;line-height:1;margin-bottom:16px;
+}
+.hero-h1 .grad { background:linear-gradient(135deg,#818cf8,#a78bfa,#67e8f9);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+.hero-sub { font-size:16px;color:var(--text2);max-width:480px;margin:0 auto 32px;line-height:1.7; }
+.hero-url { font-family:var(--font-mono);font-size:13px;color:var(--indigo-400);
+  background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.15);
+  padding:6px 16px;border-radius:8px;display:inline-block;margin-top:8px; }
+
+/* ── DOMAIN TREATMENT ── */
+.domain-row { display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px; }
+.domain-card { background:var(--surface);border:1px solid rgba(99,102,241,0.12);
+  border-radius:12px;padding:20px;text-align:center; }
+.domain-text { font-family:var(--font-display);font-weight:800;font-size:18px;letter-spacing:-0.5px; }
+.domain-sub  { font-size:11px;color:var(--text3);margin-top:4px;font-family:var(--font-mono); }
+
+/* ── COPY FEEDBACK ── */
+.copied { position:fixed;bottom:24px;right:24px;z-index:999;
+  background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);
+  color:#10b981;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;
+  opacity:0;transition:opacity 0.2s;pointer-events:none; }
+.copied.show { opacity:1; }
+
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-thumb{background:rgba(99,102,241,.3);border-radius:2px;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-logo">getaisales.com — Brand Kit</div>
+  <div class="hdr-meta">April 2026 · v1.0</div>
+</header>
+
+<div class="page">
+
+  <!-- ══ HERO MOCK ══ -->
+  <section>
+    <div class="hero-mock">
+      <div class="hero-eyebrow">
+        <span style="width:6px;height:6px;border-radius:50%;background:#10b981;animation:pulse 2s infinite;display:inline-block"></span>
+        AI-Powered Sales Automation
+      </div>
+      <h1 class="hero-h1">
+        Close deals while<br><span class="grad">you sleep.</span>
+      </h1>
+      <p class="hero-sub">Claude AI qualifies every lead, diagnoses their problem, and sends the perfect WhatsApp message — automatically.</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <button class="btn-primary-brand">Start Free Trial →</button>
+        <button class="btn-secondary-brand">Watch Demo</button>
+      </div>
+      <div class="hero-url">getaisales.com</div>
+    </div>
+  </section>
+
+  <!-- ══ LOGO ══ -->
+  <section id="logo">
+    <div class="section-label">01 — Logo System</div>
+    <h2 class="section-title">The Logo</h2>
+    <p class="section-sub">The logo combines a bold geometric AI spark icon with the wordmark "getaisales" — always presented together except at very small sizes.</p>
+
+    <div class="logo-showcase">
+      <!-- Dark -->
+      <div class="logo-card dark">
+        <div class="logo-mark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.9"/>
+              <circle cx="12" cy="12" r="3" fill="white" opacity="0.4"/>
+            </svg>
+          </div>
+          <div class="logo-wordmark">
+            <div class="logo-name">getaisales</div>
+            <div class="logo-tld">.com</div>
+          </div>
+        </div>
+        <div class="logo-card-label">On Dark</div>
+      </div>
+
+      <!-- Light -->
+      <div class="logo-card light">
+        <div class="logo-mark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.9"/>
+              <circle cx="12" cy="12" r="3" fill="white" opacity="0.4"/>
+            </svg>
+          </div>
+          <div class="logo-wordmark">
+            <div class="logo-name">getaisales</div>
+            <div class="logo-tld">.com</div>
+          </div>
+        </div>
+        <div class="logo-card-label">On Light</div>
+      </div>
+
+      <!-- Black -->
+      <div class="logo-card black">
+        <div class="logo-mark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.9"/>
+              <circle cx="12" cy="12" r="3" fill="white" opacity="0.4"/>
+            </svg>
+          </div>
+          <div class="logo-wordmark">
+            <div class="logo-name">getaisales</div>
+            <div class="logo-tld">.com</div>
+          </div>
+        </div>
+        <div class="logo-card-label" style="color:#333">On Black</div>
+      </div>
+
+      <!-- Indigo gradient -->
+      <div class="logo-card indigo">
+        <div class="logo-mark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.9"/>
+              <circle cx="12" cy="12" r="3" fill="white" opacity="0.4"/>
+            </svg>
+          </div>
+          <div class="logo-wordmark">
+            <div class="logo-name">getaisales</div>
+            <div class="logo-tld">.com</div>
+          </div>
+        </div>
+        <div class="logo-card-label">On Brand Gradient</div>
+      </div>
+    </div>
+
+    <!-- Favicon / icon-only sizes -->
+    <div class="section-label" style="margin-top:2rem">Icon Only — Small Sizes</div>
+    <div class="favicon-row">
+      <div class="fav-item">
+        <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;box-shadow:0 0 24px rgba(99,102,241,0.4)">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.9"/><circle cx="12" cy="12" r="3" fill="white" opacity="0.4"/></svg>
+        </div>
+        <span>64px App Icon</span>
+      </div>
+      <div class="fav-item">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;box-shadow:0 0 18px rgba(99,102,241,0.4)">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.9"/><circle cx="12" cy="12" r="3" fill="white" opacity="0.4"/></svg>
+        </div>
+        <span>48px</span>
+      </div>
+      <div class="fav-item">
+        <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.9"/></svg>
+        </div>
+        <span>32px</span>
+      </div>
+      <div class="fav-item">
+        <div style="width:16px;height:16px;border-radius:4px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white"/></svg>
+        </div>
+        <span>16px Favicon</span>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ COLOUR PALETTE ══ -->
+  <section id="colours">
+    <div class="section-label">02 — Colour Palette</div>
+    <h2 class="section-title">Brand Colours</h2>
+    <p class="section-sub">The palette is built around Indigo as the primary AI-forward accent — energetic, intelligent, and distinct. Click any swatch to copy the hex code.</p>
+
+    <div class="palette-grid">
+      <!-- Primary -->
+      <div class="swatch" onclick="copyHex('#6366f1','Indigo 500')">
+        <div class="swatch-color" style="background:#6366f1">
+          <span class="swatch-check">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Indigo 500</div>
+          <div class="swatch-hex">#6366f1</div>
+          <div class="swatch-role">Primary · CTAs · Active</div>
+        </div>
+      </div>
+      <div class="swatch" onclick="copyHex('#818cf8','Neon Indigo')">
+        <div class="swatch-color" style="background:#818cf8">
+          <span class="swatch-check">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Neon Indigo</div>
+          <div class="swatch-hex">#818cf8</div>
+          <div class="swatch-role">AI elements · Glow · Links</div>
+        </div>
+      </div>
+      <div class="swatch" onclick="copyHex('#8b5cf6','Violet 500')">
+        <div class="swatch-color" style="background:#8b5cf6">
+          <span class="swatch-check">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Violet 500</div>
+          <div class="swatch-hex">#8b5cf6</div>
+          <div class="swatch-role">Secondary · Gradients</div>
+        </div>
+      </div>
+      <div class="swatch" onclick="copyHex('#a78bfa','Violet 400')">
+        <div class="swatch-color" style="background:#a78bfa">
+          <span class="swatch-check">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Violet 400</div>
+          <div class="swatch-hex">#a78bfa</div>
+          <div class="swatch-role">Hover states · Highlights</div>
+        </div>
+      </div>
+      <div class="swatch" onclick="copyHex('#67e8f9','Cyan')">
+        <div class="swatch-color" style="background:#67e8f9">
+          <span class="swatch-check" style="color:#0f172a">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Cyan</div>
+          <div class="swatch-hex">#67e8f9</div>
+          <div class="swatch-role">Gradient accent · Tech feel</div>
+        </div>
+      </div>
+      <div class="swatch" onclick="copyHex('#10b981','Emerald')">
+        <div class="swatch-color" style="background:#10b981">
+          <span class="swatch-check">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Emerald</div>
+          <div class="swatch-hex">#10b981</div>
+          <div class="swatch-role">Success · Live · HOT leads</div>
+        </div>
+      </div>
+      <div class="swatch" onclick="copyHex('#f59e0b','Amber')">
+        <div class="swatch-color" style="background:#f59e0b">
+          <span class="swatch-check" style="color:#0f172a">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Amber</div>
+          <div class="swatch-hex">#f59e0b</div>
+          <div class="swatch-role">WARM leads · Warnings</div>
+        </div>
+      </div>
+      <div class="swatch" onclick="copyHex('#ef4444','Red')">
+        <div class="swatch-color" style="background:#ef4444">
+          <span class="swatch-check">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Red</div>
+          <div class="swatch-hex">#ef4444</div>
+          <div class="swatch-role">HOT alerts · Urgent</div>
+        </div>
+      </div>
+      <!-- Surfaces -->
+      <div class="swatch" onclick="copyHex('#030712','Background')">
+        <div class="swatch-color" style="background:#030712;border:1px solid rgba(255,255,255,0.05)">
+          <span class="swatch-check">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Background</div>
+          <div class="swatch-hex">#030712</div>
+          <div class="swatch-role">Page background</div>
+        </div>
+      </div>
+      <div class="swatch" onclick="copyHex('#0f172a','Surface')">
+        <div class="swatch-color" style="background:#0f172a;border:1px solid rgba(255,255,255,0.05)">
+          <span class="swatch-check">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Surface</div>
+          <div class="swatch-hex">#0f172a</div>
+          <div class="swatch-role">Cards · Panels</div>
+        </div>
+      </div>
+      <div class="swatch" onclick="copyHex('#1e293b','Surface 2')">
+        <div class="swatch-color" style="background:#1e293b;border:1px solid rgba(255,255,255,0.05)">
+          <span class="swatch-check">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Surface 2</div>
+          <div class="swatch-hex">#1e293b</div>
+          <div class="swatch-role">Inputs · Hover bg</div>
+        </div>
+      </div>
+      <div class="swatch" onclick="copyHex('#f1f5f9','Text')">
+        <div class="swatch-color" style="background:#f1f5f9">
+          <span class="swatch-check" style="color:#0f172a">✓</span>
+        </div>
+        <div class="swatch-info">
+          <div class="swatch-name">Text Primary</div>
+          <div class="swatch-hex">#f1f5f9</div>
+          <div class="swatch-role">Headings · Body</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gradients -->
+    <div class="section-label" style="margin-top:2.5rem">Brand Gradients</div>
+    <div class="gradient-row">
+      <div class="grad-card" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
+        <div><div class="grad-label">Primary</div><div class="grad-val">#6366f1 → #8b5cf6</div></div>
+      </div>
+      <div class="grad-card" style="background:linear-gradient(135deg,#818cf8,#a78bfa,#67e8f9)">
+        <div><div class="grad-label">AI Glow</div><div class="grad-val">#818cf8 → #67e8f9</div></div>
+      </div>
+      <div class="grad-card" style="background:linear-gradient(135deg,#030712,#0f172a)">
+        <div><div class="grad-label">Dark Surface</div><div class="grad-val">#030712 → #0f172a</div></div>
+      </div>
+      <div class="grad-card" style="background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(139,92,246,0.1)),url('');background-color:#0f172a">
+        <div><div class="grad-label">Glass Overlay</div><div class="grad-val">Indigo 20% on Surface</div></div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ TYPOGRAPHY ══ -->
+  <section id="typography">
+    <div class="section-label">03 — Typography</div>
+    <h2 class="section-title">Type System</h2>
+    <p class="section-sub">Three typefaces with distinct roles — display for impact, body for readability, mono for data and code.</p>
+
+    <div class="type-showcase">
+      <div class="type-card">
+        <div class="type-label">Display — Plus Jakarta Sans</div>
+        <div class="type-sample-display">AI Sales<br>Made Simple.</div>
+        <div class="type-meta">800 weight · Headings · Hero text · Logo</div>
+      </div>
+      <div class="type-card">
+        <div class="type-label">Body — Space Grotesk</div>
+        <div class="type-sample-body">Claude AI qualifies every lead, diagnoses their problem, and sends the perfect WhatsApp message — automatically. Close more deals in less time.</div>
+        <div class="type-meta">400/500/600 · Body copy · UI labels · Descriptions</div>
+      </div>
+      <div class="type-card">
+        <div class="type-label">Monospace — JetBrains Mono</div>
+        <div class="type-sample-mono">score: 88/100 · HOT<br>campaign: "Eid ul-Fitr Sale"<br>roas: 5.68× · leads: 284</div>
+        <div class="type-meta">400/500 · Data · Code · Stats · Badges</div>
+      </div>
+      <div class="type-card">
+        <div class="type-label">Type Scale</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="font-family:var(--font-display);font-size:48px;font-weight:800;letter-spacing:-2px;line-height:1;color:var(--text)">Aa</div>
+          <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text3);font-family:var(--font-mono)">
+            <span>H1 — 52px / 800 / -2px</span>
+            <span>H2 — 36px / 700 / -1px</span>
+            <span>H3 — 24px / 700 / -0.5px</span>
+            <span>Body — 15px / 400 / normal</span>
+            <span>Small — 12px / 500 / normal</span>
+            <span>Mono — 12px / 400 / normal</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ COMPONENTS ══ -->
+  <section id="components">
+    <div class="section-label">04 — UI Components</div>
+    <h2 class="section-title">Component Library</h2>
+    <p class="section-sub">Core UI components using the brand palette — consistent across all product surfaces.</p>
+
+    <div class="section-label" style="margin-bottom:8px">Buttons</div>
+    <div class="comp-row">
+      <button class="btn-primary-brand">Start Free Trial →</button>
+      <button class="btn-secondary-brand">◎ Watch Demo</button>
+      <button class="btn-ghost-brand">Learn More</button>
+    </div>
+
+    <div class="section-label" style="margin-bottom:8px;margin-top:1.5rem">Badges</div>
+    <div class="comp-row">
+      <span class="badge-brand badge-ai">◎ AI Active</span>
+      <span class="badge-brand badge-hot">● HOT Lead</span>
+      <span class="badge-brand badge-live">● Live</span>
+      <span class="badge-brand badge-new">◆ New</span>
+    </div>
+
+    <div class="section-label" style="margin-bottom:12px;margin-top:1.5rem">Domain Wordmark Treatments</div>
+    <div class="domain-row">
+      <div class="domain-card">
+        <div class="domain-text" style="background:linear-gradient(135deg,#818cf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
+          getaisales.com
+        </div>
+        <div class="domain-sub">Gradient — Primary use</div>
+      </div>
+      <div class="domain-card">
+        <div class="domain-text" style="color:#f1f5f9">getaisales<span style="color:#6366f1">.com</span></div>
+        <div class="domain-sub">White + Indigo TLD</div>
+      </div>
+      <div class="domain-card" style="background:#fff">
+        <div class="domain-text" style="color:#1C1C1E">getaisales<span style="color:#6366f1">.com</span></div>
+        <div class="domain-sub">Dark + Indigo TLD</div>
+      </div>
+      <div class="domain-card" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
+        <div class="domain-text" style="color:#fff">getaisales.com</div>
+        <div class="domain-sub" style="color:rgba(255,255,255,0.6)">Reversed on brand</div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ LOGO DO's and DON'Ts ══ -->
+  <section>
+    <div class="section-label">05 — Logo Usage Rules</div>
+    <h2 class="section-title">Do's & Don'ts</h2>
+    <div class="dont-grid">
+      <div class="dont-card">
+        <div style="opacity:0.4;font-family:var(--font-display);font-weight:800;font-size:16px;text-decoration:line-through">getaisales.com</div>
+        <div class="dont-x">✕ Don't</div>
+        <div class="dont-desc">Never stretch, squish or distort the logo</div>
+      </div>
+      <div class="dont-card">
+        <div style="opacity:0.4;font-family:var(--font-display);font-weight:800;font-size:16px;color:#ff0000">getaisales.com</div>
+        <div class="dont-x">✕ Don't</div>
+        <div class="dont-desc">Never use off-brand colors (red, green on logo)</div>
+      </div>
+      <div class="dont-card">
+        <div style="opacity:0.4;font-family:Arial;font-size:16px">getaisales.com</div>
+        <div class="dont-x">✕ Don't</div>
+        <div class="dont-desc">Never use system fonts (Arial, Helvetica, etc.)</div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ BRAND VOICE ══ -->
+  <section>
+    <div class="section-label">06 — Brand Voice</div>
+    <h2 class="section-title">How We Sound</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+      <div style="background:var(--surface);border:1px solid rgba(99,102,241,0.12);border-radius:12px;padding:20px">
+        <div style="font-size:24px;margin-bottom:8px">⚡</div>
+        <div style="font-weight:700;margin-bottom:4px">Direct</div>
+        <div style="font-size:12px;color:var(--text2)">No fluff. Tell them the result, not the process.</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid rgba(99,102,241,0.12);border-radius:12px;padding:20px">
+        <div style="font-size:24px;margin-bottom:8px">🧠</div>
+        <div style="font-weight:700;margin-bottom:4px">Intelligent</div>
+        <div style="font-size:12px;color:var(--text2)">Data-driven language. Specific numbers over vague claims.</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid rgba(99,102,241,0.12);border-radius:12px;padding:20px">
+        <div style="font-size:24px;margin-bottom:8px">🤝</div>
+        <div style="font-weight:700;margin-bottom:4px">Empathetic</div>
+        <div style="font-size:12px;color:var(--text2)">We understand the pain of missed leads. We've solved it.</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid rgba(99,102,241,0.12);border-radius:12px;padding:20px">
+        <div style="font-size:24px;margin-bottom:8px">🚀</div>
+        <div style="font-weight:700;margin-bottom:4px">Ambitious</div>
+        <div style="font-size:12px;color:var(--text2)">We're building the future of sales. Language should match.</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- Copied toast -->
+<div class="copied" id="copiedToast">Copied!</div>
+
+<script>
+function copyHex(hex, name) {
+  navigator.clipboard.writeText(hex).then(() => {
+    const t = document.getElementById('copiedToast');
+    t.textContent = `${name} — ${hex} copied!`;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  });
+}
+
+// Smooth scroll for header links
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const el = document.querySelector(a.getAttribute('href'));
+    if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+  });
+});
+</script>
+
+</body>
+</html>

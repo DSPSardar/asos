@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASOS v1 — System Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --surface2: #161b22;
+    --surface3: #1f2937;
+    --border: #21262d;
+    --border2: #30363d;
+    --accent: #f97316;
+    --accent2: #fb923c;
+    --green: #22c55e;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+    --cyan: #06b6d4;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #484f58;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(8,12,16,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-badge {
+    background: var(--accent);
+    color: #000;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    padding: 2px 7px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+  }
+
+  nav {
+    display: flex;
+    gap: 2px;
+  }
+
+  nav a {
+    color: var(--text2);
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 4px;
+    transition: all 0.15s;
+    letter-spacing: 0.3px;
+  }
+
+  nav a:hover { color: var(--text); background: var(--surface2); }
+  nav a.active { color: var(--accent); }
+
+  .header-meta {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.5px;
+  }
+
+  /* ── LAYOUT ── */
+  .page {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 3rem 2rem 6rem;
+  }
+
+  /* ── SECTION ── */
+  .section {
+    margin-bottom: 5rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-num {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding-top: 4px;
+    flex-shrink: 0;
+    min-width: 28px;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+
+  .section-sub {
+    font-size: 12px;
+    color: var(--text2);
+    margin-top: 4px;
+    font-family: var(--font-mono);
+  }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 4rem 0 3rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -100px;
+    left: -100px;
+    width: 600px;
+    height: 400px;
+    background: radial-gradient(ellipse at center, rgba(249,115,22,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-eyebrow {
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 1rem;
+  }
+
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: 52px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    line-height: 1;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  .hero-title span { color: var(--accent); }
+
+  .hero-sub {
+    font-size: 14px;
+    color: var(--text2);
+    margin-top: 1rem;
+    max-width: 580px;
+    line-height: 1.7;
+  }
+
+  .hero-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+  }
+
+  .chip {
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text2);
+    letter-spacing: 0.3px;
+  }
+
+  .chip.green { border-color: rgba(34,197,94,0.4); color: var(--green); }
+  .chip.blue { border-color: rgba(59,130,246,0.4); color: var(--blue); }
+  .chip.purple { border-color: rgba(168,85,247,0.4); color: var(--purple); }
+  .chip.orange { border-color: rgba(249,115,22,0.4); color: var(--accent); }
+  .chip.cyan { border-color: rgba(6,182,212,0.4); color: var(--cyan); }
+
+  /* ── ARCH FLOW ── */
+  .arch-flow {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    position: relative;
+  }
+
+  .flow-layer {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    padding: 1.5rem 0;
+    position: relative;
+  }
+
+  .flow-layer + .flow-layer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1px;
+    height: 1px;
+    background: transparent;
+  }
+
+  .flow-arrow {
+    text-align: center;
+    color: var(--text3);
+    font-size: 18px;
+    padding: 4px 0;
+    letter-spacing: 4px;
+  }
+
+  .flow-arrow span {
+    color: var(--accent);
+    font-size: 11px;
+    display: block;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .flow-node {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    transition: border-color 0.2s;
+  }
+
+  .flow-node:hover { border-color: var(--border2); }
+
+  .flow-node.accent { border-color: rgba(249,115,22,0.4); background: rgba(249,115,22,0.04); }
+  .flow-node.green { border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.04); }
+  .flow-node.blue { border-color: rgba(59,130,246,0.3); background: rgba(59,130,246,0.04); }
+  .flow-node.purple { border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.04); }
+  .flow-node.cyan { border-color: rgba(6,182,212,0.3); background: rgba(6,182,212,0.04); }
+  .flow-node.red { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.04); }
+
+  .node-icon {
+    font-size: 20px;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .node-label {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .node-desc {
+    font-size: 11px;
+    color: var(--text2);
+    line-height: 1.5;
+  }
+
+  .layer-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 8px;
+    padding-left: 2px;
+  }
+
+  /* ── CARDS ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .card-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dot-orange { background: var(--accent); }
+  .dot-green { background: var(--green); }
+  .dot-blue { background: var(--blue); }
+  .dot-purple { background: var(--purple); }
+  .dot-cyan { background: var(--cyan); }
+  .dot-red { background: var(--red); }
+  .dot-yellow { background: var(--yellow); }
+
+  /* ── CODE TREE ── */
+  .tree {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.8;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+  }
+
+  .tree-dir {
+    color: var(--blue);
+    font-weight: 600;
+  }
+
+  .tree-file {
+    color: var(--text2);
+  }
+
+  .tree-comment {
+    color: var(--text3);
+    font-style: italic;
+  }
+
+  .tree-accent {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .tree-green { color: var(--green); }
+  .tree-purple { color: var(--purple); }
+
+  /* ── TABLE ── */
+  .api-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .api-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text3);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+  }
+
+  .api-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    color: var(--text2);
+    line-height: 1.5;
+  }
+
+  .api-table tr:last-child td { border-bottom: none; }
+  .api-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .api-table td:first-child { font-family: var(--font-mono); }
+  .api-table td:nth-child(2) { color: var(--text); font-weight: 500; }
+
+  .method {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+    min-width: 44px;
+    text-align: center;
+    font-family: var(--font-mono);
+  }
+
+  .GET { background: rgba(34,197,94,0.15); color: var(--green); }
+  .POST { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .PUT { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .DELETE { background: rgba(239,68,68,0.15); color: var(--red); }
+  .PATCH { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .WEBHOOK { background: rgba(249,115,22,0.15); color: var(--accent); }
+
+  /* ── DB SCHEMA ── */
+  .schema-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+  }
+
+  .schema-table {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .schema-table-header {
+    background: var(--surface3);
+    padding: 10px 16px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .schema-table-header .pk-badge {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    background: rgba(249,115,22,0.15);
+    color: var(--accent);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-left: auto;
+  }
+
+  .schema-field {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+    font-size: 12px;
+  }
+
+  .schema-field:last-child { border-bottom: none; }
+
+  .field-name {
+    color: var(--text);
+    font-weight: 500;
+    min-width: 130px;
+    flex-shrink: 0;
+  }
+
+  .field-type {
+    color: var(--cyan);
+    font-size: 11px;
+    min-width: 90px;
+    flex-shrink: 0;
+  }
+
+  .field-note {
+    color: var(--text3);
+    font-size: 11px;
+    flex: 1;
+  }
+
+  .field-pk { color: var(--accent); font-weight: 700; }
+  .field-fk { color: var(--purple); }
+  .field-idx { color: var(--yellow); }
+
+  /* ── AI FLOW ── */
+  .ai-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .ai-step {
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 0;
+    position: relative;
+  }
+
+  .ai-step-line {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 4px;
+  }
+
+  .ai-step-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--surface3);
+    border: 2px solid var(--border2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text2);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .ai-step.accent .ai-step-num { border-color: var(--accent); color: var(--accent); background: rgba(249,115,22,0.1); }
+  .ai-step.green .ai-step-num { border-color: var(--green); color: var(--green); background: rgba(34,197,94,0.1); }
+  .ai-step.blue .ai-step-num { border-color: var(--blue); color: var(--blue); background: rgba(59,130,246,0.1); }
+  .ai-step.purple .ai-step-num { border-color: var(--purple); color: var(--purple); background: rgba(168,85,247,0.1); }
+  .ai-step.cyan .ai-step-num { border-color: var(--cyan); color: var(--cyan); background: rgba(6,182,212,0.1); }
+
+  .ai-vert-line {
+    flex: 1;
+    width: 2px;
+    background: var(--border);
+    margin: 4px 0;
+    min-height: 32px;
+  }
+
+  .ai-step:last-child .ai-vert-line { display: none; }
+
+  .ai-step-body {
+    padding: 0 0 28px 16px;
+  }
+
+  .ai-step-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text);
+    margin-bottom: 6px;
+    margin-top: 4px;
+  }
+
+  .ai-step-desc {
+    color: var(--text2);
+    font-size: 12px;
+    line-height: 1.7;
+    margin-bottom: 10px;
+  }
+
+  .ai-sub-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ai-sub {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text2);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+
+  .ai-sub-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 0;
+  }
+
+  .ai-sub strong {
+    color: var(--text);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  /* ── BACKEND SERVICES ── */
+  .service-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+
+  .service-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .service-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .service-type {
+    font-size: 10px;
+    color: var(--text3);
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .service-items {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .service-items li {
+    font-size: 11px;
+    color: var(--text2);
+    padding-left: 12px;
+    position: relative;
+    line-height: 1.5;
+  }
+
+  .service-items li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--text3);
+    font-size: 10px;
+  }
+
+  /* ── TECH STACK ── */
+  .stack-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .stack-item {
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ── API GROUP ── */
+  .api-group {
+    margin-bottom: 2rem;
+  }
+
+  .api-group-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding: 8px 14px;
+    background: rgba(249,115,22,0.06);
+    border: 1px solid rgba(249,115,22,0.15);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+  }
+
+  .api-table-wrap {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+  }
+
+  /* ── CALLOUT ── */
+  .callout {
+    background: rgba(249,115,22,0.05);
+    border: 1px solid rgba(249,115,22,0.2);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    font-size: 12px;
+    color: var(--text2);
+    margin-top: 1.5rem;
+    line-height: 1.7;
+  }
+
+  .callout strong { color: var(--accent); font-weight: 600; }
+
+  /* ── DIVIDER ── */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 3rem 0;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem;
+    text-align: center;
+    color: var(--text3);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .section { animation: fadeUp 0.4s ease both; }
+
+  @media (max-width: 768px) {
+    .hero-title { font-size: 32px; }
+    nav { display: none; }
+    .schema-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <span>ASOS</span>
+    <span class="logo-badge">v1</span>
+  </div>
+  <nav>
+    <a href="#arch">Architecture</a>
+    <a href="#backend">Backend</a>
+    <a href="#schema">Schema</a>
+    <a href="#api">API</a>
+    <a href="#structure">Structure</a>
+    <a href="#ai-flow">AI Flow</a>
+  </nav>
+  <div class="header-meta">System Design · Apr 2026</div>
+</header>
+
+<div class="page">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-eyebrow">Pre-engineering specification</div>
+    <h1 class="hero-title">AI Sales<br><span>Operating System</span></h1>
+    <p class="hero-sub">Multi-tenant SaaS that converts Meta Ads traffic into WhatsApp conversations, qualifies leads via Claude AI, and closes deals — with full CRM, analytics, and white-label support for multiple businesses.</p>
+    <div class="hero-chips">
+      <span class="chip orange">Multi-tenant</span>
+      <span class="chip green">Node.js + PostgreSQL</span>
+      <span class="chip blue">WhatsApp Cloud API</span>
+      <span class="chip purple">Claude AI (Anthropic)</span>
+      <span class="chip cyan">Meta Ads API</span>
+      <span class="chip">Redis Queue</span>
+      <span class="chip">Row-Level Security</span>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- SECTION 1: SYSTEM ARCHITECTURE             -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="section" id="arch">
+    <div class="section-header">
+      <div class="section-num">01</div>
+      <div>
+        <div class="section-title">System Architecture</div>
+        <div class="section-sub">High-level data and control flow across all layers</div>
+      </div>
+    </div>
+
+    <!-- LAYER 1: TRAFFIC SOURCES -->
+    <div class="layer-label">Layer 1 — Traffic Sources</div>
+    <div class="flow-layer">
+      <div class="flow-node accent">
+        <span class="node-icon">📢</span>
+        <div class="node-label">Meta Ads</div>
+        <div class="node-desc">Facebook / Instagram ads with Click-to-WhatsApp CTA. Carries UTM params + ad_id, adset_id, campaign_id.</div>
+      </div>
+      <div class="flow-node accent">
+        <span class="node-icon">🔗</span>
+        <div class="node-label">WhatsApp Deep Link</div>
+        <div class="node-desc">wa.me link with pre-filled message encoding the campaign source. Routes user to Business number.</div>
+      </div>
+      <div class="flow-node accent">
+        <span class="node-icon">📊</span>
+        <div class="node-label">Meta Conversions API</div>
+        <div class="node-desc">Server-side pixel events. Fires lead, purchase events back to Meta for attribution + optimization.</div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓ &nbsp; ↓ &nbsp; ↓<span>Webhook / API Call</span></div>
+
+    <!-- LAYER 2: GATEWAY -->
+    <div class="layer-label">Layer 2 — API Gateway &amp; Webhook Ingestion</div>
+    <div class="flow-layer">
+      <div class="flow-node blue">
+        <span class="node-icon">🚪</span>
+        <div class="node-label">API Gateway</div>
+        <div class="node-desc">Reverse proxy (Nginx/Caddy). Rate limiting, SSL termination, tenant routing via subdomain or header.</div>
+      </div>
+      <div class="flow-node blue">
+        <span class="node-icon">🔔</span>
+        <div class="node-label">WhatsApp Webhook</div>
+        <div class="node-desc">Receives inbound messages from Meta Cloud API. Verifies HMAC signature. Publishes to message queue.</div>
+      </div>
+      <div class="flow-node blue">
+        <span class="node-icon">🔐</span>
+        <div class="node-label">Auth Service</div>
+        <div class="node-desc">JWT + refresh tokens. Tenant-scoped claims. Role-based: superadmin, tenant_admin, agent.</div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓ &nbsp; ↓ &nbsp; ↓<span>Internal Event Bus</span></div>
+
+    <!-- LAYER 3: APPLICATION CORE -->
+    <div class="layer-label">Layer 3 — Application Core (Node.js Microservices)</div>
+    <div class="flow-layer">
+      <div class="flow-node green">
+        <span class="node-icon">💬</span>
+        <div class="node-label">Conversation Service</div>
+        <div class="node-desc">State machine for each conversation. Orchestrates AI responses, human handoff, stage transitions.</div>
+      </div>
+      <div class="flow-node green">
+        <span class="node-icon">🤖</span>
+        <div class="node-label">Dual AI Engine (v1.5)</div>
+        <div class="node-desc">Qualifier AI scores intent → Closer AI generates reply. Both return strict JSON. Audit logged to AiAgentLog.</div>
+      </div>
+      <div class="flow-node green">
+        <span class="node-icon">👥</span>
+        <div class="node-label">CRM Service</div>
+        <div class="node-desc">Central record system. Manages leads, contacts, deals, activities, stages and scores.</div>
+      </div>
+      <div class="flow-node green">
+        <span class="node-icon">📣</span>
+        <div class="node-label">Campaign Service</div>
+        <div class="node-desc">Links Meta Ad campaigns to ASOS tenants. Tracks spend, impressions, conversions.</div>
+      </div>
+      <div class="flow-node green">
+        <span class="node-icon">📈</span>
+        <div class="node-label">Analytics Service</div>
+        <div class="node-desc">Aggregates funnel metrics, AI performance, ROI. Powers dashboard charts.</div>
+      </div>
+      <div class="flow-node green">
+        <span class="node-icon">🔔</span>
+        <div class="node-label">Notification Service</div>
+        <div class="node-desc">Alerts agents on hot leads, escalations, AI failures. Email + in-app.</div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓ &nbsp; ↓ &nbsp; ↓<span>Read / Write</span></div>
+
+    <!-- LAYER 4: DATA -->
+    <div class="layer-label">Layer 4 — Data Layer</div>
+    <div class="flow-layer">
+      <div class="flow-node purple">
+        <span class="node-icon">🐘</span>
+        <div class="node-label">PostgreSQL</div>
+        <div class="node-desc">Primary data store. Row-Level Security enforces tenant isolation. All CRM, billing, config data.</div>
+      </div>
+      <div class="flow-node purple">
+        <span class="node-icon">⚡</span>
+        <div class="node-label">Redis</div>
+        <div class="node-desc">Session cache, conversation state cache, job queue (BullMQ), rate limit counters.</div>
+      </div>
+      <div class="flow-node purple">
+        <span class="node-icon">📁</span>
+        <div class="node-label">Object Storage</div>
+        <div class="node-desc">WhatsApp media (images, audio, docs). S3-compatible. CDN-served per tenant.</div>
+      </div>
+      <div class="flow-node purple">
+        <span class="node-icon">🔍</span>
+        <div class="node-label">Vector Store</div>
+        <div class="node-desc">Tenant product knowledge base for Claude RAG. pgvector extension on PostgreSQL.</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Multi-tenancy model:</strong> Shared database, shared schema, tenant isolation via <code>tenant_id</code> FK on every table + PostgreSQL Row Level Security (RLS) policies. Each tenant gets a dedicated WhatsApp Business number, Meta Pixel, and AI prompt configuration. Superadmin has unscoped access for billing and support.
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- SECTION 2: BACKEND ARCHITECTURE            -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="section" id="backend">
+    <div class="section-header">
+      <div class="section-num">02</div>
+      <div>
+        <div class="section-title">Backend Architecture</div>
+        <div class="section-sub">Node.js services, middleware layers, and infrastructure</div>
+      </div>
+    </div>
+
+    <div class="service-grid">
+      <div class="service-card">
+        <div class="service-name"><span class="dot dot-orange"></span> Core API Server</div>
+        <div class="service-type">Express.js · Port 3000</div>
+        <ul class="service-items">
+          <li>REST API router with versioning (/api/v1)</li>
+          <li>Tenant resolution middleware (X-Tenant-ID or subdomain)</li>
+          <li>JWT auth + RBAC middleware</li>
+          <li>Request validation (Zod schemas)</li>
+          <li>Error handler + structured logging (Pino)</li>
+          <li>OpenAPI / Swagger docs generation</li>
+        </ul>
+      </div>
+
+      <div class="service-card">
+        <div class="service-name"><span class="dot dot-blue"></span> Webhook Worker</div>
+        <div class="service-type">Express.js · Port 3001</div>
+        <ul class="service-items">
+          <li>POST /webhooks/whatsapp — receives WA Cloud API events</li>
+          <li>GET /webhooks/whatsapp — WA verification handshake</li>
+          <li>POST /webhooks/meta — receives Conversions API callbacks</li>
+          <li>HMAC-SHA256 signature verification</li>
+          <li>Idempotency check (dedup via Redis)</li>
+          <li>Publishes to BullMQ "messages" queue</li>
+        </ul>
+      </div>
+
+      <div class="service-card">
+        <div class="service-name"><span class="dot dot-green"></span> Conversation Engine</div>
+        <div class="service-type">BullMQ Worker Process</div>
+        <ul class="service-items">
+          <li>Consumes "messages" queue jobs</li>
+          <li>Loads conversation state from Redis cache</li>
+          <li>Determines: AI response | human agent | auto-reply</li>
+          <li>Calls Claude AI Engine service</li>
+          <li>Sends reply via WhatsApp Cloud API</li>
+          <li>Updates CRM lead record + conversation log</li>
+          <li>Fires Conversions API event to Meta</li>
+        </ul>
+      </div>
+
+      <div class="service-card">
+        <div class="service-name"><span class="dot dot-purple"></span> Claude AI Engine</div>
+        <div class="service-type">Internal Service Module</div>
+        <ul class="service-items">
+          <li><strong>v1.5 Dual Agent</strong> — Qualifier (haiku, temp 0) + Closer (sonnet, temp 0.4)</li>
+          <li>Loads tenant system prompt from DB</li>
+          <li>Fetches RAG context from pgvector</li>
+          <li>Builds message array with full conversation history</li>
+          <li>Qualifier returns {lead_status, score 1-10, intent, problem_summary, next_action}</li>
+          <li>Closer returns {reply_message, closing_type, urgency_trigger}</li>
+          <li>Both outputs logged to ai_agent_logs for Analyst AI (v2)</li>
+          <li>Score ≥ 8 → humanFollowupRequired=true; AI keeps replying</li>
+          <li>Logs token usage per tenant for billing</li>
+        </ul>
+      </div>
+
+      <div class="service-card">
+        <div class="service-name"><span class="dot dot-cyan"></span> CRM Service</div>
+        <div class="service-type">Internal Service Module</div>
+        <ul class="service-items">
+          <li>Lead CRUD + stage pipeline management</li>
+          <li>Contact deduplication (phone + email)</li>
+          <li>Deal value + probability scoring</li>
+          <li>Activity timeline logging</li>
+          <li>Agent assignment logic</li>
+          <li>Tag + segment management</li>
+        </ul>
+      </div>
+
+      <div class="service-card">
+        <div class="service-name"><span class="dot dot-yellow"></span> Scheduler Service</div>
+        <div class="service-type">Node-cron · BullMQ Delayed</div>
+        <ul class="service-items">
+          <li>Follow-up message scheduling</li>
+          <li>Stale lead re-engagement triggers</li>
+          <li>Daily analytics aggregation jobs</li>
+          <li>Meta Conversions API batch flush</li>
+          <li>Subscription billing cycle checks</li>
+          <li>Tenant health monitoring</li>
+        </ul>
+      </div>
+
+      <div class="service-card">
+        <div class="service-name"><span class="dot dot-red"></span> Billing Service</div>
+        <div class="service-type">Stripe Integration Module</div>
+        <ul class="service-items">
+          <li>Subscription plan management (Free, Pro, Enterprise)</li>
+          <li>Usage metering (AI tokens, contacts, messages)</li>
+          <li>Stripe webhook handler</li>
+          <li>Invoice generation</li>
+          <li>Feature flag enforcement by plan</li>
+          <li>Trial period management</li>
+        </ul>
+      </div>
+
+      <div class="service-card">
+        <div class="service-name"><span class="dot dot-orange"></span> Analytics Service</div>
+        <div class="service-type">Internal Service Module</div>
+        <ul class="service-items">
+          <li>Funnel stage conversion rates</li>
+          <li>AI qualification accuracy metrics</li>
+          <li>Revenue attribution by ad campaign</li>
+          <li>Agent performance reports</li>
+          <li>WhatsApp message delivery rates</li>
+          <li>Cost per lead / cost per close</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-top: 2rem">
+      <div class="layer-label" style="margin-bottom: 12px">Technology Stack</div>
+      <div class="stack-row">
+        <div class="stack-item">🟢 Node.js 22 LTS</div>
+        <div class="stack-item">⚡ Express.js 5</div>
+        <div class="stack-item">🐘 PostgreSQL 16</div>
+        <div class="stack-item">🔴 Redis 7</div>
+        <div class="stack-item">🔁 BullMQ</div>
+        <div class="stack-item">🤖 Anthropic SDK</div>
+        <div class="stack-item">💬 WhatsApp Cloud API</div>
+        <div class="stack-item">📊 Meta Business SDK</div>
+        <div class="stack-item">💳 Stripe Node</div>
+        <div class="stack-item">🔷 Zod</div>
+        <div class="stack-item">📝 Pino Logger</div>
+        <div class="stack-item">🔒 bcrypt + JWT</div>
+        <div class="stack-item">🧪 Vitest</div>
+        <div class="stack-item">🐳 Docker + Compose</div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- SECTION 3: DATABASE SCHEMA                 -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="section" id="schema">
+    <div class="section-header">
+      <div class="section-num">03</div>
+      <div>
+        <div class="section-title">Multi-tenant Database Schema</div>
+        <div class="section-sub">PostgreSQL · Row Level Security · All tables include tenant_id FK</div>
+      </div>
+    </div>
+
+    <div class="schema-grid">
+
+      <!-- tenants -->
+      <div class="schema-table">
+        <div class="schema-table-header" style="color: var(--accent)">🏢 tenants <span class="pk-badge">CORE</span></div>
+        <div class="schema-field"><span class="field-name field-pk">id</span><span class="field-type">UUID</span><span class="field-note">PK · gen_random_uuid()</span></div>
+        <div class="schema-field"><span class="field-name">slug</span><span class="field-type">VARCHAR(64)</span><span class="field-note">Unique · subdomain identifier</span></div>
+        <div class="schema-field"><span class="field-name">name</span><span class="field-type">TEXT</span><span class="field-note">Business display name</span></div>
+        <div class="schema-field"><span class="field-name">plan</span><span class="field-type">ENUM</span><span class="field-note">free | pro | enterprise</span></div>
+        <div class="schema-field"><span class="field-name">status</span><span class="field-type">ENUM</span><span class="field-note">active | suspended | trial</span></div>
+        <div class="schema-field"><span class="field-name">wa_phone_id</span><span class="field-type">TEXT</span><span class="field-note">WhatsApp Phone Number ID</span></div>
+        <div class="schema-field"><span class="field-name">wa_token</span><span class="field-type">TEXT</span><span class="field-note">Encrypted WA API token</span></div>
+        <div class="schema-field"><span class="field-name">meta_pixel_id</span><span class="field-type">TEXT</span><span class="field-note">Meta Pixel for attribution</span></div>
+        <div class="schema-field"><span class="field-name">stripe_customer_id</span><span class="field-type">TEXT</span><span class="field-note">Stripe billing reference</span></div>
+        <div class="schema-field"><span class="field-name">ai_system_prompt</span><span class="field-type">TEXT</span><span class="field-note">Custom Claude system prompt</span></div>
+        <div class="schema-field"><span class="field-name">settings</span><span class="field-type">JSONB</span><span class="field-note">Tenant config object</span></div>
+        <div class="schema-field"><span class="field-name">created_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note">Auto-set</span></div>
+      </div>
+
+      <!-- users -->
+      <div class="schema-table">
+        <div class="schema-table-header" style="color: var(--blue)">👤 users</div>
+        <div class="schema-field"><span class="field-name field-pk">id</span><span class="field-type">UUID</span><span class="field-note">PK</span></div>
+        <div class="schema-field"><span class="field-name field-fk">tenant_id</span><span class="field-type">UUID</span><span class="field-note">FK → tenants · nullable (superadmin)</span></div>
+        <div class="schema-field"><span class="field-name">email</span><span class="field-type">TEXT</span><span class="field-note">Unique · lowercase</span></div>
+        <div class="schema-field"><span class="field-name">password_hash</span><span class="field-type">TEXT</span><span class="field-note">bcrypt hash</span></div>
+        <div class="schema-field"><span class="field-name">role</span><span class="field-type">ENUM</span><span class="field-note">superadmin | tenant_admin | agent</span></div>
+        <div class="schema-field"><span class="field-name">full_name</span><span class="field-type">TEXT</span><span class="field-note"></span></div>
+        <div class="schema-field"><span class="field-name">avatar_url</span><span class="field-type">TEXT</span><span class="field-note">S3 URL</span></div>
+        <div class="schema-field"><span class="field-name">is_active</span><span class="field-type">BOOLEAN</span><span class="field-note">Default true</span></div>
+        <div class="schema-field"><span class="field-name">last_login_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note"></span></div>
+        <div class="schema-field"><span class="field-name">created_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note"></span></div>
+      </div>
+
+      <!-- contacts -->
+      <div class="schema-table">
+        <div class="schema-table-header" style="color: var(--green)">📋 contacts</div>
+        <div class="schema-field"><span class="field-name field-pk">id</span><span class="field-type">UUID</span><span class="field-note">PK</span></div>
+        <div class="schema-field"><span class="field-name field-fk">tenant_id</span><span class="field-type">UUID</span><span class="field-note">FK → tenants · RLS key</span></div>
+        <div class="schema-field"><span class="field-name">phone</span><span class="field-type">VARCHAR(20)</span><span class="field-note">E.164 format · idx per tenant</span></div>
+        <div class="schema-field"><span class="field-name">name</span><span class="field-type">TEXT</span><span class="field-note">WhatsApp profile name</span></div>
+        <div class="schema-field"><span class="field-name">email</span><span class="field-type">TEXT</span><span class="field-note">Nullable</span></div>
+        <div class="schema-field"><span class="field-name">wa_profile_pic</span><span class="field-type">TEXT</span><span class="field-note">URL from WA API</span></div>
+        <div class="schema-field"><span class="field-name">city</span><span class="field-type">TEXT</span><span class="field-note">Extracted by AI</span></div>
+        <div class="schema-field"><span class="field-name">tags</span><span class="field-type">TEXT[]</span><span class="field-note">Array of tag strings</span></div>
+        <div class="schema-field"><span class="field-name">custom_fields</span><span class="field-type">JSONB</span><span class="field-note">Tenant-defined extra data</span></div>
+        <div class="schema-field"><span class="field-name">opt_in</span><span class="field-type">BOOLEAN</span><span class="field-note">WA marketing opt-in status</span></div>
+        <div class="schema-field"><span class="field-name">created_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note"></span></div>
+      </div>
+
+      <!-- leads -->
+      <div class="schema-table">
+        <div class="schema-table-header" style="color: var(--accent)">🎯 leads</div>
+        <div class="schema-field"><span class="field-name field-pk">id</span><span class="field-type">UUID</span><span class="field-note">PK</span></div>
+        <div class="schema-field"><span class="field-name field-fk">tenant_id</span><span class="field-type">UUID</span><span class="field-note">FK → tenants</span></div>
+        <div class="schema-field"><span class="field-name field-fk">contact_id</span><span class="field-type">UUID</span><span class="field-note">FK → contacts</span></div>
+        <div class="schema-field"><span class="field-name field-fk">campaign_id</span><span class="field-type">UUID</span><span class="field-note">FK → campaigns · attribution</span></div>
+        <div class="schema-field"><span class="field-name field-fk">assigned_to</span><span class="field-type">UUID</span><span class="field-note">FK → users (agent)</span></div>
+        <div class="schema-field"><span class="field-name">stage</span><span class="field-type">ENUM</span><span class="field-note">new | qualifying | diagnosed | proposed | closed_won | closed_lost</span></div>
+        <div class="schema-field"><span class="field-name">ai_score</span><span class="field-type">SMALLINT</span><span class="field-note">0–100 · AI qualification score</span></div>
+        <div class="schema-field"><span class="field-name">deal_value</span><span class="field-type">NUMERIC(12,2)</span><span class="field-note">Estimated deal amount</span></div>
+        <div class="schema-field"><span class="field-name">currency</span><span class="field-type">CHAR(3)</span><span class="field-note">ISO 4217</span></div>
+        <div class="schema-field"><span class="field-name">lost_reason</span><span class="field-type">TEXT</span><span class="field-note">Nullable</span></div>
+        <div class="schema-field"><span class="field-name">qualification_data</span><span class="field-type">JSONB</span><span class="field-note">AI-extracted BANT data</span></div>
+        <div class="schema-field"><span class="field-name">source_utm</span><span class="field-type">JSONB</span><span class="field-note">utm_source/medium/campaign/content</span></div>
+        <div class="schema-field"><span class="field-name">meta_ad_id</span><span class="field-type">TEXT</span><span class="field-note">Meta ad_id for attribution</span></div>
+        <div class="schema-field"><span class="field-name">closed_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note">Nullable</span></div>
+        <div class="schema-field"><span class="field-name">created_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note"></span></div>
+      </div>
+
+      <!-- conversations -->
+      <div class="schema-table">
+        <div class="schema-table-header" style="color: var(--cyan)">💬 conversations</div>
+        <div class="schema-field"><span class="field-name field-pk">id</span><span class="field-type">UUID</span><span class="field-note">PK</span></div>
+        <div class="schema-field"><span class="field-name field-fk">tenant_id</span><span class="field-type">UUID</span><span class="field-note">FK → tenants</span></div>
+        <div class="schema-field"><span class="field-name field-fk">lead_id</span><span class="field-type">UUID</span><span class="field-note">FK → leads</span></div>
+        <div class="schema-field"><span class="field-name field-fk">contact_id</span><span class="field-type">UUID</span><span class="field-note">FK → contacts</span></div>
+        <div class="schema-field"><span class="field-name">wa_conversation_id</span><span class="field-type">TEXT</span><span class="field-note">WhatsApp conversation ID</span></div>
+        <div class="schema-field"><span class="field-name">status</span><span class="field-type">ENUM</span><span class="field-note">active | ai_handling | human_takeover | closed</span></div>
+        <div class="schema-field"><span class="field-name">ai_enabled</span><span class="field-type">BOOLEAN</span><span class="field-note">Toggle AI on/off per convo</span></div>
+        <div class="schema-field"><span class="field-name">handoff_reason</span><span class="field-type">TEXT</span><span class="field-note">Why AI handed to human</span></div>
+        <div class="schema-field"><span class="field-name">last_message_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note">idx</span></div>
+        <div class="schema-field"><span class="field-name">created_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note"></span></div>
+      </div>
+
+      <!-- messages -->
+      <div class="schema-table">
+        <div class="schema-table-header" style="color: var(--cyan)">📨 messages</div>
+        <div class="schema-field"><span class="field-name field-pk">id</span><span class="field-type">UUID</span><span class="field-note">PK</span></div>
+        <div class="schema-field"><span class="field-name field-fk">tenant_id</span><span class="field-type">UUID</span><span class="field-note">FK → tenants</span></div>
+        <div class="schema-field"><span class="field-name field-fk">conversation_id</span><span class="field-type">UUID</span><span class="field-note">FK → conversations</span></div>
+        <div class="schema-field"><span class="field-name">wa_message_id</span><span class="field-type">TEXT</span><span class="field-note">Unique · WA message ID</span></div>
+        <div class="schema-field"><span class="field-name">direction</span><span class="field-type">ENUM</span><span class="field-note">inbound | outbound</span></div>
+        <div class="schema-field"><span class="field-name">sender</span><span class="field-type">ENUM</span><span class="field-note">contact | ai | agent | system</span></div>
+        <div class="schema-field"><span class="field-name">type</span><span class="field-type">ENUM</span><span class="field-note">text | image | audio | document | template</span></div>
+        <div class="schema-field"><span class="field-name">content</span><span class="field-type">TEXT</span><span class="field-note">Message body text</span></div>
+        <div class="schema-field"><span class="field-name">media_url</span><span class="field-type">TEXT</span><span class="field-note">S3 URL for media</span></div>
+        <div class="schema-field"><span class="field-name">status</span><span class="field-type">ENUM</span><span class="field-note">sent | delivered | read | failed</span></div>
+        <div class="schema-field"><span class="field-name">ai_tokens_used</span><span class="field-type">INTEGER</span><span class="field-note">For billing metering</span></div>
+        <div class="schema-field"><span class="field-name">sent_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note"></span></div>
+      </div>
+
+      <!-- campaigns -->
+      <div class="schema-table">
+        <div class="schema-table-header" style="color: var(--purple)">📢 campaigns</div>
+        <div class="schema-field"><span class="field-name field-pk">id</span><span class="field-type">UUID</span><span class="field-note">PK</span></div>
+        <div class="schema-field"><span class="field-name field-fk">tenant_id</span><span class="field-type">UUID</span><span class="field-note">FK → tenants</span></div>
+        <div class="schema-field"><span class="field-name">name</span><span class="field-type">TEXT</span><span class="field-note">Campaign display name</span></div>
+        <div class="schema-field"><span class="field-name">meta_campaign_id</span><span class="field-type">TEXT</span><span class="field-note">Meta Ads campaign ID</span></div>
+        <div class="schema-field"><span class="field-name">meta_adset_id</span><span class="field-type">TEXT</span><span class="field-note">Adset ID</span></div>
+        <div class="schema-field"><span class="field-name">meta_ad_id</span><span class="field-type">TEXT</span><span class="field-note">Ad ID (most granular)</span></div>
+        <div class="schema-field"><span class="field-name">budget</span><span class="field-type">NUMERIC(12,2)</span><span class="field-note">Daily / lifetime budget</span></div>
+        <div class="schema-field"><span class="field-name">spend</span><span class="field-type">NUMERIC(12,2)</span><span class="field-note">Synced from Meta API</span></div>
+        <div class="schema-field"><span class="field-name">impressions</span><span class="field-type">INTEGER</span><span class="field-note">Synced from Meta API</span></div>
+        <div class="schema-field"><span class="field-name">clicks</span><span class="field-type">INTEGER</span><span class="field-note">Synced from Meta API</span></div>
+        <div class="schema-field"><span class="field-name">status</span><span class="field-type">ENUM</span><span class="field-note">active | paused | ended</span></div>
+        <div class="schema-field"><span class="field-name">started_at</span><span class="field-type">DATE</span><span class="field-note"></span></div>
+        <div class="schema-field"><span class="field-name">ended_at</span><span class="field-type">DATE</span><span class="field-note">Nullable</span></div>
+      </div>
+
+      <!-- activities -->
+      <div class="schema-table">
+        <div class="schema-table-header" style="color: var(--yellow)">📋 activities</div>
+        <div class="schema-field"><span class="field-name field-pk">id</span><span class="field-type">UUID</span><span class="field-note">PK</span></div>
+        <div class="schema-field"><span class="field-name field-fk">tenant_id</span><span class="field-type">UUID</span><span class="field-note">FK → tenants</span></div>
+        <div class="schema-field"><span class="field-name field-fk">lead_id</span><span class="field-type">UUID</span><span class="field-note">FK → leads</span></div>
+        <div class="schema-field"><span class="field-name field-fk">user_id</span><span class="field-type">UUID</span><span class="field-note">FK → users · nullable (system)</span></div>
+        <div class="schema-field"><span class="field-name">type</span><span class="field-type">ENUM</span><span class="field-note">note | stage_change | ai_action | call | email</span></div>
+        <div class="schema-field"><span class="field-name">content</span><span class="field-type">TEXT</span><span class="field-note">Activity description</span></div>
+        <div class="schema-field"><span class="field-name">metadata</span><span class="field-type">JSONB</span><span class="field-note">from_stage, to_stage, etc.</span></div>
+        <div class="schema-field"><span class="field-name">created_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note"></span></div>
+      </div>
+
+      <!-- ai_prompt_configs -->
+      <div class="schema-table">
+        <div class="schema-table-header" style="color: var(--purple)">🤖 ai_prompt_configs</div>
+        <div class="schema-field"><span class="field-name field-pk">id</span><span class="field-type">UUID</span><span class="field-note">PK</span></div>
+        <div class="schema-field"><span class="field-name field-fk">tenant_id</span><span class="field-type">UUID</span><span class="field-note">FK → tenants · Unique</span></div>
+        <div class="schema-field"><span class="field-name">system_prompt</span><span class="field-type">TEXT</span><span class="field-note">AI persona + instructions</span></div>
+        <div class="schema-field"><span class="field-name">qualification_criteria</span><span class="field-type">JSONB</span><span class="field-note">BANT questions array</span></div>
+        <div class="schema-field"><span class="field-name">closing_script</span><span class="field-type">TEXT</span><span class="field-note">Closing message templates</span></div>
+        <div class="schema-field"><span class="field-name">handoff_triggers</span><span class="field-type">JSONB</span><span class="field-note">Keywords → human escalation</span></div>
+        <div class="schema-field"><span class="field-name">language</span><span class="field-type">CHAR(5)</span><span class="field-note">pt-BR, en-US, es-MX, etc.</span></div>
+        <div class="schema-field"><span class="field-name">model</span><span class="field-type">TEXT</span><span class="field-note">claude-3-5-sonnet-20241022</span></div>
+        <div class="schema-field"><span class="field-name">temperature</span><span class="field-type">NUMERIC(3,2)</span><span class="field-note">0.0–1.0</span></div>
+        <div class="schema-field"><span class="field-name">updated_at</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note"></span></div>
+      </div>
+
+      <!-- subscriptions -->
+      <div class="schema-table">
+        <div class="schema-table-header" style="color: var(--red)">💳 subscriptions</div>
+        <div class="schema-field"><span class="field-name field-pk">id</span><span class="field-type">UUID</span><span class="field-note">PK</span></div>
+        <div class="schema-field"><span class="field-name field-fk">tenant_id</span><span class="field-type">UUID</span><span class="field-note">FK → tenants</span></div>
+        <div class="schema-field"><span class="field-name">stripe_sub_id</span><span class="field-type">TEXT</span><span class="field-note">Stripe subscription ID</span></div>
+        <div class="schema-field"><span class="field-name">plan</span><span class="field-type">ENUM</span><span class="field-note">free | pro | enterprise</span></div>
+        <div class="schema-field"><span class="field-name">status</span><span class="field-type">ENUM</span><span class="field-note">active | past_due | canceled</span></div>
+        <div class="schema-field"><span class="field-name">current_period_start</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note"></span></div>
+        <div class="schema-field"><span class="field-name">current_period_end</span><span class="field-type">TIMESTAMPTZ</span><span class="field-note"></span></div>
+        <div class="schema-field"><span class="field-name">contacts_limit</span><span class="field-type">INTEGER</span><span class="field-note">Plan contact ceiling</span></div>
+        <div class="schema-field"><span class="field-name">ai_tokens_limit</span><span class="field-type">BIGINT</span><span class="field-note">Monthly token allowance</span></div>
+        <div class="schema-field"><span class="field-name">ai_tokens_used</span><span class="field-type">BIGINT</span><span class="field-note">Current month usage</span></div>
+      </div>
+
+    </div>
+
+    <div class="callout" style="margin-top: 1.5rem">
+      <strong>RLS Policy pattern:</strong> Every table has a policy like <code>CREATE POLICY tenant_isolation ON leads USING (tenant_id = current_setting('app.current_tenant_id')::uuid)</code>. The API sets this config param at the start of each request transaction. Superadmin bypasses RLS via a separate role with <code>BYPASSRLS</code> privilege.
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- SECTION 4: API ENDPOINTS                   -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="section" id="api">
+    <div class="section-header">
+      <div class="section-num">04</div>
+      <div>
+        <div class="section-title">Full API Endpoints</div>
+        <div class="section-sub">Base path: /api/v1 · All endpoints require JWT except /auth/* and /webhooks/*</div>
+      </div>
+    </div>
+
+    <!-- AUTH -->
+    <div class="api-group">
+      <div class="api-group-title">🔐 Authentication</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method POST">POST</span></td><td>/auth/register</td><td>Register new tenant + admin user</td><td>Public</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/auth/login</td><td>Authenticate user → returns JWT + refresh token</td><td>Public</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/auth/refresh</td><td>Exchange refresh token for new JWT</td><td>Public</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/auth/logout</td><td>Revoke refresh token</td><td>JWT</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/auth/forgot-password</td><td>Send password reset email</td><td>Public</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/auth/reset-password</td><td>Set new password via reset token</td><td>Public</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- WEBHOOKS -->
+    <div class="api-group">
+      <div class="api-group-title">🔔 Webhooks (External Facing)</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/webhooks/whatsapp</td><td>WhatsApp webhook verification (hub.challenge)</td><td>WA Token</td></tr>
+            <tr><td><span class="method WEBHOOK">POST</span></td><td>/webhooks/whatsapp</td><td>Receive inbound WA messages + status updates</td><td>HMAC-SHA256</td></tr>
+            <tr><td><span class="method WEBHOOK">POST</span></td><td>/webhooks/stripe</td><td>Stripe billing events (payment, subscription)</td><td>Stripe sig</td></tr>
+            <tr><td><span class="method WEBHOOK">POST</span></td><td>/webhooks/meta</td><td>Meta Conversions API callback</td><td>HMAC</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TENANT -->
+    <div class="api-group">
+      <div class="api-group-title">🏢 Tenant Management (Superadmin)</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/admin/tenants</td><td>List all tenants with usage metrics</td><td>Superadmin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/admin/tenants/:id</td><td>Get tenant detail + subscription + stats</td><td>Superadmin</td></tr>
+            <tr><td><span class="method PATCH">PATCH</span></td><td>/admin/tenants/:id</td><td>Update tenant status, plan, settings</td><td>Superadmin</td></tr>
+            <tr><td><span class="method DELETE">DELETE</span></td><td>/admin/tenants/:id</td><td>Soft-delete tenant + suspend WA connection</td><td>Superadmin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/admin/metrics</td><td>Platform-wide KPIs (MRR, DAU, lead volume)</td><td>Superadmin</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TENANT SETTINGS -->
+    <div class="api-group">
+      <div class="api-group-title">⚙️ Tenant Settings</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/settings</td><td>Get current tenant settings</td><td>Admin</td></tr>
+            <tr><td><span class="method PUT">PUT</span></td><td>/settings</td><td>Update tenant settings (name, logo, etc.)</td><td>Admin</td></tr>
+            <tr><td><span class="method PUT">PUT</span></td><td>/settings/whatsapp</td><td>Update WA Phone ID + API token</td><td>Admin</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/settings/whatsapp/test</td><td>Send test message to verify WA connection</td><td>Admin</td></tr>
+            <tr><td><span class="method PUT">PUT</span></td><td>/settings/meta</td><td>Update Meta Pixel ID + Conversions API token</td><td>Admin</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CONTACTS -->
+    <div class="api-group">
+      <div class="api-group-title">👥 Contacts (CRM)</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/contacts</td><td>List contacts (pagination, search, filter by tag)</td><td>Agent+</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/contacts</td><td>Create contact manually</td><td>Agent+</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/contacts/:id</td><td>Get contact + linked leads + conversations</td><td>Agent+</td></tr>
+            <tr><td><span class="method PATCH">PATCH</span></td><td>/contacts/:id</td><td>Update contact fields</td><td>Agent+</td></tr>
+            <tr><td><span class="method DELETE">DELETE</span></td><td>/contacts/:id</td><td>Soft-delete contact</td><td>Admin</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/contacts/import</td><td>CSV bulk import contacts</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/contacts/export</td><td>Export contacts to CSV</td><td>Admin</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LEADS -->
+    <div class="api-group">
+      <div class="api-group-title">🎯 Leads (CRM)</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/leads</td><td>List leads (filter by stage, agent, score, date)</td><td>Agent+</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/leads</td><td>Create lead manually</td><td>Agent+</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/leads/:id</td><td>Get lead detail + messages + activities</td><td>Agent+</td></tr>
+            <tr><td><span class="method PATCH">PATCH</span></td><td>/leads/:id/stage</td><td>Move lead to new pipeline stage</td><td>Agent+</td></tr>
+            <tr><td><span class="method PATCH">PATCH</span></td><td>/leads/:id/assign</td><td>Assign lead to agent</td><td>Admin</td></tr>
+            <tr><td><span class="method PATCH">PATCH</span></td><td>/leads/:id/deal-value</td><td>Update estimated deal value</td><td>Agent+</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/leads/:id/notes</td><td>Add internal note to lead activity</td><td>Agent+</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/leads/pipeline</td><td>Kanban view data grouped by stage</td><td>Agent+</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CONVERSATIONS -->
+    <div class="api-group">
+      <div class="api-group-title">💬 Conversations</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/conversations</td><td>List conversations (filter by status, date)</td><td>Agent+</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/conversations/:id</td><td>Get conversation + all messages</td><td>Agent+</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/conversations/:id/messages</td><td>Send outbound message (agent manual send)</td><td>Agent+</td></tr>
+            <tr><td><span class="method PATCH">PATCH</span></td><td>/conversations/:id/ai</td><td>Toggle AI on/off for this conversation</td><td>Agent+</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/conversations/:id/takeover</td><td>Agent takes over from AI</td><td>Agent+</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/conversations/:id/handback</td><td>Agent hands back to AI</td><td>Agent+</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/conversations/:id/close</td><td>Close conversation</td><td>Agent+</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/conversations/:id/summary</td><td>AI-generated conversation summary</td><td>Agent+</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CAMPAIGNS -->
+    <div class="api-group">
+      <div class="api-group-title">📢 Campaigns</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/campaigns</td><td>List campaigns with performance metrics</td><td>Admin</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/campaigns</td><td>Create campaign (link to Meta Ads IDs)</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/campaigns/:id</td><td>Campaign detail + leads + conversions</td><td>Admin</td></tr>
+            <tr><td><span class="method PATCH">PATCH</span></td><td>/campaigns/:id</td><td>Update campaign settings</td><td>Admin</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/campaigns/:id/sync</td><td>Force sync Meta Ads data (spend, impressions)</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/campaigns/:id/roi</td><td>ROI report: spend vs. deal value closed</td><td>Admin</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- AI CONFIG -->
+    <div class="api-group">
+      <div class="api-group-title">🤖 AI Configuration</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/ai/config</td><td>Get AI prompt config for tenant</td><td>Admin</td></tr>
+            <tr><td><span class="method PUT">PUT</span></td><td>/ai/config</td><td>Update system prompt, qualification criteria</td><td>Admin</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/ai/config/test</td><td>Send test message through AI pipeline (sandbox)</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/ai/knowledge-base</td><td>List product/service knowledge chunks</td><td>Admin</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/ai/knowledge-base</td><td>Upload document to RAG knowledge base</td><td>Admin</td></tr>
+            <tr><td><span class="method DELETE">DELETE</span></td><td>/ai/knowledge-base/:id</td><td>Remove knowledge chunk</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/ai/usage</td><td>Token usage + cost for current billing period</td><td>Admin</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ANALYTICS -->
+    <div class="api-group">
+      <div class="api-group-title">📊 Analytics</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/analytics/overview</td><td>Dashboard KPIs: leads, conversions, revenue, CPL</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/analytics/funnel</td><td>Stage-by-stage conversion rates + drop-off</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/analytics/revenue</td><td>Revenue timeline + forecast</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/analytics/ai-performance</td><td>AI qualification accuracy, handoff rate, response time</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/analytics/agents</td><td>Per-agent lead count, close rate, response time</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/analytics/campaigns</td><td>Cross-campaign performance comparison</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/analytics/messages</td><td>WA message volume, delivery rates by date</td><td>Admin</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- USERS -->
+    <div class="api-group">
+      <div class="api-group-title">👤 Users &amp; Team</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/users</td><td>List team members for tenant</td><td>Admin</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/users/invite</td><td>Send email invite to new team member</td><td>Admin</td></tr>
+            <tr><td><span class="method PATCH">PATCH</span></td><td>/users/:id/role</td><td>Change user role</td><td>Admin</td></tr>
+            <tr><td><span class="method DELETE">DELETE</span></td><td>/users/:id</td><td>Remove user from tenant</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/users/me</td><td>Get authenticated user profile</td><td>JWT</td></tr>
+            <tr><td><span class="method PATCH">PATCH</span></td><td>/users/me</td><td>Update own profile + password</td><td>JWT</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- BILLING -->
+    <div class="api-group">
+      <div class="api-group-title">💳 Billing</div>
+      <div class="api-table-wrap">
+        <table class="api-table">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Auth</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method GET">GET</span></td><td>/billing/subscription</td><td>Get current plan + usage + limits</td><td>Admin</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/billing/checkout</td><td>Create Stripe checkout session for plan upgrade</td><td>Admin</td></tr>
+            <tr><td><span class="method POST">POST</span></td><td>/billing/portal</td><td>Create Stripe customer portal URL</td><td>Admin</td></tr>
+            <tr><td><span class="method GET">GET</span></td><td>/billing/invoices</td><td>List past invoices</td><td>Admin</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- SECTION 5: FOLDER STRUCTURE                -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="section" id="structure">
+    <div class="section-header">
+      <div class="section-num">05</div>
+      <div>
+        <div class="section-title">Project Folder Structure</div>
+        <div class="section-sub">Monorepo with pnpm workspaces · Backend + Frontend + Shared packages</div>
+      </div>
+    </div>
+
+    <div class="tree">
+<span class="tree-dir">asos-v1/</span>  <span class="tree-comment">← monorepo root</span>
+├── <span class="tree-dir">apps/</span>
+│   ├── <span class="tree-dir">api/</span>  <span class="tree-comment">← Core REST API (Express.js)</span>
+│   │   ├── <span class="tree-dir">src/</span>
+│   │   │   ├── <span class="tree-dir">config/</span>
+│   │   │   │   ├── <span class="tree-file">env.ts</span>  <span class="tree-comment">← Zod-validated env vars</span>
+│   │   │   │   ├── <span class="tree-file">database.ts</span>  <span class="tree-comment">← pg pool + RLS context setter</span>
+│   │   │   │   └── <span class="tree-file">redis.ts</span>
+│   │   │   ├── <span class="tree-dir">middleware/</span>
+│   │   │   │   ├── <span class="tree-file">auth.middleware.ts</span>  <span class="tree-comment">← JWT verify + attach user</span>
+│   │   │   │   ├── <span class="tree-file">tenant.middleware.ts</span>  <span class="tree-comment">← Resolve tenant, set RLS</span>
+│   │   │   │   ├── <span class="tree-file">rbac.middleware.ts</span>  <span class="tree-comment">← Role-based access control</span>
+│   │   │   │   ├── <span class="tree-file">rateLimiter.middleware.ts</span>
+│   │   │   │   └── <span class="tree-file">error.middleware.ts</span>
+│   │   │   ├── <span class="tree-dir">modules/</span>  <span class="tree-comment">← Feature-scoped modules</span>
+│   │   │   │   ├── <span class="tree-dir">auth/</span>
+│   │   │   │   │   ├── <span class="tree-file">auth.routes.ts</span>
+│   │   │   │   │   ├── <span class="tree-file">auth.controller.ts</span>
+│   │   │   │   │   ├── <span class="tree-file">auth.service.ts</span>
+│   │   │   │   │   └── <span class="tree-file">auth.schema.ts</span>  <span class="tree-comment">← Zod request schemas</span>
+│   │   │   │   ├── <span class="tree-dir">tenants/</span>
+│   │   │   │   ├── <span class="tree-dir">contacts/</span>
+│   │   │   │   ├── <span class="tree-dir">leads/</span>
+│   │   │   │   ├── <span class="tree-dir">conversations/</span>
+│   │   │   │   ├── <span class="tree-dir">messages/</span>
+│   │   │   │   ├── <span class="tree-dir">campaigns/</span>
+│   │   │   │   ├── <span class="tree-dir">analytics/</span>
+│   │   │   │   ├── <span class="tree-dir">users/</span>
+│   │   │   │   ├── <span class="tree-dir">billing/</span>
+│   │   │   │   └── <span class="tree-dir">ai-config/</span>
+│   │   │   ├── <span class="tree-dir">services/</span>  <span class="tree-comment">← Shared business logic</span>
+│   │   │   │   ├── <span class="tree-file">whatsapp.service.ts</span>  <span class="tree-comment">← WA Cloud API client</span>
+│   │   │   │   ├── <span class="tree-file">claude.service.ts</span>  <span class="tree-comment">← Anthropic API wrapper</span>
+│   │   │   │   ├── <span class="tree-file">meta.service.ts</span>  <span class="tree-comment">← Meta Conversions API</span>
+│   │   │   │   ├── <span class="tree-file">stripe.service.ts</span>
+│   │   │   │   ├── <span class="tree-file">email.service.ts</span>  <span class="tree-comment">← Resend / SES</span>
+│   │   │   │   └── <span class="tree-file">storage.service.ts</span>  <span class="tree-comment">← S3-compatible upload</span>
+│   │   │   ├── <span class="tree-dir">queues/</span>  <span class="tree-comment">← BullMQ definitions</span>
+│   │   │   │   ├── <span class="tree-file">message.queue.ts</span>
+│   │   │   │   ├── <span class="tree-file">meta-events.queue.ts</span>
+│   │   │   │   └── <span class="tree-file">scheduler.queue.ts</span>
+│   │   │   ├── <span class="tree-dir">workers/</span>  <span class="tree-comment">← BullMQ consumers (separate process)</span>
+│   │   │   │   ├── <span class="tree-file">conversation.worker.ts</span>  <span class="tree-comment">← MAIN: AI engine orchestration</span>
+│   │   │   │   ├── <span class="tree-file">meta-events.worker.ts</span>
+│   │   │   │   └── <span class="tree-file">scheduler.worker.ts</span>
+│   │   │   ├── <span class="tree-dir">webhooks/</span>
+│   │   │   │   ├── <span class="tree-file">whatsapp.webhook.ts</span>
+│   │   │   │   ├── <span class="tree-file">stripe.webhook.ts</span>
+│   │   │   │   └── <span class="tree-file">meta.webhook.ts</span>
+│   │   │   ├── <span class="tree-file">app.ts</span>  <span class="tree-comment">← Express app factory</span>
+│   │   │   └── <span class="tree-file">server.ts</span>  <span class="tree-comment">← HTTP server entrypoint</span>
+│   │   ├── <span class="tree-file">package.json</span>
+│   │   └── <span class="tree-file">tsconfig.json</span>
+│   │
+│   └── <span class="tree-dir">dashboard/</span>  <span class="tree-comment">← React SPA (Next.js 15 App Router)</span>
+│       ├── <span class="tree-dir">src/</span>
+│       │   ├── <span class="tree-dir">app/</span>  <span class="tree-comment">← Next.js App Router pages</span>
+│       │   │   ├── <span class="tree-dir">(auth)/</span>  <span class="tree-comment">← login, register, forgot-password</span>
+│       │   │   ├── <span class="tree-dir">(dashboard)/</span>
+│       │   │   │   ├── <span class="tree-dir">pipeline/</span>  <span class="tree-comment">← Kanban CRM view</span>
+│       │   │   │   ├── <span class="tree-dir">conversations/</span>  <span class="tree-comment">← Inbox</span>
+│       │   │   │   ├── <span class="tree-dir">contacts/</span>
+│       │   │   │   ├── <span class="tree-dir">campaigns/</span>
+│       │   │   │   ├── <span class="tree-dir">analytics/</span>
+│       │   │   │   ├── <span class="tree-dir">ai-settings/</span>
+│       │   │   │   ├── <span class="tree-dir">team/</span>
+│       │   │   │   └── <span class="tree-dir">billing/</span>
+│       │   │   └── <span class="tree-dir">(superadmin)/</span>  <span class="tree-comment">← Platform admin UI</span>
+│       │   ├── <span class="tree-dir">components/</span>
+│       │   │   ├── <span class="tree-dir">crm/</span>  <span class="tree-comment">← PipelineBoard, LeadCard, LeadDetail</span>
+│       │   │   ├── <span class="tree-dir">inbox/</span>  <span class="tree-comment">← ConversationList, ChatWindow, AiIndicator</span>
+│       │   │   ├── <span class="tree-dir">analytics/</span>  <span class="tree-comment">← Charts, KpiCard, FunnelChart</span>
+│       │   │   └── <span class="tree-dir">ui/</span>  <span class="tree-comment">← Shared design system components</span>
+│       │   ├── <span class="tree-dir">lib/</span>
+│       │   │   ├── <span class="tree-file">api-client.ts</span>  <span class="tree-comment">← Typed fetch wrapper</span>
+│       │   │   └── <span class="tree-file">realtime.ts</span>  <span class="tree-comment">← WebSocket for live inbox</span>
+│       │   └── <span class="tree-dir">stores/</span>  <span class="tree-comment">← Zustand state stores</span>
+│       └── <span class="tree-file">package.json</span>
+│
+├── <span class="tree-dir">packages/</span>
+│   ├── <span class="tree-dir">types/</span>  <span class="tree-comment">← Shared TypeScript types (API contracts)</span>
+│   │   └── <span class="tree-file">src/index.ts</span>
+│   └── <span class="tree-dir">config/</span>  <span class="tree-comment">← Shared eslint, tsconfig, prettier configs</span>
+│
+├── <span class="tree-dir">infrastructure/</span>
+│   ├── <span class="tree-dir">migrations/</span>  <span class="tree-comment">← SQL migration files (node-pg-migrate)</span>
+│   │   ├── <span class="tree-file">001_create_tenants.sql</span>
+│   │   ├── <span class="tree-file">002_create_users.sql</span>
+│   │   ├── <span class="tree-file">003_create_contacts_leads.sql</span>
+│   │   ├── <span class="tree-file">004_create_conversations_messages.sql</span>
+│   │   ├── <span class="tree-file">005_create_campaigns.sql</span>
+│   │   ├── <span class="tree-file">006_create_ai_config.sql</span>
+│   │   ├── <span class="tree-file">007_create_rls_policies.sql</span>  <span class="tree-comment">← RLS setup</span>
+│   │   └── <span class="tree-file">008_enable_pgvector.sql</span>
+│   ├── <span class="tree-dir">docker/</span>
+│   │   ├── <span class="tree-file">Dockerfile.api</span>
+│   │   └── <span class="tree-file">Dockerfile.worker</span>
+│   └── <span class="tree-file">docker-compose.yml</span>  <span class="tree-comment">← Local dev: pg + redis + api + worker + dashboard</span>
+│
+├── <span class="tree-dir">scripts/</span>
+│   ├── <span class="tree-file">seed.ts</span>  <span class="tree-comment">← Dev seed: create superadmin + demo tenant</span>
+│   └── <span class="tree-file">migrate.ts</span>
+│
+├── <span class="tree-file">pnpm-workspace.yaml</span>
+├── <span class="tree-file">package.json</span>
+└── <span class="tree-file">README.md</span>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- SECTION 6: WHATSAPP + CLAUDE AI FLOW       -->
+  <!-- ══════════════════════════════════════════ -->
+  <div class="section" id="ai-flow">
+    <div class="section-header">
+      <div class="section-num">06</div>
+      <div>
+        <div class="section-title">WhatsApp + Claude AI Integration Flow</div>
+        <div class="section-sub">End-to-end flow from ad click → AI response → CRM update → Meta attribution</div>
+      </div>
+    </div>
+
+    <div class="ai-flow">
+
+      <div class="ai-step accent">
+        <div class="ai-step-line">
+          <div class="ai-step-num">1</div>
+          <div class="ai-vert-line"></div>
+        </div>
+        <div class="ai-step-body">
+          <div class="ai-step-title">Ad Click → WhatsApp Entry</div>
+          <div class="ai-step-desc">User clicks a Click-to-WhatsApp Meta Ad. The WA deep link pre-fills a message containing an encoded campaign identifier (e.g. "Quero saber mais [src:camp_2024_promo]"). This lands the user in a conversation with the tenant's WhatsApp Business number.</div>
+          <div class="ai-sub-steps">
+            <div class="ai-sub"><span class="ai-sub-icon">📢</span><div><strong>Meta Ad fires Pixel event</strong>Ad click event logged client-side. UTM params + ad_id + adset_id + campaign_id captured in WA entry message payload.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">📱</span><div><strong>WhatsApp message created</strong>WhatsApp Cloud API fires a webhook to our server: POST /webhooks/whatsapp with the full message object including the user's WA ID (phone number) and message text.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-step blue">
+        <div class="ai-step-line">
+          <div class="ai-step-num">2</div>
+          <div class="ai-vert-line"></div>
+        </div>
+        <div class="ai-step-body">
+          <div class="ai-step-title">Webhook Ingestion + Deduplication</div>
+          <div class="ai-step-desc">The Webhook Worker receives the event, verifies the HMAC-SHA256 signature from Meta, checks Redis for duplicate <code>wa_message_id</code>, and publishes a job to the BullMQ "messages" queue.</div>
+          <div class="ai-sub-steps">
+            <div class="ai-sub"><span class="ai-sub-icon">🔐</span><div><strong>Signature verification</strong><code>X-Hub-Signature-256</code> header compared against HMAC of raw body using tenant's WA App Secret.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">🔁</span><div><strong>Idempotency check</strong>Redis key: <code>wa:dedup:{wa_message_id}</code> with 24h TTL. Prevents double-processing on WA retry deliveries.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">📨</span><div><strong>Queue publish</strong>Job added to BullMQ queue with payload: {tenantId, phone, messageText, waMessageId, adSource, timestamp}.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-step green">
+        <div class="ai-step-line">
+          <div class="ai-step-num">3</div>
+          <div class="ai-vert-line"></div>
+        </div>
+        <div class="ai-step-body">
+          <div class="ai-step-title">Contact + Lead Resolution</div>
+          <div class="ai-step-desc">The Conversation Worker picks up the job. It resolves (or creates) the contact and lead records in the CRM before invoking AI.</div>
+          <div class="ai-sub-steps">
+            <div class="ai-sub"><span class="ai-sub-icon">🔍</span><div><strong>Contact lookup</strong>Query contacts WHERE phone = E.164(phone) AND tenant_id = X. If not found, create new contact with WA profile name + phone.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">🎯</span><div><strong>Lead resolution</strong>Check for open lead linked to contact. If none, create new lead with stage = "new", linking to campaign via decoded ad source. Parse UTM + meta_ad_id from message payload.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">💬</span><div><strong>Conversation state</strong>Load or create conversation record. Check Redis for cached conversation state: {stage, messageHistory[], aiEnabled}. If cache miss, hydrate from DB (last 30 messages).</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-step purple">
+        <div class="ai-step-line">
+          <div class="ai-step-num">4</div>
+          <div class="ai-vert-line"></div>
+        </div>
+        <div class="ai-step-body">
+          <div class="ai-step-title">Claude AI Processing</div>
+          <div class="ai-step-desc">The AI Engine builds a rich context and sends it to Claude. It parses the structured response to drive CRM state transitions and WhatsApp replies.</div>
+          <div class="ai-sub-steps">
+            <div class="ai-sub"><span class="ai-sub-icon">📝</span><div><strong>Prompt assembly</strong>System prompt = tenant's custom persona + qualification criteria + closing script + language + current date. RAG context fetched from pgvector (cosine similarity search on message embedding).</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">📚</span><div><strong>Message history injection</strong>Last N conversation turns injected as messages array: [{role: "user", content: ...}, {role: "assistant", content: ...}]. Latest inbound message appended as final user turn.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">🤖</span><div><strong>Claude API call</strong>Model: claude-3-5-sonnet-20241022. Response format: JSON with schema {reply: string, stage: LeadStage, ai_score: 0-100, qualification_data: object, action: "continue" | "close" | "handoff", handoff_reason?: string}.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">🧠</span><div><strong>Structured output parsing</strong>JSON response validated against Zod schema. On parse failure: retry once with explicit format reminder. On second failure: log error, send safe fallback reply, flag for human review.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-step cyan">
+        <div class="ai-step-line">
+          <div class="ai-step-num">5</div>
+          <div class="ai-vert-line"></div>
+        </div>
+        <div class="ai-step-body">
+          <div class="ai-step-title">Action Routing (Continue | Handoff | Close)</div>
+          <div class="ai-step-desc">Based on Claude's <code>action</code> field, the worker routes to one of three paths.</div>
+          <div class="ai-sub-steps">
+            <div class="ai-sub"><span class="ai-sub-icon">▶️</span><div><strong>action: "continue"</strong>Send AI reply via WhatsApp Cloud API. Update conversation state in Redis. Persist inbound + outbound messages to DB. Update lead stage + ai_score if changed.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">🙋</span><div><strong>action: "handoff"</strong>Set conversation.status = "human_takeover". Disable AI for conversation. Notify assigned agent via in-app + email notification. Send fallback message to user: "Um especialista vai te atender em breve ✅". Log handoff_reason in activity feed.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">🏆</span><div><strong>action: "close"</strong>AI detected buying signal. Set lead.stage = "closed_won" or presents closing offer. Creates follow-up task for agent. Fires "Purchase" event to Meta Conversions API for ROAS measurement.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-step green">
+        <div class="ai-step-line">
+          <div class="ai-step-num">6</div>
+          <div class="ai-vert-line"></div>
+        </div>
+        <div class="ai-step-body">
+          <div class="ai-step-title">WhatsApp Message Delivery</div>
+          <div class="ai-step-desc">AI reply is sent via the WhatsApp Cloud API using the tenant's Phone Number ID + access token. Message status updates (delivered, read) flow back via webhook and update the messages.status field.</div>
+          <div class="ai-sub-steps">
+            <div class="ai-sub"><span class="ai-sub-icon">📤</span><div><strong>Send via WA Cloud API</strong>POST https://graph.facebook.com/v20.0/{phone_number_id}/messages. Type: text (or interactive for CTAs). Includes reply_to_message_id for threading.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">✅</span><div><strong>Delivery tracking</strong>WA Cloud API fires status webhooks: sent → delivered → read. Each updates messages.status in real-time. Failed deliveries trigger agent notification.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-step accent">
+        <div class="ai-step-line">
+          <div class="ai-step-num">7</div>
+          <div class="ai-vert-line"></div>
+        </div>
+        <div class="ai-step-body">
+          <div class="ai-step-title">Meta Attribution + CRM Sync</div>
+          <div class="ai-step-desc">Server-side events are fired to Meta Conversions API (CAPI) to feed the optimization algorithm and close the attribution loop. All data is simultaneously persisted to the CRM for the dashboard.</div>
+          <div class="ai-sub-steps">
+            <div class="ai-sub"><span class="ai-sub-icon">📊</span><div><strong>Meta CAPI events</strong>Lead event fired on first message. CompleteRegistration on qualification. Purchase on deal close. Each event carries event_id, phone hash, client_ip for dedup + matching.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">🗄️</span><div><strong>CRM update</strong>Lead stage, AI score, qualification_data, deal_value written to PostgreSQL. Activity log entry created for every state change. Analytics aggregation tables updated via DB triggers.</div></div>
+            <div class="ai-sub"><span class="ai-sub-icon">📡</span><div><strong>Real-time dashboard push</strong>WebSocket event emitted to connected dashboard sessions for this tenant. Agents see new leads, stage changes, and incoming messages in real-time without polling.</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="callout">
+      <strong>Human takeover protocol:</strong> Agents can take over any AI conversation from the dashboard inbox. When <code>conversation.ai_enabled = false</code>, the Conversation Worker skips AI processing and routes inbound messages directly to the agent's inbox. Agents can hand back to AI at any time via the toggle, which re-enables the worker and includes a context summary of the human conversation turn.
+    </div>
+
+    <div class="callout" style="margin-top: 1rem; border-left-color: var(--purple); background: rgba(168,85,247,0.05);">
+      <strong>Claude system prompt structure:</strong> ROLE → PRODUCT_KNOWLEDGE (RAG) → QUALIFICATION_CRITERIA (BANT questions) → CONVERSATION_STAGE_INSTRUCTIONS → CLOSING_SCRIPT → OUTPUT_FORMAT_INSTRUCTIONS. Output format is always strict JSON. Temperature 0.3 for consistent, professional tone. Max tokens 512 per response to enforce concise WA-appropriate replies.
+    </div>
+
+  </div>
+
+  <hr class="divider">
+
+  <!-- APPROVAL BLOCK -->
+  <div style="background: var(--surface2); border: 1px solid rgba(249,115,22,0.3); border-radius: 10px; padding: 2rem; text-align: center;">
+    <div style="font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; font-weight: 600">⏳ Awaiting Approval</div>
+    <div style="font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 8px">System Design Complete</div>
+    <div style="font-size: 13px; color: var(--text2); max-width: 560px; margin: 0 auto; line-height: 1.7">All 6 architecture sections above constitute the full ASOS v1 design. Review each section and confirm approval to begin the coding phase. Any adjustments to scope, tech choices, or schema can be made now before implementation begins.</div>
+    <div style="margin-top: 1.5rem; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; font-size: 12px; color: var(--text3)">
+      <span>6 sections completed</span>
+      <span>·</span>
+      <span>10 DB tables designed</span>
+      <span>·</span>
+      <span>~55 API endpoints</span>
+      <span>·</span>
+      <span>7-step AI flow</span>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  ASOS v1 — System Design · Confidential · April 2026
+</footer>
+
+<script>
+  // Smooth scroll for nav links
+  document.querySelectorAll('nav a').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) {
+        const y = target.getBoundingClientRect().top + window.scrollY - 72;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    });
+  });
+
+  // Active nav highlight
+  const sections = document.querySelectorAll('.section[id]');
+  const navLinks = document.querySelectorAll('nav a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + entry.target.id);
+        });
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

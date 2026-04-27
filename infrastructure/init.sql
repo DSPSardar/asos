@@ -1,0 +1,12 @@
+-- ─────────────────────────────────────────────────────────────
+-- ASOS v1 — Postgres init script
+-- Mounted at /docker-entrypoint-initdb.d/init.sql by docker-compose.
+-- Runs ONCE on the very first boot of an empty postgres data volume.
+-- Schema is owned by Prisma migrations — this file only sets DB-level
+-- options (extensions, etc).
+-- ─────────────────────────────────────────────────────────────
+
+-- Reserved for future DB-level setup. Intentionally minimal.
+-- Uncomment as needed:
+-- CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- CREATE EXTENSION IF NOT EXISTS citext;
