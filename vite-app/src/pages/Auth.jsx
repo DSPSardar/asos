@@ -47,18 +47,6 @@ export default function Auth() {
 
   const canSubmit = email.trim() && password.length > 0 && !submitting;
 
-  // ── Dev-only shortcut: bypass real auth and seed a demo session.
-  // TODO: remove (or gate behind import.meta.env.DEV) before production deploy.
-  const skipLogin = () => {
-    localStorage.setItem('asos_token', 'dev-skip-token');
-    setAuth({
-      accessToken:  'dev-skip-token',
-      refreshToken: 'dev-skip-refresh',
-      user:         { name: 'Dev User', email: 'dev@asos.io', role: 'TENANT_ADMIN' },
-      tenant:       { name: 'Boulevard Tower REIT', slug: 'boulevardtower' },
-    });
-    navigate('/dashboard', { replace: true });
-  };
 
   return (
     <div className="grid-bg flex min-h-screen items-center justify-center bg-bg p-6">
@@ -181,18 +169,6 @@ export default function Auth() {
           </a>
         </p>
 
-        {/* Dev shortcut — remove before production */}
-        <div className="mt-4 flex justify-center">
-          <button
-            type="button"
-            onClick={skipLogin}
-            className="group inline-flex items-center gap-1.5 rounded-md border border-dashed border-slate-700/60 bg-slate-900/40 px-3 py-1.5 text-[11px] font-medium text-slate-500 transition-all hover:border-amber-400/30 hover:bg-amber-400/5 hover:text-amber-300"
-            title="Bypass authentication and load demo data — remove before production"
-          >
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400/60 group-hover:bg-amber-400" />
-            Skip login (Dev Mode)
-          </button>
-        </div>
       </div>
     </div>
   );

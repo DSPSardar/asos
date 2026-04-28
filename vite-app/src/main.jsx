@@ -20,7 +20,12 @@ const OnboardingPage = React.lazy(() => import('@pages/Onboarding'));
 // ── Auth guard ────────────────────────────────────────────────
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('asos_token');
-  return token ? children : <Navigate to="/auth" replace />;
+  const isValid = token && token !== 'dev-skip-token' && token.length > 20;
+  if (!isValid) {
+    localStorage.removeItem('asos_token');
+    return <Navigate to="/auth" replace />;
+  }
+  return children;
 };
 
 const Suspense = ({ children }) => (
