@@ -159,7 +159,8 @@ model User {
   id            String    @id @default(uuid())
   tenantId      String?   @map("tenant_id")   // null = SUPERADMIN
   email         String    @unique
-  passwordHash  String    @map("password_hash")
+  passwordHash  String?   @map("password_hash")
+  googleId      String?   @unique @map("google_id")
   role          UserRole  @default(AGENT)
   fullName      String    @map("full_name")
   avatarUrl     String?   @map("avatar_url")

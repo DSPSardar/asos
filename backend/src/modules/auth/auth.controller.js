@@ -66,4 +66,15 @@ const me = async (req, res) => {
   });
 };
 
-module.exports = { register, login, refresh, logout, me };
+const googleAuth = async (req, res, next) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) return next(Object.assign(new Error('Google credential required'), { statusCode: 400, expose: true }));
+    const result = await authService.googleAuth(credential);
+    return success(res, result, 'Google login successful');
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { register, login, refresh, logout, me, googleAuth };

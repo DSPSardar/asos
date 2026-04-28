@@ -1,6 +1,7 @@
 // src/pages/Auth.jsx — Login + Register with branded two-panel layout
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useGoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '@stores/auth.store';
 import { authAPI } from '@lib/api';
 
@@ -16,9 +17,9 @@ function getStrength(val) {
   return { score, color: colors[score - 1] || '#1e293b', label: val.length > 0 ? labels[score - 1] || '' : '' };
 }
 
-// ── Slug normaliser ────────────────────────────────────────────────────
-function normaliseSlug(val) {
-  return val.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+// ── Auto-generate slug from email ─────────────────────────────────────
+function slugFromEmail(email) {
+  return email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 }
 
 export default function Auth() {
@@ -39,14 +40,11 @@ export default function Auth() {
   const [showLoginPw, setShowLoginPw]     = useState(false);
 
   // register fields
-  const [regBusiness, setRegBusiness] = useState('');
   const [regName, setRegName]         = useState('');
-  const [regSlug, setRegSlug]         = useState('');
   const [regEmail, setRegEmail]       = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [showRegPw, setShowRegPw]     = useState(false);
   const [strength, setStrength]       = useState({ score: 0, color: '#1e293b', label: '' });
-  const [slugFeedback, setSlugFeedback] = useState('');
   const [termsOk, setTermsOk]         = useState(false);
 
   // forgot password
@@ -86,18 +84,64 @@ export default function Auth() {
     }
   };
 
+  // ── Demo skip login ───────────────────────────────────────────────────
+  const handleSkip = async () => {
+    if (submitting) return;
+    clearMessages();
+    setSubmit(true);
+    try {
+      const res = await authAPI.login({ email: 'admin@demo-empresa.com', password: 'admin123!' });
+      const payload = res?.data ?? res;
+      const { accessToken, refreshToken, user, tenant } = payload || {};
+      if (!accessToken) throw new Error('Demo login failed.');
+      localStorage.setItem('asos_token', accessToken);
+      setAuth({ accessToken, refreshToken, user, tenant });
+      setSuccess('Entering demo workspace…');
+      setTimeout(() => navigate('/dashboard', { replace: true }), 600);
+    } catch {
+      setError('Demo login unavailable. Please sign in manually.');
+    } finally {
+      setSubmit(false);
+    }
+  };
+
+  // ── Google login ─────────────────────────────────────────────────────
+  const handleGoogleSuccess = async (tokenResponse) => {
+    clearMessages();
+    setSubmit(true);
+    try {
+      const res = await authAPI.googleAuth(tokenResponse.access_token);
+      const payload = res?.data ?? res;
+      const { accessToken, refreshToken, user, tenant } = payload || {};
+      if (!accessToken) throw new Error('Google login failed.');
+      localStorage.setItem('asos_token', accessToken);
+      setAuth({ accessToken, refreshToken, user, tenant });
+      setSuccess('Signed in with Google! Redirecting…');
+      setTimeout(() => navigate('/dashboard', { replace: true }), 800);
+    } catch (err) {
+      setError(err?.message || 'Google sign-in failed. Please try again.');
+    } finally {
+      setSubmit(false);
+    }
+  };
+
+  const googleLogin = useGoogleLogin({
+    onSuccess: handleGoogleSuccess,
+    onError: () => setError('Google sign-in was cancelled or failed.'),
+  });
+
   // ── Register ─────────────────────────────────────────────────────────
   const handleRegister = async (e) => {
     e.preventDefault();
     if (submitting) return;
     clearMessages();
     if (!termsOk) { setError('Please accept the Terms of Service to continue.'); return; }
-    if (regSlug.length < 3) { setError('Workspace slug must be at least 3 characters.'); return; }
     setSubmit(true);
     try {
+      const slug = slugFromEmail(regEmail);
       const res = await authAPI.register({
-        tenantName: regBusiness,
-        tenantSlug: regSlug,
+        tenantName: regName,
+        tenantSlug: slug,
         email:      regEmail,
         password:   regPassword,
         fullName:   regName,
@@ -122,17 +166,6 @@ export default function Auth() {
     setShowForgot(false);
     setSuccess('If that email exists, a reset link is on its way. Check your inbox.');
   };
-
-  // ── Slug input ────────────────────────────────────────────────────────
-  const onSlugChange = useCallback((val) => {
-    const clean = normaliseSlug(val);
-    setRegSlug(clean);
-    if (clean.length < 3) {
-      setSlugFeedback({ text: 'Min 3 characters', ok: false });
-    } else {
-      setSlugFeedback({ text: `✓ getaisales.com/${clean}`, ok: true });
-    }
-  }, []);
 
   const strengthBars = Array.from({ length: 4 }, (_, i) => ({
     active: i < strength.score,
@@ -350,42 +383,14 @@ export default function Auth() {
             {/* ── REGISTER FORM ── */}
             {tab === 'register' && (
               <form onSubmit={handleRegister} className="space-y-4" noValidate>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Business Name</label>
-                    <AuthInput value={regBusiness} onChange={(e) => setRegBusiness(e.target.value)}
-                               placeholder="Acme Corp" required disabled={submitting} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Your Name</label>
-                    <AuthInput value={regName} onChange={(e) => setRegName(e.target.value)}
-                               placeholder="John Smith" required disabled={submitting} />
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Your Name</label>
+                  <AuthInput value={regName} onChange={(e) => setRegName(e.target.value)}
+                             placeholder="John Smith" required disabled={submitting} />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Workspace Slug</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs font-mono pointer-events-none">
-                      getaisales.com/
-                    </span>
-                    <input type="text" required disabled={submitting} value={regSlug}
-                           onChange={(e) => onSlugChange(e.target.value)}
-                           placeholder="acme-corp"
-                           className="w-full rounded-xl pl-[7.5rem] pr-4 py-3 text-sm text-slate-100 placeholder-slate-600 outline-none transition-all"
-                           style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(99,102,241,0.2)' }}
-                           onFocus={(e) => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
-                           onBlur={(e) => e.target.style.borderColor = 'rgba(99,102,241,0.2)'} />
-                  </div>
-                  {slugFeedback && (
-                    <div className="text-[10px] mt-1" style={{ color: slugFeedback.ok ? '#10b981' : '#ef4444' }}>
-                      {slugFeedback.text}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Work Email</label>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Email</label>
                   <AuthInput type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)}
                              placeholder="you@company.com" required disabled={submitting} />
                 </div>
@@ -429,7 +434,7 @@ export default function Auth() {
                   </label>
                 </div>
 
-                <button type="submit" disabled={submitting || !regBusiness || !regName || !regEmail || !regPassword || !termsOk}
+                <button type="submit" disabled={submitting || !regName || !regEmail || !regPassword || !termsOk}
                         className="w-full rounded-xl py-3 text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] active:scale-[0.99]"
                         style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 24px rgba(99,102,241,0.3)' }}>
                   {submitting ? (
@@ -445,26 +450,40 @@ export default function Auth() {
             {/* ── Divider ── */}
             <div className="flex items-center gap-3 my-5">
               <div className="flex-1 h-px" style={{ background: 'rgba(99,102,241,0.1)' }} />
-              <span className="text-xs text-slate-600">or</span>
+              <span className="text-xs text-slate-600">or continue with</span>
               <div className="flex-1 h-px" style={{ background: 'rgba(99,102,241,0.1)' }} />
             </div>
 
-            {/* Bottom actions */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Google button */}
+            <button type="button" onClick={() => googleLogin()} disabled={submitting}
+                    className="w-full flex items-center justify-center gap-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 transition-all hover:text-white hover:border-indigo-400/40 disabled:opacity-40"
+                    style={{ border: '1px solid rgba(99,102,241,0.2)', background: 'rgba(15,23,42,0.6)' }}>
+              <GoogleIcon />
+              Continue with Google
+            </button>
+
+            {/* Bottom links */}
+            <div className="flex items-center justify-between mt-3">
               <a href="https://getaisales.com" target="_blank" rel="noreferrer"
-                 className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-medium text-slate-400 transition-all hover:text-slate-200"
-                 style={{ border: '1px solid rgba(99,102,241,0.2)', background: 'rgba(15,23,42,0.6)' }}>
+                 className="text-xs text-slate-600 hover:text-slate-400 transition-colors">
                 ← Back to site
               </a>
               <a href="mailto:sales@getaisales.com?subject=Demo%20Request"
-                 className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-medium text-slate-400 transition-all hover:text-slate-200"
-                 style={{ border: '1px solid rgba(99,102,241,0.2)', background: 'rgba(15,23,42,0.6)' }}>
+                 className="text-xs text-slate-600 hover:text-slate-400 transition-colors">
                 Contact sales →
               </a>
             </div>
 
+            {/* Skip / demo access */}
+            <div className="mt-5 text-center">
+              <button type="button" onClick={handleSkip} disabled={submitting}
+                      className="text-xs text-slate-600 hover:text-slate-400 transition-colors underline underline-offset-2 disabled:opacity-40">
+                Skip — explore with demo account →
+              </button>
+            </div>
+
             {/* Footer note */}
-            <p className="text-center text-xs text-slate-600 mt-5">
+            <p className="text-center text-xs text-slate-700 mt-3">
               14-day free trial · No credit card required · Cancel anytime
             </p>
           </div>
@@ -504,6 +523,18 @@ export default function Auth() {
       {/* ── Float animation keyframes ── */}
       <style>{`@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}`}</style>
     </div>
+  );
+}
+
+// ── Google SVG icon ───────────────────────────────────────────────────
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/>
+      <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/>
+      <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/>
+      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z" fill="#EA4335"/>
+    </svg>
   );
 }
 

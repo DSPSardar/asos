@@ -188,6 +188,83 @@ const refresh = async (refreshToken) => {
   return { accessToken, user: { id: user.id, email: user.email, role: user.role } };
 };
 
+// ── Google OAuth ──────────────────────────────────────
+
+const googleAuth = async (idToken) => {
+  const { OAuth2Client } = require('google-auth-library');
+  const client = new OAuth2Client(env.GOOGLE_CLIENT_ID);
+
+  const ticket = await client.verifyIdToken({
+    idToken,
+    audience: env.GOOGLE_CLIENT_ID,
+  }).catch(() => {
+    throw Object.assign(new Error('Invalid Google token'), { statusCode: 401, expose: true });
+  });
+
+  const payload = ticket.getPayload();
+  const { sub: googleId, email, name: fullName, picture: avatarUrl } = payload;
+
+  if (!email) throw Object.assign(new Error('Google account has no email'), { statusCode: 400, expose: true });
+
+  // Find existing user by googleId or email
+  let user = await prisma.user.findFirst({
+    where: { OR: [{ googleId }, { email }] },
+    include: { tenant: { select: { id: true, slug: true, name: true, plan: true, status: true } } },
+  });
+
+  if (user) {
+    // Link googleId if user signed up with email/password before
+    if (!user.googleId) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { googleId, avatarUrl: avatarUrl || user.avatarUrl },
+        include: { tenant: { select: { id: true, slug: true, name: true, plan: true, status: true } } },
+      });
+    }
+    if (!user.isActive) throw Object.assign(new Error('Account is deactivated'), { statusCode: 403, expose: true });
+    if (user.tenant?.status === 'SUSPENDED') throw Object.assign(new Error('Account suspended. Contact support.'), { statusCode: 403, expose: true });
+  } else {
+    // New user — create tenant + user in one transaction
+    const baseSlug = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const tenantSlug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: { slug: tenantSlug, name: fullName || email, plan: 'FREE', status: 'TRIAL' },
+      });
+      const newUser = await tx.user.create({
+        data: { tenantId: tenant.id, email, googleId, fullName: fullName || email, avatarUrl, role: 'TENANT_ADMIN' },
+      });
+      await tx.aiConfig.create({
+        data: {
+          tenantId: tenant.id,
+          systemPrompt: `You are a professional AI sales assistant for ${fullName || email}.\nQualify leads, diagnose problems, and guide prospects to the next step.\nBe empathetic, clear, and consultative.`,
+          qualificationCriteria: ['What is your main challenge today?', 'How long have you faced this?', 'What is the financial impact?'],
+          language: 'en',
+        },
+      });
+      await tx.subscription.create({
+        data: { tenantId: tenant.id, plan: 'FREE', status: 'TRIALING', contactsLimit: 100, aiTokensLimit: 100000, messagesLimit: 1000 },
+      });
+      return { tenant, user: newUser };
+    });
+
+    user = { ...result.user, tenant: result.tenant };
+    logger.info({ tenantId: result.tenant.id, email }, 'New tenant registered via Google');
+  }
+
+  const accessToken = generateAccessToken(user.id, user.tenantId, user.role);
+  const { token: refreshToken, hash } = generateRefreshToken(user.id);
+  await prisma.user.update({ where: { id: user.id }, data: { refreshTokenHash: hash, lastLoginAt: new Date() } });
+
+  return {
+    accessToken,
+    refreshToken,
+    user:   { id: user.id, email: user.email, fullName: user.fullName, role: user.role, avatarUrl: user.avatarUrl },
+    tenant: user.tenant,
+  };
+};
+
 // ── Logout ────────────────────────────────────────────
 
 const logout = async (userId) => {
@@ -197,4 +274,4 @@ const logout = async (userId) => {
   });
 };
 
-module.exports = { register, login, refresh, logout };
+module.exports = { register, login, googleAuth, refresh, logout };

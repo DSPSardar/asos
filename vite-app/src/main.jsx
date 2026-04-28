@@ -2,6 +2,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import './index.css';
 
 // Pages (lazy-loaded for performance)
@@ -38,8 +39,11 @@ const Suspense = ({ children }) => (
   </React.Suspense>
 );
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
     <BrowserRouter>
       <Suspense>
         <Routes>
@@ -65,5 +69,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </Routes>
       </Suspense>
     </BrowserRouter>
+    </GoogleOAuthProvider>
   </React.StrictMode>
 );

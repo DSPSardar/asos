@@ -54,11 +54,12 @@ api.interceptors.response.use(
 // ── Typed API calls ───────────────────────────────────────────
 
 export const authAPI = {
-  login:    (data) => api.post('/auth/login', data),
-  register: (data) => api.post('/auth/register', data),
-  refresh:  (refreshToken) => api.post('/auth/refresh', { refreshToken }),
-  logout:   () => api.post('/auth/logout'),
-  me:       () => api.get('/auth/me'),
+  login:      (data) => api.post('/auth/login', data),
+  register:   (data) => api.post('/auth/register', data),
+  googleAuth: (credential) => api.post('/auth/google', { credential }),
+  refresh:    (refreshToken) => api.post('/auth/refresh', { refreshToken }),
+  logout:     () => api.post('/auth/logout'),
+  me:         () => api.get('/auth/me'),
 };
 
 export const leadsAPI = {

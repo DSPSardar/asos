@@ -36,6 +36,8 @@ const envSchema = z.object({
   META_API_URL:            z.string().url().default('https://graph.facebook.com'),
   META_API_VERSION:        z.string().default('v20.0'),
 
+  GOOGLE_CLIENT_ID:        z.string().optional(),
+
   STRIPE_SECRET_KEY:       z.string().optional(),
   STRIPE_WEBHOOK_SECRET:   z.string().optional(),
 
