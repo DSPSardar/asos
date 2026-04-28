@@ -125,9 +125,16 @@ fi
 # ── 9. Nginx config ───────────────────────────────────────────
 sed -i "s/yourdomain.com/$DOMAIN/g" "$ASOS_DIR/nginx/nginx.conf"
 
-# ── 10. Start services ────────────────────────────────────────
-echo "→ Starting ASOS services..."
+# ── 10. Build vite-app SPA ────────────────────────────────────
+# nginx bind-mounts vite-app/dist; if it doesn't exist, the
+# dashboard host returns 404s. Build before starting nginx.
+echo "→ Building vite-app SPA..."
 cd "$ASOS_DIR"
+docker run --rm -v "$ASOS_DIR/vite-app:/app" -w /app node:22-alpine \
+  sh -c "npm ci --silent && npm run build"
+
+# ── 11. Start services ────────────────────────────────────────
+echo "→ Starting ASOS services..."
 docker-compose --env-file .env.production pull
 docker-compose --env-file .env.production up -d migrate
 sleep 5

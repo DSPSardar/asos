@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `backend/` — Node 22 / Express 5 / Prisma / PostgreSQL / Redis / BullMQ. **API server and worker are separate processes** that share `backend/src/` but are launched via different entrypoints.
 - `vite-app/` — **The current React SPA** (Vite + Tailwind + Zustand + React Router). This is what gets served as the dashboard.
-- `frontend/` — **Legacy** static-HTML prototype (`ASOS-Auth.html`, `ASOS-Dashboard.html`, `src/App.jsx` using `window.*` globals via CDN React). Superseded by `vite-app/`. Don't add features here; nginx still mounts it (`docker-compose.yml` line ~135) so deletions need a config update.
+- `frontend/` — **Legacy** static-HTML prototype (`ASOS-Auth.html`, `ASOS-Dashboard.html`, `src/App.jsx` using `window.*` globals via CDN React). Superseded by `vite-app/`; nginx no longer serves this directory. Kept in-repo for reference; safe to delete.
 - Top-level `*.html` files (`getaisales-Landing.html`, `about.html`, `ASOS-v1-*.html`, etc.) are the **marketing site / docs**, served statically.
 - `infrastructure/init.sql`, `nginx/nginx.conf`, `deploy/setup.sh` — production deployment scaffolding.
 
@@ -104,3 +104,11 @@ Each `src/modules/<name>/` has `<name>.routes.js` + `<name>.controller.js` + `<n
 - **Stage activity logging** is split across `STAGE_CHANGE` (lifecycle) and `AI_ACTION` (per-message) Activity rows — both are written in `conversation.worker.js`. Keep them separate; analytics queries depend on the type distinction.
 - **Encrypted-at-rest WA tokens.** `utils/crypto.js` does AES-256-GCM. Settings routes that update WA creds must encrypt before write and decrypt before passing to `whatsappService`.
 - **Prisma migrations.** Schema lives in `backend/prisma/schema.prisma`; only `0_init` is checked in. After editing the schema, run `npx prisma migrate dev --name <change>` locally — don't hand-edit migration SQL.
+
+## Deploy scripts (`deploy/`)
+
+Run on the server inside the deploy dir (default `/opt/asos`):
+- `setup.sh` — one-time provisioning. Installs Docker, configures UFW/fail2ban, gets SSL certs, builds the SPA, starts containers.
+- `bootstrap-git.sh` — one-time conversion of an rsync'd dir into a git checkout, so `update.sh` can pull from origin.
+- `update.sh` — pull `origin/main`, rebuild only what changed (api/worker images, vite-app SPA), run pending migrations, reload nginx, health-check. Requires a clean working tree.
+- `rollback.sh <commit-ish> [--force]` — `git reset --hard` to the target SHA, rebuild + restart. Refuses to roll back across new Prisma migrations unless `--force`.

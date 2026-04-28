@@ -132,7 +132,7 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - certbot_www:/var/www/certbot:ro
       - certbot_conf:/etc/letsencrypt:ro
-      - ./frontend:/var/www/frontend:ro     # Serve frontend static files
+      - ./vite-app/dist:/var/www/spa:ro     # Built React SPA (built by deploy/update.sh)
     depends_on:
       - api
     networks:
