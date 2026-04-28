@@ -1,9 +1,10 @@
 // src/pages/Auth.jsx — Login + Register with branded two-panel layout
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useGoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '@stores/auth.store';
 import { authAPI } from '@lib/api';
+
+const GOOGLE_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 // ── Password strength helper ───────────────────────────────────────────
 function getStrength(val) {
@@ -124,11 +125,6 @@ export default function Auth() {
       setSubmit(false);
     }
   };
-
-  const googleLogin = useGoogleLogin({
-    onSuccess: handleGoogleSuccess,
-    onError: () => setError('Google sign-in was cancelled or failed.'),
-  });
 
   // ── Register ─────────────────────────────────────────────────────────
   const handleRegister = async (e) => {
@@ -454,13 +450,10 @@ export default function Auth() {
               <div className="flex-1 h-px" style={{ background: 'rgba(99,102,241,0.1)' }} />
             </div>
 
-            {/* Google button */}
-            <button type="button" onClick={() => googleLogin()} disabled={submitting}
-                    className="w-full flex items-center justify-center gap-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 transition-all hover:text-white hover:border-indigo-400/40 disabled:opacity-40"
-                    style={{ border: '1px solid rgba(99,102,241,0.2)', background: 'rgba(15,23,42,0.6)' }}>
-              <GoogleIcon />
-              Continue with Google
-            </button>
+            {/* Google button — only rendered when OAuth is configured */}
+            {GOOGLE_ENABLED && (
+              <GoogleButton onSuccess={handleGoogleSuccess} disabled={submitting} />
+            )}
 
             {/* Bottom links */}
             <div className="flex items-center justify-between mt-3">
@@ -524,6 +517,23 @@ export default function Auth() {
       {/* ── Float animation keyframes ── */}
       <style>{`@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}`}</style>
     </div>
+  );
+}
+
+// ── Google button (hook lives here, inside GoogleOAuthProvider context) ─
+function GoogleButton({ onSuccess, disabled }) {
+  const { useGoogleLogin } = require('@react-oauth/google');
+  const googleLogin = useGoogleLogin({
+    onSuccess,
+    onError: () => {},
+  });
+  return (
+    <button type="button" onClick={() => googleLogin()} disabled={disabled}
+            className="w-full flex items-center justify-center gap-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 transition-all hover:text-white disabled:opacity-40"
+            style={{ border: '1px solid rgba(99,102,241,0.2)', background: 'rgba(15,23,42,0.6)' }}>
+      <GoogleIcon />
+      Continue with Google
+    </button>
   );
 }
 
