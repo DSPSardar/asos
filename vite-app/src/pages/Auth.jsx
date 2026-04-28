@@ -1,6 +1,7 @@
 // src/pages/Auth.jsx — Login + Register with branded two-panel layout
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useGoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '@stores/auth.store';
 import { authAPI } from '@lib/api';
 
@@ -520,9 +521,8 @@ export default function Auth() {
   );
 }
 
-// ── Google button (hook lives here, inside GoogleOAuthProvider context) ─
+// ── Google button — only rendered when GOOGLE_ENABLED + inside GoogleOAuthProvider
 function GoogleButton({ onSuccess, disabled }) {
-  const { useGoogleLogin } = require('@react-oauth/google');
   const googleLogin = useGoogleLogin({
     onSuccess,
     onError: () => {},
