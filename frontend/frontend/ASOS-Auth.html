@@ -512,7 +512,7 @@ tailwind.config = {
           <button class="social-btn" onclick="demoLogin()">
             ◎ Demo Login
           </button>
-          <button class="social-btn" onclick="window.open('ASOS-Dashboard.html','_self')">
+          <button class="social-btn" onclick="window.open('https://app.getaisales.com/dashboard','_self')">
             → Dashboard
           </button>
         </div>
@@ -612,7 +612,7 @@ async function handleLogin(e) {
       localStorage.setItem('asos_refresh', data.data.refreshToken);
       localStorage.setItem('asos_user', JSON.stringify(data.data.user));
       showSuccess('Login successful! Redirecting…');
-      setTimeout(() => { window.location.href = 'ASOS-Dashboard.html'; }, 1000);
+      setTimeout(() => { window.location.href = 'https://app.getaisales.com/dashboard'; }, 1000);
     } else {
       // Demo mode — bypass auth if backend not running
       showError(data.message || 'Login failed');
@@ -652,13 +652,13 @@ async function handleRegister(e) {
     if (data.success) {
       localStorage.setItem('asos_token', data.data.accessToken);
       showSuccess('Account created! Setting up your workspace…');
-      setTimeout(() => { window.location.href = 'ASOS-Dashboard.html'; }, 1500);
+      setTimeout(() => { window.location.href = 'https://app.getaisales.com/dashboard'; }, 1500);
     } else {
       showError(data.message || 'Registration failed');
     }
   } catch {
     showSuccess('Demo mode: Redirecting to dashboard…');
-    setTimeout(() => { window.location.href = 'ASOS-Dashboard.html'; }, 1000);
+    setTimeout(() => { window.location.href = 'https://app.getaisales.com/dashboard'; }, 1000);
   } finally {
     setLoading(btn, btnText, spinner, false);
   }
@@ -672,7 +672,7 @@ function demoLogin() {
     fullName: 'John Admin', role: 'TENANT_ADMIN',
   }));
   showSuccess('Demo mode active — entering dashboard…');
-  setTimeout(() => { window.location.href = 'ASOS-Dashboard.html'; }, 800);
+  setTimeout(() => { window.location.href = 'https://app.getaisales.com/dashboard'; }, 800);
 }
 
 // ── Password strength ───────────────────────────────────────────────────
