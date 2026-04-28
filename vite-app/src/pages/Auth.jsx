@@ -477,8 +477,9 @@ export default function Auth() {
             {/* Skip / demo access */}
             <div className="mt-5 text-center">
               <button type="button" onClick={handleSkip} disabled={submitting}
-                      className="text-xs text-slate-600 hover:text-slate-400 transition-colors underline underline-offset-2 disabled:opacity-40">
-                Skip — explore with demo account →
+                      className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-indigo-200 border border-indigo-400/40 bg-indigo-500/15 shadow-[0_0_24px_rgba(99,102,241,0.25)] hover:bg-indigo-500/25 hover:border-indigo-300/60 hover:text-white transition-all disabled:opacity-40">
+                <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                Skip login — enter demo instantly →
               </button>
             </div>
 
