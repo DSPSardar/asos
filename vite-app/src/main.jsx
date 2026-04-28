@@ -5,6 +5,24 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import './index.css';
 
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ minHeight:'100vh', background:'#030712', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16, color:'#f1f5f9', fontFamily:'sans-serif', padding:24 }}>
+          <div style={{ fontSize:32 }}>⚠</div>
+          <div style={{ fontSize:16, fontWeight:600 }}>Something went wrong</div>
+          <div style={{ fontSize:12, color:'#64748b', maxWidth:400, textAlign:'center' }}>{this.state.error.message}</div>
+          <button onClick={() => window.location.reload()} style={{ marginTop:8, padding:'8px 20px', borderRadius:8, background:'#6366f1', color:'#fff', border:'none', cursor:'pointer', fontSize:13 }}>Reload page</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Pages (lazy-loaded for performance)
 const AuthPage       = React.lazy(() => import('@pages/Auth'));
 const DashboardLayout= React.lazy(() => import('@pages/Layout'));
@@ -41,9 +59,15 @@ const Suspense = ({ children }) => (
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
+// Wrap with GoogleOAuthProvider only if a client ID is configured
+const AppWithAuth = ({ children }) => GOOGLE_CLIENT_ID
+  ? <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>{children}</GoogleOAuthProvider>
+  : <>{children}</>;
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+    <ErrorBoundary>
+    <AppWithAuth>
     <BrowserRouter>
       <Suspense>
         <Routes>
@@ -69,6 +93,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </Routes>
       </Suspense>
     </BrowserRouter>
-    </GoogleOAuthProvider>
+    </AppWithAuth>
+    </ErrorBoundary>
   </React.StrictMode>
 );
