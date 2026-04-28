@@ -11,6 +11,10 @@
 # Override defaults via env:
 #   ASOS_DIR=/srv/asos BRANCH=main ENV_FILE=.env.production \
 #     bash deploy/update.sh
+#
+# Server mode: Apache + Virtualmin (not Docker Nginx)
+#   SPA build output is copied to /home/app/public_html/
+#   Landing page HTML is copied to /var/www/getaisales/
 # ─────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -18,6 +22,10 @@ set -euo pipefail
 ASOS_DIR=${ASOS_DIR:-/opt/asos}
 BRANCH=${BRANCH:-main}
 ENV_FILE=${ENV_FILE:-.env.production}
+SPA_WEBROOT=${SPA_WEBROOT:-/home/app/public_html}
+LANDING_WEBROOT=${LANDING_WEBROOT:-/var/www/getaisales}
+VITE_API_URL=${VITE_API_URL:-https://api.getaisales.com/api/v1}
+VITE_APP_URL=${VITE_APP_URL:-https://app.getaisales.com}
 
 cd "$ASOS_DIR"
 
@@ -73,7 +81,9 @@ while IFS= read -r f; do
     backend/prisma/schema.prisma) need_backend_build=true ;;
     backend/*)                   need_backend_build=true ;;
     vite-app/*)                  need_spa_build=true ;;
-    nginx/nginx.conf)            need_nginx_reload=true ;;
+    getaisales-Landing.html|\
+    getaisales-shell.*|\
+    *.html)                      need_spa_build=true ;;
     docker-compose.yml)          need_compose_up=true ;;
   esac
 done <<< "$CHANGED"
@@ -106,15 +116,20 @@ if $need_backend_build; then
 fi
 
 if $need_spa_build; then
-  echo "→ Building vite-app SPA (dist is bind-mounted into nginx)..."
-  docker run --rm -v "$PWD/vite-app:/app" -w /app node:22-alpine \
-    sh -c "npm ci --silent && npm run build"
-fi
+  echo "→ Building vite-app SPA..."
+  cd "$ASOS_DIR/vite-app"
+  npm ci --silent
+  VITE_API_URL="$VITE_API_URL" VITE_APP_URL="$VITE_APP_URL" npm run build
+  cd "$ASOS_DIR"
 
-if $need_nginx_reload; then
-  echo "→ Validating + reloading nginx config..."
-  $DC exec -T nginx nginx -t
-  $DC exec -T nginx nginx -s reload
+  echo "→ Copying SPA to Apache webroot: $SPA_WEBROOT"
+  mkdir -p "$SPA_WEBROOT"
+  cp -r "$ASOS_DIR/vite-app/dist/"* "$SPA_WEBROOT/"
+
+  echo "→ Updating landing page: $LANDING_WEBROOT"
+  mkdir -p "$LANDING_WEBROOT"
+  cp "$ASOS_DIR"/*.html "$ASOS_DIR"/getaisales-shell.* "$LANDING_WEBROOT/" 2>/dev/null || true
+  cp "$ASOS_DIR/getaisales-Landing.html" "$LANDING_WEBROOT/index.html"
 fi
 
 if $need_compose_up; then
