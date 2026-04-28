@@ -65,6 +65,8 @@ export const authAPI = {
 export const leadsAPI = {
   list:        (params) => api.get('/leads', { params }),
   pipeline:    () => api.get('/leads/pipeline'),
+  hot:         (limit = 20) => api.get('/leads/hot', { params: { limit } }),
+  handoff:     () => api.get('/leads/handoff'),
   get:         (id) => api.get(`/leads/${id}`),
   create:      (data) => api.post('/leads', data),
   updateStage: (id, stage, lostReason) => api.patch(`/leads/${id}/stage`, { stage, lostReason }),

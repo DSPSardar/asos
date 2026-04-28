@@ -70,4 +70,19 @@ const updateDealValue = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { list, pipeline, getOne, create, updateStage, assign, addNote, updateDealValue };
+const hotLeads = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const leads = await leadsService.getHotLeads(req.tenantId, limit);
+    return success(res, leads);
+  } catch (err) { next(err); }
+};
+
+const handoffQueue = async (req, res, next) => {
+  try {
+    const convs = await leadsService.getHandoffQueue(req.tenantId);
+    return success(res, convs);
+  } catch (err) { next(err); }
+};
+
+module.exports = { list, pipeline, getOne, create, updateStage, assign, addNote, updateDealValue, hotLeads, handoffQueue };

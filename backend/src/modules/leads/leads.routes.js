@@ -10,6 +10,8 @@ router.use(authenticate, requireActiveTenant);
 
 router.get('/',                  ctrl.list);
 router.get('/pipeline',          ctrl.pipeline);
+router.get('/hot',               ctrl.hotLeads);
+router.get('/handoff',           ctrl.handoffQueue);
 router.get('/:id',               ctrl.getOne);
 router.post('/',                 ctrl.create);
 router.patch('/:id/stage',       ctrl.updateStage);

@@ -194,4 +194,55 @@ const updateDealValue = async (tenantId, leadId, dealValue, currency) => {
   });
 };
 
-module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue };
+// ── HOT leads feed (newest first, last 24h) ───────────────────────────
+
+const getHotLeads = async (tenantId, limit = 20) => {
+  return prisma.lead.findMany({
+    where: {
+      tenantId,
+      scoreLabel: 'HOT',
+      stage: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: limit,
+    include: {
+      contact:  { select: { id: true, name: true, phone: true, email: true } },
+      agent:    { select: { id: true, fullName: true } },
+      campaign: { select: { id: true, name: true } },
+      activities: {
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: { id: true, type: true, content: true, createdAt: true, metadata: true },
+      },
+      conversations: {
+        orderBy: { lastMessageAt: 'desc' },
+        take: 1,
+        select: { id: true, status: true, aiEnabled: true, lastMessageAt: true },
+      },
+    },
+  });
+};
+
+// ── Handoff queue (AI flagged → needs human) ──────────────────────────
+
+const getHandoffQueue = async (tenantId) => {
+  const convs = await prisma.conversation.findMany({
+    where: {
+      tenantId,
+      status: 'NEEDS_HUMAN',
+    },
+    orderBy: { lastMessageAt: 'desc' },
+    include: {
+      lead: {
+        include: {
+          contact:  { select: { id: true, name: true, phone: true } },
+          agent:    { select: { id: true, fullName: true } },
+          campaign: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+  return convs;
+};
+
+module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue, getHotLeads, getHandoffQueue };

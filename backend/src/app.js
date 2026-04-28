@@ -27,6 +27,9 @@ const webhookRoutes      = require('./webhooks/webhook.routes');
 const createApp = () => {
   const app = express();
 
+  // Trust Apache/Nginx reverse proxy so X-Forwarded-For is used for rate limiting
+  app.set('trust proxy', 1);
+
   // ── Security headers
   app.use(helmet());
 
