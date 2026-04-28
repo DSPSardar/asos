@@ -190,19 +190,47 @@ const refresh = async (refreshToken) => {
 
 // ── Google OAuth ──────────────────────────────────────
 
-const googleAuth = async (idToken) => {
+const googleAuth = async (token) => {
+  if (!env.GOOGLE_CLIENT_ID) {
+    throw Object.assign(new Error('Google OAuth is not configured'), { statusCode: 503, expose: true });
+  }
+
+  const axios = require('axios');
   const { OAuth2Client } = require('google-auth-library');
-  const client = new OAuth2Client(env.GOOGLE_CLIENT_ID);
+  const oauthClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
-  const ticket = await client.verifyIdToken({
-    idToken,
-    audience: env.GOOGLE_CLIENT_ID,
-  }).catch(() => {
-    throw Object.assign(new Error('Invalid Google token'), { statusCode: 401, expose: true });
-  });
+  let googleId;
+  let email;
+  let fullName;
+  let avatarUrl;
 
-  const payload = ticket.getPayload();
-  const { sub: googleId, email, name: fullName, picture: avatarUrl } = payload;
+  // JWT credential from Google Identity Services / One Tap (three dot-separated segments)
+  const parts = String(token).split('.');
+  if (parts.length === 3) {
+    const ticket = await oauthClient.verifyIdToken({
+      idToken: token,
+      audience: env.GOOGLE_CLIENT_ID,
+    }).catch(() => {
+      throw Object.assign(new Error('Invalid Google token'), { statusCode: 401, expose: true });
+    });
+    const payload = ticket.getPayload();
+    googleId = payload.sub;
+    email = payload.email;
+    fullName = payload.name;
+    avatarUrl = payload.picture;
+  } else {
+    // OAuth access_token from @react-oauth/google useGoogleLogin()
+    const { data } = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 10000,
+    }).catch(() => {
+      throw Object.assign(new Error('Invalid Google token'), { statusCode: 401, expose: true });
+    });
+    googleId = data.sub;
+    email = data.email;
+    fullName = data.name;
+    avatarUrl = data.picture;
+  }
 
   if (!email) throw Object.assign(new Error('Google account has no email'), { statusCode: 400, expose: true });
 

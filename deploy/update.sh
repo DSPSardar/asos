@@ -26,8 +26,19 @@ SPA_WEBROOT=${SPA_WEBROOT:-/home/app/public_html}
 LANDING_WEBROOT=${LANDING_WEBROOT:-/var/www/getaisales}
 VITE_API_URL=${VITE_API_URL:-https://api.getaisales.com/api/v1}
 VITE_APP_URL=${VITE_APP_URL:-https://app.getaisales.com}
+# Same value as GOOGLE_CLIENT_ID in .env.production — Google Sign-In embeds it in JS (not secret).
+VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID:-}
 
 cd "$ASOS_DIR"
+
+# Reuse GOOGLE_CLIENT_ID from .env.production for the Vite bundle if unset
+if [[ -z "${VITE_GOOGLE_CLIENT_ID:-}" && -f "$ENV_FILE" ]]; then
+  _gcid=$(grep -E '^GOOGLE_CLIENT_ID=' "$ENV_FILE" 2>/dev/null | head -1 | sed 's/^GOOGLE_CLIENT_ID=//' | tr -d '"' | tr -d "'" | tr -d '\r')
+  if [[ -n "$_gcid" ]]; then
+    export VITE_GOOGLE_CLIENT_ID="$_gcid"
+  fi
+  unset _gcid
+fi
 
 # ── 1. Sanity checks ──────────────────────────────────────────
 if [ ! -d ".git" ]; then
@@ -119,7 +130,8 @@ if $need_spa_build; then
   echo "→ Building vite-app SPA..."
   cd "$ASOS_DIR/vite-app"
   npm ci --silent
-  VITE_API_URL="$VITE_API_URL" VITE_APP_URL="$VITE_APP_URL" npm run build
+  VITE_API_URL="$VITE_API_URL" VITE_APP_URL="$VITE_APP_URL" \
+  VITE_GOOGLE_CLIENT_ID="$VITE_GOOGLE_CLIENT_ID" npm run build
   cd "$ASOS_DIR"
 
   echo "→ Copying SPA to Apache webroot: $SPA_WEBROOT"
