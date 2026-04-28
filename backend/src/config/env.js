@@ -42,6 +42,7 @@ const envSchema = z.object({
   RESEND_API_KEY:          z.string().optional(),
   EMAIL_FROM:              z.string().email().optional(),
 
+  APP_URL:                 z.string().url().default('http://localhost:3001'),
   ALLOWED_ORIGINS:         z.string().default('http://localhost:3001'),
   LOG_LEVEL:               z.enum(['fatal','error','warn','info','debug','trace']).default('info'),
 });

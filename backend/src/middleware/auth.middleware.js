@@ -22,7 +22,7 @@ const authenticate = async (req, res, next) => {
       return error(res, msg, 401);
     }
 
-    const user = await prisma.user.findUnique({
+    const user = await prisma.user.findFirst({
       where: { id: payload.userId, isActive: true },
       select: {
         id: true, email: true, role: true,
