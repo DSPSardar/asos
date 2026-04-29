@@ -288,6 +288,47 @@ const pickContactName = (name, email, phone) => {
   return 'DSP CRM Contact';
 };
 
+/** Maps mysql2/network errors to a safe tenant-facing hint (does not expose secrets). */
+const dspMysqlConnectHint = (error) => {
+  const errno = typeof error.errno === 'number' ? error.errno : error.code;
+
+  // mysql2 codes: ER_ACCESS_DENIED_ERROR etc.; Node: ECONNREFUSED, ETIMEDOUT …
+  if (errno === 'ECONNREFUSED' || error.code === 'ECONNREFUSED') {
+    return 'Unable to reach MySQL — connection refused on host/port. Confirm DSP_DB_HOST, DSP_DB_PORT and that mysqld listens (not only on 127.0.0.1).';
+  }
+  if (errno === 'ENOTFOUND' || error.code === 'ENOTFOUND') {
+    return 'Unable to resolve MySQL host — check DSP_DB_HOST.';
+  }
+  if (errno === 'ETIMEDOUT' || error.code === 'ETIMEDOUT') {
+    return 'Timed out reaching MySQL — firewall/security group blocking port 3306 from this server.';
+  }
+  if (
+    errno === 1045
+    || error.code === 'ER_ACCESS_DENIED_ERROR'
+    || (typeof error.sqlMessage === 'string' && error.sqlMessage.includes('Access denied'))
+  ) {
+    return (
+      'MySQL refused login — verify DSP_DB_USER and DSP_DB_PASSWORD, and that the user is granted '
+      + 'from this Docker host (e.g. GRANT SELECT ON your_crm.* TO user@\'172.17.%\' IDENTIFIED BY ...).'
+    );
+  }
+  if (errno === 1049 || error.code === 'ER_BAD_DB_ERROR') {
+    return `Unknown database "${env.DSP_DB_NAME}" — set DSP_DB_NAME to the CRM schema name on MySQL.`;
+  }
+  if (
+    errno === 'ER_CANT_CREATE'
+    || (typeof error.sqlMessage === 'string'
+      && (error.sqlMessage.includes('doesn\'t exist') || error.sqlMessage.includes("doesn't exist")))
+  ) {
+    return 'MySQL rejected the schema or privileges — verify DSP_DB_NAME and user grants.';
+  }
+  if (error.sqlMessage && error.code && String(error.code).startsWith('ER_')) {
+    return `DSP MySQL error: ${error.sqlMessage}`;
+  }
+  const short = typeof error.message === 'string' ? error.message.split('\n')[0] : 'Unknown error';
+  return `Unable to connect DSP CRM database (${short})`;
+};
+
 const syncFromDsp = async (tenantId, requestingUserId) => {
   if (!env.DSP_DB_USER || !env.DSP_DB_PASSWORD) {
     throw Object.assign(
@@ -296,18 +337,30 @@ const syncFromDsp = async (tenantId, requestingUserId) => {
     );
   }
 
+  const dspConnectionConfig = {
+    host: env.DSP_DB_HOST,
+    port: Number(env.DSP_DB_PORT),
+    user: env.DSP_DB_USER,
+    password: env.DSP_DB_PASSWORD,
+    database: env.DSP_DB_NAME,
+  };
+
   let connection;
   try {
-    connection = await mysql.createConnection({
-      host: env.DSP_DB_HOST,
-      port: Number(env.DSP_DB_PORT),
-      user: env.DSP_DB_USER,
-      password: env.DSP_DB_PASSWORD,
-      database: env.DSP_DB_NAME,
-    });
+    connection = await mysql.createConnection(dspConnectionConfig);
   } catch (error) {
-    logger.error({ err: error }, 'Failed to connect DSP MySQL database');
-    throw Object.assign(new Error('Unable to connect DSP CRM database'), { statusCode: 502, expose: true });
+    logger.error(
+      {
+        err: error,
+        dspHost: env.DSP_DB_HOST,
+        dspPort: dspConnectionConfig.port,
+        dspDb: env.DSP_DB_NAME,
+        dspUser: env.DSP_DB_USER,
+      },
+      'Failed to connect DSP MySQL database',
+    );
+    const msg = dspMysqlConnectHint(error);
+    throw Object.assign(new Error(msg), { statusCode: 502, expose: true });
   }
 
   try {
@@ -396,6 +449,13 @@ const syncFromDsp = async (tenantId, requestingUserId) => {
       skipped,
       invalid,
     };
+  } catch (runErr) {
+    logger.error({ err: runErr }, 'DSP sync query failed');
+    const extra = runErr.sqlMessage || runErr.message || 'query failed';
+    throw Object.assign(
+      new Error(`DSP CRM read failed: ${extra}`),
+      { statusCode: 502, expose: true },
+    );
   } finally {
     await connection.end();
   }
