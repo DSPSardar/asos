@@ -2,7 +2,7 @@
 
 const { Router } = require('express');
 const ctrl = require('./leads.controller');
-const { authenticate } = require('../../middleware/auth.middleware');
+const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { requireActiveTenant } = require('../../middleware/tenant.middleware');
 
 const router = Router();
@@ -12,6 +12,7 @@ router.get('/',                  ctrl.list);
 router.get('/pipeline',          ctrl.pipeline);
 router.get('/hot',               ctrl.hotLeads);
 router.get('/handoff',           ctrl.handoffQueue);
+router.post('/sync-dsp',         authorize('TENANT_ADMIN'), ctrl.syncFromDsp);
 router.get('/:id',               ctrl.getOne);
 router.post('/',                 ctrl.create);
 router.patch('/:id/stage',       ctrl.updateStage);

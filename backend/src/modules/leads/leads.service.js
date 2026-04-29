@@ -2,6 +2,8 @@
 
 const prisma = require('../../config/database');
 const logger = require('../../utils/logger');
+const mysql = require('mysql2/promise');
+const env = require('../../config/env');
 
 // ── List leads with filters + pagination ──────────────────────────────
 
@@ -245,4 +247,130 @@ const getHandoffQueue = async (tenantId) => {
   return convs;
 };
 
-module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue, getHotLeads, getHandoffQueue };
+const normalizePhone = (value = '') => {
+  if (!value) return '';
+  if (value.startsWith('+')) return `+${value.slice(1).replace(/\D/g, '')}`;
+  return value.replace(/\D/g, '');
+};
+
+const pickContactName = (name, email, phone) => {
+  if (name && name.trim()) return name.trim();
+  if (email && email.trim()) return email.trim();
+  if (phone && phone.trim()) return phone.trim();
+  return 'DSP CRM Contact';
+};
+
+const syncFromDsp = async (tenantId, requestingUserId) => {
+  if (!env.DSP_DB_USER || !env.DSP_DB_PASSWORD) {
+    throw Object.assign(
+      new Error('DSP DB credentials are not configured'),
+      { statusCode: 400, expose: true },
+    );
+  }
+
+  let connection;
+  try {
+    connection = await mysql.createConnection({
+      host: env.DSP_DB_HOST,
+      port: Number(env.DSP_DB_PORT),
+      user: env.DSP_DB_USER,
+      password: env.DSP_DB_PASSWORD,
+      database: env.DSP_DB_NAME,
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to connect DSP MySQL database');
+    throw Object.assign(new Error('Unable to connect DSP CRM database'), { statusCode: 502, expose: true });
+  }
+
+  try {
+    const [rows] = await connection.execute(
+      `SELECT name, email, phone_number, is_phone_verified
+       FROM users`,
+    );
+
+    let inserted = 0;
+    let skipped = 0;
+    let invalid = 0;
+
+    for (const row of rows) {
+      const phone = normalizePhone(row.phone_number || '');
+      const email = row.email?.trim() || null;
+      const name = pickContactName(row.name, email, phone);
+
+      if (!phone) {
+        invalid += 1;
+        continue;
+      }
+
+      const existingContact = await prisma.contact.findFirst({
+        where: {
+          tenantId,
+          OR: [
+            { phone },
+            ...(email ? [{ email }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+
+      if (existingContact) {
+        skipped += 1;
+        continue;
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const contact = await tx.contact.create({
+          data: {
+            tenantId,
+            name,
+            email,
+            phone,
+            optIn: Boolean(row.is_phone_verified),
+            customFields: {
+              source: 'DSP_CRM',
+              dspPhoneVerified: Boolean(row.is_phone_verified),
+            },
+          },
+        });
+
+        const lead = await tx.lead.create({
+          data: {
+            tenantId,
+            contactId: contact.id,
+            stage: 'NEW',
+            scoreLabel: 'COLD',
+            aiScore: 0,
+            currency: 'PKR',
+          },
+        });
+
+        await tx.activity.create({
+          data: {
+            tenantId,
+            leadId: lead.id,
+            userId: requestingUserId || null,
+            type: 'SYSTEM',
+            content: 'Lead imported from DSP CRM',
+            metadata: {
+              source: 'DSP_CRM',
+              isPhoneVerified: Boolean(row.is_phone_verified),
+            },
+          },
+        });
+      });
+
+      inserted += 1;
+    }
+
+    return {
+      totalFetched: rows.length,
+      inserted,
+      skipped,
+      invalid,
+    };
+  } finally {
+    await connection.end();
+  }
+};
+
+module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue, getHotLeads, getHandoffQueue, syncFromDsp };

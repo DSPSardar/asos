@@ -85,4 +85,11 @@ const handoffQueue = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { list, pipeline, getOne, create, updateStage, assign, addNote, updateDealValue, hotLeads, handoffQueue };
+const syncFromDsp = async (req, res, next) => {
+  try {
+    const result = await leadsService.syncFromDsp(req.tenantId, req.user.id);
+    return success(res, result, 'DSP CRM sync completed');
+  } catch (err) { next(err); }
+};
+
+module.exports = { list, pipeline, getOne, create, updateStage, assign, addNote, updateDealValue, hotLeads, handoffQueue, syncFromDsp };

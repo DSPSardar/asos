@@ -10,6 +10,11 @@ const envSchema = z.object({
   API_VERSION:             z.string().default('v1'),
 
   DATABASE_URL:            z.string().url(),
+  DSP_DB_HOST:             z.string().default('127.0.0.1'),
+  DSP_DB_PORT:             z.string().default('3306'),
+  DSP_DB_NAME:             z.string().default('dsp_crm'),
+  DSP_DB_USER:             z.string().optional(),
+  DSP_DB_PASSWORD:         z.string().optional(),
 
   REDIS_URL:               z.string().default('redis://localhost:6379'),
 

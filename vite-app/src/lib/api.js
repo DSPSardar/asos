@@ -73,6 +73,7 @@ export const leadsAPI = {
   assign:      (id, agentId) => api.patch(`/leads/${id}/assign`, { agentId }),
   addNote:     (id, content) => api.post(`/leads/${id}/notes`, { content }),
   updateDeal:  (id, dealValue, currency) => api.patch(`/leads/${id}/deal-value`, { dealValue, currency }),
+  syncDsp:     () => api.post('/leads/sync-dsp'),
 };
 
 export const contactsAPI = {

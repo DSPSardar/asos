@@ -1,7 +1,8 @@
 // src/pages/Pipeline.jsx — Leads page (route: /leads). Kanban + Table views,
 // search/filter, slide-out detail panel, "+ New Lead" modal.
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { PageHeader } from '@pages/Layout';
+import { contactsAPI, leadsAPI } from '@lib/api';
 
 // ─────────────────────────────────────────────────────────────
 // Style maps
@@ -233,9 +234,28 @@ export default function Pipeline() {
   const [dateFilter, setDateFilter] = useState('all');
   const [activeId, setActiveId] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [dbLeads, setDbLeads] = useState([]);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+
+  const allLeads = useMemo(() => [...dbLeads, ...LEADS], [dbLeads]);
+
+  const loadDbLeads = useCallback(async () => {
+    try {
+      const res = await leadsAPI.list({ page: 1, limit: 100 });
+      const mapped = (res.data || []).map(mapApiLeadToUi);
+      setDbLeads(mapped);
+    } catch (error) {
+      setSyncMessage(error.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDbLeads();
+  }, []);
 
   const filtered = useMemo(() => {
-    return LEADS.filter((l) => {
+    return allLeads.filter((l) => {
       if (scoreFilter !== 'all' && l.score !== scoreFilter)   return false;
       if (sourceFilter !== 'all' && l.source !== sourceFilter) return false;
       if (dateFilter === '24h' && !/m$|^\d+h$/.test(l.lastActivity)) return false;
@@ -249,22 +269,46 @@ export default function Pipeline() {
       }
       return true;
     });
-  }, [search, scoreFilter, sourceFilter, dateFilter]);
+  }, [allLeads, search, scoreFilter, sourceFilter, dateFilter]);
 
-  const active = activeId ? LEADS.find((l) => l.id === activeId) : null;
+  const active = activeId ? allLeads.find((l) => l.id === activeId) : null;
+
+  const onSync = async () => {
+    setSyncing(true);
+    setSyncMessage('');
+    try {
+      const res = await leadsAPI.syncDsp();
+      const stats = res.data || {};
+      setSyncMessage(`DSP sync done: ${stats.inserted || 0} inserted, ${stats.skipped || 0} skipped, ${stats.invalid || 0} invalid`);
+      await loadDbLeads();
+    } catch (error) {
+      setSyncMessage(error.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <>
       <PageHeader
         title="Leads"
-        subtitle={`${filtered.length} of ${LEADS.length} · ${formatPKR(filtered.reduce((s,l) => s + l.value, 0))} pipeline`}
+        subtitle={`${filtered.length} of ${allLeads.length} · ${formatPKR(filtered.reduce((s,l) => s + l.value, 0))} pipeline`}
         action={
-          <button
-            onClick={() => setNewOpen(true)}
-            className="rounded-lg bg-gradient-to-r from-accent to-accent2 px-3.5 py-2 text-sm font-medium text-white shadow-lg shadow-accent/20 transition-transform hover:scale-[1.02]"
-          >
-            + New Lead
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onSync}
+              disabled={syncing}
+              className="rounded-lg border border-slate-700/60 bg-surface2/40 px-3.5 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-surface2/80 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {syncing ? 'Syncing...' : 'Sync from DSP CRM'}
+            </button>
+            <button
+              onClick={() => setNewOpen(true)}
+              className="rounded-lg bg-gradient-to-r from-accent to-accent2 px-3.5 py-2 text-sm font-medium text-white shadow-lg shadow-accent/20 transition-transform hover:scale-[1.02]"
+            >
+              + New Lead
+            </button>
+          </div>
         }
       />
 
@@ -277,6 +321,7 @@ export default function Pipeline() {
           sourceFilter={sourceFilter} setSourceFilter={setSourceFilter}
           dateFilter={dateFilter} setDateFilter={setDateFilter}
         />
+        {syncMessage && <div className="text-xs text-slate-400">{syncMessage}</div>}
 
         {/* View body */}
         {view === 'kanban'
@@ -288,7 +333,7 @@ export default function Pipeline() {
       <DetailPanel lead={active} onClose={() => setActiveId(null)} />
 
       {/* New lead modal */}
-      {newOpen && <NewLeadModal onClose={() => setNewOpen(false)} />}
+      {newOpen && <NewLeadModal onClose={() => setNewOpen(false)} onCreated={loadDbLeads} />}
     </>
   );
 }
@@ -665,11 +710,13 @@ function ActionBtn({ label, onClick, primary = false }) {
 // ─────────────────────────────────────────────────────────────
 // New lead modal (demo: just collects name + phone + source)
 // ─────────────────────────────────────────────────────────────
-function NewLeadModal({ onClose }) {
+function NewLeadModal({ onClose, onCreated }) {
   const [name, setName]     = useState('');
   const [phone, setPhone]   = useState('+92 ');
   const [source, setSource] = useState(SOURCES[0]);
   const [score, setScore]   = useState('WARM');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -677,10 +724,29 @@ function NewLeadModal({ onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    alert(`Demo: would create lead\nName: ${name}\nPhone: ${phone}\nSource: ${source}\nScore: ${score}`);
-    onClose();
+    setSaving(true);
+    setError('');
+    try {
+      const contactRes = await contactsAPI.create({
+        name: name.trim(),
+        phone: phone.trim(),
+        tags: ['manual'],
+        customFields: { source, score },
+      });
+      await leadsAPI.create({
+        contactId: contactRes.data.id,
+        stage: 'NEW',
+        currency: 'PKR',
+      });
+      if (onCreated) await onCreated();
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -698,6 +764,7 @@ function NewLeadModal({ onClose }) {
         </div>
 
         <div className="space-y-3">
+          {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-xs text-red-300">{error}</div>}
           <Field label="Name">
             <input required autoFocus value={name} onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Asma Khan" className="input-dark w-full rounded-lg px-3 py-2 text-sm" />
@@ -726,8 +793,8 @@ function NewLeadModal({ onClose }) {
           <button type="button" onClick={onClose} className="rounded-lg border border-slate-700/60 bg-transparent px-3 py-2 text-xs text-slate-300 hover:bg-surface2/60">
             Cancel
           </button>
-          <button type="submit" className="rounded-lg bg-gradient-to-r from-accent to-accent2 px-3.5 py-2 text-xs font-medium text-white shadow-md shadow-accent/20">
-            Create lead
+          <button disabled={saving} type="submit" className="rounded-lg bg-gradient-to-r from-accent to-accent2 px-3.5 py-2 text-xs font-medium text-white shadow-md shadow-accent/20 disabled:cursor-not-allowed disabled:opacity-60">
+            {saving ? 'Creating...' : 'Create lead'}
           </button>
         </div>
       </form>
@@ -775,6 +842,48 @@ function SourceBadge({ source }) {
       {source}
     </span>
   );
+}
+
+function mapApiLeadToUi(lead) {
+  const stageMap = {
+    NEW: 'NEW',
+    QUALIFYING: 'QUALIFIED',
+    DIAGNOSED: 'PROPOSAL',
+    PROPOSED: 'PROPOSAL',
+    CLOSED_WON: 'WON',
+    CLOSED_LOST: 'LOST',
+  };
+  const scoreMap = { HOT: 'HOT', WARM: 'WARM', COLD: 'COLD' };
+
+  const createdAt = lead.createdAt ? new Date(lead.createdAt) : new Date();
+  const source = lead.contact?.customFields?.source || 'DSP CRM';
+  const notes = lead.problemSummary || `Imported lead from ${source}`;
+
+  return {
+    id: `db-${lead.id}`,
+    name: lead.contact?.name || 'Unknown',
+    phone: lead.contact?.phone || '-',
+    stage: stageMap[lead.stage] || 'NEW',
+    score: scoreMap[lead.scoreLabel] || 'COLD',
+    source,
+    lastActivity: timeAgo(createdAt),
+    value: Number(lead.dealValue || 0),
+    owner: lead.agent?.fullName || 'Unassigned',
+    notes,
+    lastMessages: [
+      { from: 'system', text: notes, ts: createdAt.toLocaleString() },
+    ],
+  };
+}
+
+function timeAgo(date) {
+  const diffMs = Date.now() - date.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${Math.max(1, mins)}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d`;
 }
 
 function formatPKR(n) {
