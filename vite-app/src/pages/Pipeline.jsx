@@ -236,22 +236,28 @@ export default function Pipeline() {
   const [activeId, setActiveId] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [dbLeads, setDbLeads] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
 
-  const allLeads = useMemo(() => [...dbLeads, ...LEADS], [dbLeads]);
+  const allLeads = useMemo(() => dbLeads, [dbLeads]);
 
   const loadDbLeads = useCallback(async () => {
+    setLoading(true);
     try {
       const params = { page: 1, limit: 100 };
       if (sourceFilter === 'DSP CRM') params.fromDsp = '1';
+      if (search.trim()) params.search = search.trim();
+      if (scoreFilter !== 'all') params.scoreLabel = scoreFilter;
       const res = await leadsAPI.list(params);
       const mapped = (res.data || []).map(mapApiLeadToUi);
       setDbLeads(mapped);
     } catch (error) {
       setSyncMessage(error.message);
+    } finally {
+      setLoading(false);
     }
-  }, [sourceFilter]);
+  }, [sourceFilter, search, scoreFilter]);
 
   useEffect(() => {
     loadDbLeads();
@@ -259,20 +265,13 @@ export default function Pipeline() {
 
   const filtered = useMemo(() => {
     return allLeads.filter((l) => {
-      if (scoreFilter !== 'all' && l.score !== scoreFilter)   return false;
+      if (scoreFilter !== 'all' && l.score !== scoreFilter) return false;
       if (sourceFilter !== 'all' && l.source !== sourceFilter) return false;
       if (dateFilter === '24h' && !/m$|^\d+h$/.test(l.lastActivity)) return false;
       if (dateFilter === '7d'  && /^\d+d$/.test(l.lastActivity) && parseInt(l.lastActivity,10) > 7) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        if (!l.name.toLowerCase().includes(q) &&
-            !l.phone.includes(q) &&
-            !l.notes.toLowerCase().includes(q) &&
-            !l.lastMessages.some((m) => m.text.toLowerCase().includes(q))) return false;
-      }
       return true;
     });
-  }, [allLeads, search, scoreFilter, sourceFilter, dateFilter]);
+  }, [allLeads, scoreFilter, sourceFilter, dateFilter]);
 
   const active = activeId ? allLeads.find((l) => l.id === activeId) : null;
 
@@ -289,6 +288,13 @@ export default function Pipeline() {
     } finally {
       setSyncing(false);
     }
+  };
+
+  const updateLead = async (leadId, updater) => {
+    const target = allLeads.find((l) => l.id === leadId);
+    if (!target?.apiId) return;
+    await updater(target.apiId);
+    await loadDbLeads();
   };
 
   return (
@@ -326,6 +332,8 @@ export default function Pipeline() {
         />
         {syncMessage && <div className="text-xs text-slate-400">{syncMessage}</div>}
 
+        {loading && <div className="text-xs text-slate-500">Loading leads...</div>}
+
         {/* View body */}
         {view === 'kanban'
           ? <KanbanView leads={filtered} onSelect={setActiveId} />
@@ -333,7 +341,14 @@ export default function Pipeline() {
       </div>
 
       {/* Slide-out detail panel */}
-      <DetailPanel lead={active} onClose={() => setActiveId(null)} />
+      <DetailPanel
+        lead={active}
+        onClose={() => setActiveId(null)}
+        onStageChange={(leadId, nextStage) => updateLead(leadId, (apiId) => leadsAPI.updateStage(apiId, nextStage))}
+        onMarkWon={(leadId) => updateLead(leadId, (apiId) => leadsAPI.updateStage(apiId, 'CLOSED_WON'))}
+        onAddNote={(leadId, content) => updateLead(leadId, (apiId) => leadsAPI.addNote(apiId, content))}
+        onUpdateValue={(leadId, value) => updateLead(leadId, (apiId) => leadsAPI.updateDeal(apiId, Number(value), 'PKR'))}
+      />
 
       {/* New lead modal */}
       {newOpen && <NewLeadModal onClose={() => setNewOpen(false)} onCreated={loadDbLeads} />}
@@ -554,7 +569,7 @@ function TableView({ leads, onSelect }) {
 // ─────────────────────────────────────────────────────────────
 // Slide-out detail panel
 // ─────────────────────────────────────────────────────────────
-function DetailPanel({ lead, onClose }) {
+function DetailPanel({ lead, onClose, onStageChange, onMarkWon, onAddNote, onUpdateValue }) {
   // ESC to close
   useEffect(() => {
     if (!lead) return;
@@ -575,15 +590,46 @@ function DetailPanel({ lead, onClose }) {
       <aside
         className={`fixed right-0 top-0 z-40 flex h-full w-full max-w-md flex-col border-l border-slate-800/60 bg-bg shadow-2xl transition-transform ${open ? 'translate-x-0' : 'translate-x-full'}`}
       >
-        {lead && <DetailContent lead={lead} onClose={onClose} />}
+        {lead && (
+          <DetailContent
+            lead={lead}
+            onClose={onClose}
+            onStageChange={onStageChange}
+            onMarkWon={onMarkWon}
+            onAddNote={onAddNote}
+            onUpdateValue={onUpdateValue}
+          />
+        )}
       </aside>
     </>
   );
 }
 
-function DetailContent({ lead, onClose }) {
+function DetailContent({ lead, onClose, onStageChange, onMarkWon, onAddNote, onUpdateValue }) {
   const timeline = buildTimeline(lead);
   const [stageDraft, setStageDraft] = useState(lead.stage);
+  const [saving, setSaving] = useState(false);
+
+  const stageToApi = (uiStage) => {
+    if (uiStage === 'QUALIFIED') return 'QUALIFYING';
+    if (uiStage === 'PROPOSAL') return 'PROPOSED';
+    if (uiStage === 'WON') return 'CLOSED_WON';
+    if (uiStage === 'LOST') return 'CLOSED_LOST';
+    return 'NEW';
+  };
+
+  const applyStage = async (next) => {
+    setSaving(true);
+    try {
+      await onStageChange?.(lead.id, stageToApi(next));
+      setStageDraft(next);
+    } catch (err) {
+      // Keep simple UX in this panel.
+      alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <>
@@ -614,7 +660,8 @@ function DetailContent({ lead, onClose }) {
           <Stat label="Stage">
             <select
               value={stageDraft}
-              onChange={(e) => { setStageDraft(e.target.value); alert(`Demo: would move ${lead.name} to ${e.target.value}`); }}
+              disabled={saving}
+              onChange={(e) => applyStage(e.target.value)}
               className="input-dark w-full cursor-pointer rounded-md px-1.5 py-1 text-xs text-slate-200"
             >
               {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -677,10 +724,41 @@ function DetailContent({ lead, onClose }) {
 
       {/* Sticky actions */}
       <footer className="grid grid-cols-2 gap-2 border-t border-slate-800/60 bg-surface/40 px-5 py-3">
-        <ActionBtn label="Open WhatsApp" onClick={() => alert(`Demo: would open WhatsApp thread with ${lead.name}`)} primary />
-        <ActionBtn label="Mark as Won"   onClick={() => alert(`Demo: would mark ${lead.name} as WON`)} />
-        <ActionBtn label="Add Note"      onClick={() => alert('Demo: notes UI coming soon')} />
-        <ActionBtn label="Reassign"      onClick={() => alert('Demo: reassign UI coming soon')} />
+        <ActionBtn label="Open WhatsApp" onClick={() => (window.location.href = '/conversations')} primary />
+        <ActionBtn label="Mark as Won"   onClick={async () => {
+          setSaving(true);
+          try {
+            await onMarkWon?.(lead.id);
+          } catch (err) {
+            alert(err.message);
+          } finally {
+            setSaving(false);
+          }
+        }} />
+        <ActionBtn label="Add Note"      onClick={async () => {
+          const content = window.prompt('Note for this lead:');
+          if (!content?.trim()) return;
+          setSaving(true);
+          try {
+            await onAddNote?.(lead.id, content.trim());
+          } catch (err) {
+            alert(err.message);
+          } finally {
+            setSaving(false);
+          }
+        }} />
+        <ActionBtn label="Edit Value"    onClick={async () => {
+          const value = window.prompt('Deal value (PKR):', String(lead.value || '0'));
+          if (value == null) return;
+          setSaving(true);
+          try {
+            await onUpdateValue?.(lead.id, value);
+          } catch (err) {
+            alert(err.message);
+          } finally {
+            setSaving(false);
+          }
+        }} />
       </footer>
     </>
   );
@@ -869,6 +947,7 @@ function mapApiLeadToUi(lead) {
 
   return {
     id: `db-${lead.id}`,
+    apiId: lead.id,
     name: lead.contact?.name || 'Unknown',
     phone: lead.contact?.phone || '-',
     stage: stageMap[lead.stage] || 'NEW',
