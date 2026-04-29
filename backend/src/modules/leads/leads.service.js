@@ -7,21 +7,34 @@ const env = require('../../config/env');
 
 // ── List leads with filters + pagination ──────────────────────────────
 
-const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, page = 1, limit = 20 }) => {
+const contactClause = (fromDsp, search) => {
+  const parts = [];
+  if (fromDsp) {
+    parts.push({
+      customFields: { path: ['source'], equals: 'DSP_CRM' },
+    });
+  }
+  if (search) {
+    parts.push({
+      OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ],
+    });
+  }
+  if (parts.length === 0) return {};
+  if (parts.length === 1) return { contact: parts[0] };
+  return { contact: { AND: parts } };
+};
+
+const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, fromDsp, page = 1, limit = 20 }) => {
   const where = {
     tenantId,
     ...(stage       && { stage }),
     ...(scoreLabel  && { scoreLabel }),
     ...(assignedTo  && { assignedTo }),
-    ...(search && {
-      contact: {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { phone: { contains: search } },
-          { email: { contains: search, mode: 'insensitive' } },
-        ],
-      },
-    }),
+    ...contactClause(fromDsp, search),
   };
 
   const [leads, total] = await Promise.all([
@@ -31,7 +44,7 @@ const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, page
       take: limit,
       orderBy: [{ aiScore: 'desc' }, { createdAt: 'desc' }],
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, tags: true } },
+        contact: { select: { id: true, name: true, phone: true, email: true, tags: true, customFields: true } },
         agent:   { select: { id: true, fullName: true, email: true } },
         campaign: { select: { id: true, name: true } },
         _count: { select: { conversations: true, activities: true } },
@@ -45,13 +58,21 @@ const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, page
 
 // ── Get pipeline (Kanban grouped by stage) ────────────────────────────
 
-const getPipeline = async (tenantId) => {
+const getPipeline = async (tenantId, { fromDsp } = {}) => {
   const stages = ['NEW', 'QUALIFYING', 'DIAGNOSED', 'PROPOSED', 'CLOSED_WON', 'CLOSED_LOST'];
 
+  const openWhere = {
+    tenantId,
+    stage: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] },
+    ...(fromDsp && {
+      contact: { customFields: { path: ['source'], equals: 'DSP_CRM' } },
+    }),
+  };
+
   const leads = await prisma.lead.findMany({
-    where: { tenantId, stage: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] } },
+    where: openWhere,
     include: {
-      contact: { select: { name: true, phone: true } },
+      contact: { select: { name: true, phone: true, customFields: true } },
       agent:   { select: { fullName: true } },
     },
     orderBy: { aiScore: 'desc' },
@@ -61,9 +82,16 @@ const getPipeline = async (tenantId) => {
   stages.forEach(stage => { pipeline[stage] = []; });
   leads.forEach(lead => { pipeline[lead.stage]?.push(lead); });
 
+  const statsWhere = {
+    tenantId,
+    ...(fromDsp && {
+      contact: { customFields: { path: ['source'], equals: 'DSP_CRM' } },
+    }),
+  };
+
   const stats = await prisma.lead.groupBy({
     by: ['stage'],
-    where: { tenantId },
+    where: statsWhere,
     _count: { id: true },
     _sum: { dealValue: true },
   });

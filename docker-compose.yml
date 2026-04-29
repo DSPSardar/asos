@@ -68,6 +68,9 @@ services:
     networks:
       - asos_internal
       - asos_external
+    # MySQL/MariaDB on host: use DSP_DB_HOST=host.docker.internal in .env.production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:3000:3000"   # Only expose to localhost — Nginx proxies externally
     healthcheck:
@@ -97,6 +100,8 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - asos_internal
 

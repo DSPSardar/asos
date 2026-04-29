@@ -5,10 +5,12 @@ const { success, created, paginated } = require('../../utils/response');
 
 const list = async (req, res, next) => {
   try {
-    const { stage, scoreLabel, assignedTo, search, page = 1, limit = 20 } = req.query;
+    const { stage, scoreLabel, assignedTo, search, page = 1, limit = 20, fromDsp } = req.query;
+    const fromDspFlag = fromDsp === '1' || fromDsp === 'true';
     const { leads, total } = await leadsService.listLeads({
       tenantId: req.tenantId,
       stage, scoreLabel, assignedTo, search,
+      fromDsp: fromDspFlag,
       page: parseInt(page), limit: parseInt(limit),
     });
     return paginated(res, leads, total, page, limit);
@@ -17,7 +19,8 @@ const list = async (req, res, next) => {
 
 const pipeline = async (req, res, next) => {
   try {
-    const data = await leadsService.getPipeline(req.tenantId);
+    const fromDspFlag = req.query.fromDsp === '1' || req.query.fromDsp === 'true';
+    const data = await leadsService.getPipeline(req.tenantId, { fromDsp: fromDspFlag });
     return success(res, data);
   } catch (err) { next(err); }
 };

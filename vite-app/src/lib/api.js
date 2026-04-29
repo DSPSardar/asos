@@ -64,7 +64,7 @@ export const authAPI = {
 
 export const leadsAPI = {
   list:        (params) => api.get('/leads', { params }),
-  pipeline:    () => api.get('/leads/pipeline'),
+  pipeline:    (params) => api.get('/leads/pipeline', { params: params || {} }),
   hot:         (limit = 20) => api.get('/leads/hot', { params: { limit } }),
   handoff:     () => api.get('/leads/handoff'),
   get:         (id) => api.get(`/leads/${id}`),

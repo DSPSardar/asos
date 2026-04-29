@@ -21,8 +21,9 @@ const SCORE_STYLES = {
   COLD: { label:'COLD', dot:'bg-sky-400',   pill:'bg-sky-500/15 text-sky-300 border-sky-500/30' },
 };
 
-const SOURCES = ['WhatsApp Ads', 'Facebook Ads', 'Instagram', 'Website', 'Referral'];
+const SOURCES = ['DSP CRM', 'WhatsApp Ads', 'Facebook Ads', 'Instagram', 'Website', 'Referral'];
 const SOURCE_COLOR = {
+  'DSP CRM':       'bg-violet-500/10 text-violet-300 border-violet-500/30',
   'WhatsApp Ads': 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
   'Facebook Ads': 'bg-blue-500/10 text-blue-300 border-blue-500/30',
   'Instagram':    'bg-pink-500/10 text-pink-300 border-pink-500/30',
@@ -242,17 +243,19 @@ export default function Pipeline() {
 
   const loadDbLeads = useCallback(async () => {
     try {
-      const res = await leadsAPI.list({ page: 1, limit: 100 });
+      const params = { page: 1, limit: 100 };
+      if (sourceFilter === 'DSP CRM') params.fromDsp = '1';
+      const res = await leadsAPI.list(params);
       const mapped = (res.data || []).map(mapApiLeadToUi);
       setDbLeads(mapped);
     } catch (error) {
       setSyncMessage(error.message);
     }
-  }, []);
+  }, [sourceFilter]);
 
   useEffect(() => {
     loadDbLeads();
-  }, []);
+  }, [loadDbLeads]);
 
   const filtered = useMemo(() => {
     return allLeads.filter((l) => {
@@ -856,8 +859,13 @@ function mapApiLeadToUi(lead) {
   const scoreMap = { HOT: 'HOT', WARM: 'WARM', COLD: 'COLD' };
 
   const createdAt = lead.createdAt ? new Date(lead.createdAt) : new Date();
-  const source = lead.contact?.customFields?.source || 'DSP CRM';
-  const notes = lead.problemSummary || `Imported lead from ${source}`;
+  const cf = lead.contact?.customFields;
+  const rawSource =
+    cf && typeof cf === 'object' && !Array.isArray(cf) ? cf.source : undefined;
+  const source =
+    rawSource === 'DSP_CRM' ? 'DSP CRM' : rawSource ? String(rawSource) : 'Other';
+  const notes =
+    lead.problemSummary || (rawSource === 'DSP_CRM' ? 'Imported from DSP CRM' : `Lead (${source})`);
 
   return {
     id: `db-${lead.id}`,
