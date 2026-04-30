@@ -88,13 +88,15 @@ export default function AdsPerformance() {
     if (!brandProfile?.id) { setError('Extract brand DNA first.'); return; }
     setError('');
     setIsGenerating(true);
-    setStatus('Generating 10 ad copy variants…');
+    setStatus('Generating 3 ad copy variants…');
     try {
-      const res = await contentStudioAPI.generate({ brandProfileId: brandProfile.id, count: 10, language });
-      const newDrafts = res.data?.drafts ?? res.drafts ?? [];
+      const res = await contentStudioAPI.generate({ brandProfileId: brandProfile.id, count: 3, language });
+      // res is already server JSON (interceptor does res => res.data)
+      // server shape: { success, data: { session, drafts: [...] }, message }
+      const newDrafts = res?.data?.drafts ?? res?.drafts ?? [];
       setDrafts(newDrafts);
       setActiveIdx(0);
-      setStatus(`Generated ${newDrafts.length} variants`);
+      setStatus(`Generated ${newDrafts.length} variants — swipe to review`);
     } catch (e) {
       setError(e.message || 'Generation failed — try again.');
       setStatus('');
@@ -168,7 +170,7 @@ export default function AdsPerformance() {
           <div className="flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             <span>⚠</span>
             <span className="flex-1">{error}</span>
-            <button onClick={() => setError('')} className="text-red-400 hover:text-red-200">×</button>
+            <button type="button" onClick={() => setError('')} className="text-red-400 hover:text-red-200">×</button>
           </div>
         )}
 
@@ -200,6 +202,7 @@ export default function AdsPerformance() {
             </select>
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => extract(false)}
                 disabled={isExtracting || !sourceUrl.trim()}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-accent/20 px-3 py-2 text-xs text-accent transition hover:bg-accent/30 disabled:cursor-not-allowed disabled:opacity-40"
@@ -208,6 +211,7 @@ export default function AdsPerformance() {
                 {isExtracting ? 'Extracting…' : 'Extract DNA'}
               </button>
               <button
+                type="button"
                 onClick={generate}
                 disabled={isGenerating || !brandProfile?.id}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-accent to-accent2 px-3 py-2 text-xs text-white transition disabled:cursor-not-allowed disabled:opacity-40"
@@ -248,6 +252,7 @@ export default function AdsPerformance() {
                 </span>
                 {/* Re-extract forces a fresh scrape bypassing 24h cache */}
                 <button
+                  type="button"
                   onClick={() => extract(true)}
                   disabled={isExtracting}
                   className="rounded-full border border-slate-700 bg-transparent px-2.5 py-0.5 text-[10px] text-slate-400 transition hover:border-indigo-500 hover:text-slate-200 disabled:opacity-40"
@@ -346,9 +351,9 @@ export default function AdsPerformance() {
 
                   {/* Navigation */}
                   <div className="flex gap-2">
-                    <button onClick={prevCard} disabled={activeIdx === 0} className="rounded-md border border-slate-700/60 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-30 hover:border-slate-500">← Prev</button>
-                    <button onClick={nextCard} disabled={activeIdx === drafts.length - 1} className="rounded-md border border-slate-700/60 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-30 hover:border-slate-500">Skip →</button>
-                    <button onClick={saveCurrent} className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs text-accent hover:bg-accent/20">✓ Save</button>
+                    <button type="button" onClick={prevCard} disabled={activeIdx === 0} className="rounded-md border border-slate-700/60 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-30 hover:border-slate-500">← Prev</button>
+                    <button type="button" onClick={nextCard} disabled={activeIdx === drafts.length - 1} className="rounded-md border border-slate-700/60 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-30 hover:border-slate-500">Skip →</button>
+                    <button type="button" onClick={saveCurrent} className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs text-accent hover:bg-accent/20">✓ Save</button>
                   </div>
                 </>
               ) : (
@@ -367,6 +372,7 @@ export default function AdsPerformance() {
                   <div className="flex flex-wrap gap-1.5">
                     {drafts.map((d, i) => (
                       <button
+                        type="button"
                         key={d.id}
                         onClick={() => setActiveIdx(i)}
                         className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
@@ -398,6 +404,7 @@ export default function AdsPerformance() {
               {/* Action buttons */}
               <div className="flex flex-col gap-2">
                 <button
+                  type="button"
                   onClick={publishCurrent}
                   disabled={!activeDraft}
                   className="flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-accent to-accent2 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40"
@@ -405,6 +412,7 @@ export default function AdsPerformance() {
                   Publish to Meta
                 </button>
                 <button
+                  type="button"
                   onClick={sendApproval}
                   disabled={!activeDraft || !approvalPhone}
                   className="flex items-center justify-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-medium text-emerald-300 disabled:opacity-40 hover:bg-emerald-500/20"
