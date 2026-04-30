@@ -13,6 +13,7 @@ router.get('/pipeline',          ctrl.pipeline);
 router.get('/hot',               ctrl.hotLeads);
 router.get('/handoff',           ctrl.handoffQueue);
 router.post('/sync-dsp',         authorize('TENANT_ADMIN'), ctrl.syncFromDsp);
+router.post('/digest/send',      authorize('TENANT_ADMIN'), ctrl.sendDigest);
 router.get('/:id',               ctrl.getOne);
 router.post('/',                 ctrl.create);
 router.patch('/:id/stage',       ctrl.updateStage);

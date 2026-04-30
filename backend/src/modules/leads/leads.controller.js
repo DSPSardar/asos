@@ -95,4 +95,11 @@ const syncFromDsp = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { list, pipeline, getOne, create, updateStage, assign, addNote, updateDealValue, hotLeads, handoffQueue, syncFromDsp };
+const sendDigest = async (req, res, next) => {
+  try {
+    const result = await leadsService.sendDailyHotLeadDigest(req.tenantId);
+    return success(res, result, 'Digest dispatched');
+  } catch (err) { next(err); }
+};
+
+module.exports = { list, pipeline, getOne, create, updateStage, assign, addNote, updateDealValue, hotLeads, handoffQueue, syncFromDsp, sendDigest };

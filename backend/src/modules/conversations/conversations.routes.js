@@ -9,6 +9,7 @@ const router = Router();
 router.use(authenticate, requireActiveTenant);
 
 router.get('/',                     ctrl.list);
+router.get('/client/:clientId',     ctrl.byClient);
 router.get('/:id',                  ctrl.getOne);
 router.post('/:id/messages',        ctrl.sendMessage);
 router.patch('/:id/ai',             ctrl.toggleAI);
@@ -16,5 +17,6 @@ router.post('/:id/takeover',        ctrl.takeover);
 router.post('/:id/handback',        ctrl.handback);
 router.post('/:id/close',           ctrl.close);
 router.get('/:id/summary',          ctrl.summary);
+router.get('/:id/suggestion',       ctrl.suggestion);
 
 module.exports = router;

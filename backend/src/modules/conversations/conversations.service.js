@@ -24,6 +24,11 @@ const listConversations = async ({ tenantId, status, page = 1, limit = 20 }) => 
   return { conversations, total };
 };
 
+const listByClient = async ({ tenantId, clientId }) => prisma.conversation.findMany({
+  where: { tenantId, contactId: clientId },
+  orderBy: { lastMessageAt: 'desc' },
+});
+
 const getConversation = async (tenantId, conversationId) => {
   const conv = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
@@ -168,7 +173,30 @@ const getSummary = async (tenantId, conversationId) => {
   return claudeService.generateSummary({ tenantId, messageHistory: messages });
 };
 
+const getSuggestedReply = async (tenantId, conversationId) => {
+  const conv = await prisma.conversation.findFirst({
+    where: { id: conversationId, tenantId },
+    include: { lead: true, contact: true },
+  });
+  if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404, expose: true });
+  const messages = await prisma.message.findMany({
+    where: { tenantId, conversationId },
+    orderBy: { sentAt: 'asc' },
+    take: 20,
+    select: { sender: true, content: true },
+  });
+  const out = await claudeService.runCloser({
+    aiConfig: await prisma.aiConfig.findUnique({ where: { tenantId } }),
+    lead: conv.lead,
+    contact: conv.contact,
+    messageHistory: messages,
+    newMessage: messages[messages.length - 1]?.content || 'Suggest next message',
+    qualifierOutput: { lead_status: conv.lead.scoreLabel, score: Math.max(1, Math.round((conv.lead.aiScore || 10) / 10)), intent: conv.lead.intent || 'medium', problem_summary: conv.lead.problemSummary || '', next_action: conv.lead.nextAction || 'continue_qualifying' },
+  });
+  return { suggestion: out.reply_message };
+};
+
 module.exports = {
   listConversations, getConversation, sendMessage,
-  toggleAI, takeover, handback, closeConversation, getSummary,
+  toggleAI, takeover, handback, closeConversation, getSummary, getSuggestedReply, listByClient,
 };

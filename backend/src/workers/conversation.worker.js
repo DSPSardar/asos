@@ -203,6 +203,7 @@ const processInboundMessage = async (job) => {
       problemSummary:         aiResult.problemSummary || null,
       nextAction:             aiResult.nextAction || null,
       humanFollowupRequired:  !!aiResult.humanFollowupRequired,
+      leadTemperature:        aiResult.leadStatus || 'WARM',
       qualificationData: {
         ...lead.qualificationData,
         ...aiResult.qualificationData,

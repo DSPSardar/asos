@@ -9,5 +9,6 @@ const revenue   = async (req, res, next) => { try { return success(res, await sv
 const aiPerf    = async (req, res, next) => { try { return success(res, await svc.getAIPerformance(req.tenantId, req.query)); } catch(e){next(e);} };
 const agents    = async (req, res, next) => { try { return success(res, await svc.getAgentPerformance(req.tenantId, req.query)); } catch(e){next(e);} };
 const messages  = async (req, res, next) => { try { return success(res, await svc.getMessageVolume(req.tenantId, req.query)); } catch(e){next(e);} };
+const teamPerformance  = async (req, res, next) => { try { return success(res, await svc.getTeamPerformance(req.tenantId, req.query)); } catch(e){next(e);} };
 
-module.exports = { overview, funnel, revenue, aiPerf, agents, messages };
+module.exports = { overview, funnel, revenue, aiPerf, agents, messages, teamPerformance };

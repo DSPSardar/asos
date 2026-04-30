@@ -41,6 +41,10 @@ const envSchema = z.object({
   META_API_URL:            z.string().url().default('https://graph.facebook.com'),
   META_API_VERSION:        z.string().default('v20.0'),
 
+  REPLICATE_API_TOKEN:     z.string().optional(),
+  REPLICATE_MODEL:         z.string().default('black-forest-labs/flux-schnell'),
+  REPORTS_DIR:             z.string().default('uploads/reports'),
+
   GOOGLE_CLIENT_ID:        z.string().optional(),
 
   STRIPE_SECRET_KEY:       z.string().optional(),

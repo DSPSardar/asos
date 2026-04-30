@@ -14,5 +14,6 @@ router.get('/revenue',        ctrl.revenue);
 router.get('/ai-performance', ctrl.aiPerf);
 router.get('/agents',         ctrl.agents);
 router.get('/messages',       ctrl.messages);
+router.get('/team-performance', ctrl.teamPerformance);
 
 module.exports = router;

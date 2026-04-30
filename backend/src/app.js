@@ -22,6 +22,8 @@ const settingsRoutes     = require('./modules/settings/settings.routes');
 const aiConfigRoutes     = require('./modules/ai-config/aiConfig.routes');
 const billingRoutes      = require('./modules/billing/billing.routes');
 const adminRoutes        = require('./modules/admin/admin.routes');
+const contentStudioRoutes = require('./modules/content-studio/content-studio.routes');
+const reportsRoutes = require('./modules/reports/reports.routes');
 const webhookRoutes      = require('./webhooks/webhook.routes');
 
 const createApp = () => {
@@ -93,6 +95,8 @@ const createApp = () => {
   app.use(`${v1}/ai`,             aiConfigRoutes);
   app.use(`${v1}/billing`,        billingRoutes);
   app.use(`${v1}/admin`,          adminRoutes);
+  app.use(`${v1}/content-studio`, contentStudioRoutes);
+  app.use(`${v1}/reports`,        reportsRoutes);
   app.use('/webhooks',            webhookRoutes);
 
   // ── 404 + Error handlers (must be last)

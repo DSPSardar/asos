@@ -1,11 +1,12 @@
 // src/pages/Analytics.jsx — Analytics (route: /analytics).
 // KPI tiles · funnel · source attribution · AI vs human · time-series grid · team table.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { PageHeader } from '@pages/Layout';
+import { analyticsAPI, campaignsAPI, reportsAPI } from '@lib/api';
 
 // ─────────────────────────────────────────────────────────────
 // Mock data
@@ -84,9 +85,29 @@ const RANGE_OPTIONS = [
 export default function Analytics() {
   const [range, setRange] = useState('30d');
   const [toast, setToast] = useState(null);
+  const [teamRows, setTeamRows] = useState(TEAM);
+  const [flags, setFlags] = useState([]);
 
-  const onExport = () => {
-    setToast('Demo: report queued — PDF will email in 30s ✓');
+  useEffect(() => {
+    analyticsAPI.teamPerformance().then((res) => {
+      const mapped = (res.data?.team || []).map((t) => ({
+        id: t.agentId,
+        name: t.name,
+        role: 'Agent',
+        leads: t.responses,
+        won: t.closedWon,
+        conv: `${t.conversionRate}%`,
+        deal: `Resp ${t.avgResponseSeconds}s`,
+        avatar: (t.name || 'A').split(' ').map((s) => s[0]).join('').slice(0, 2),
+      }));
+      if (mapped.length) setTeamRows(mapped);
+    }).catch(() => {});
+    campaignsAPI.underperforming().then((res) => setFlags(res.data || [])).catch(() => {});
+  }, []);
+
+  const onExport = async () => {
+    await reportsAPI.generate({ periodType: range === '7d' ? 'weekly' : 'monthly', from: new Date(Date.now() - 7 * 86400000).toISOString(), to: new Date().toISOString(), language: 'en' });
+    setToast('Report generated and ready for WhatsApp dispatch ✓');
     setTimeout(() => setToast(null), 2400);
   };
 
@@ -114,6 +135,12 @@ export default function Analytics() {
           {KPIS.map((k) => <KpiTile key={k.label} {...k} />)}
         </section>
 
+        {!!flags.length && (
+          <section className="glass-card rounded-xl p-4 text-xs text-amber-300">
+            Underperforming campaigns: {flags.map((f) => f.name).join(', ')}
+          </section>
+        )}
+
         {/* Section B — Funnel */}
         <section>
           <Funnel />
@@ -135,7 +162,7 @@ export default function Analytics() {
 
         {/* Section E — Team table */}
         <section>
-          <TeamTable />
+          <TeamTable rows={teamRows} />
         </section>
       </div>
 
@@ -364,7 +391,7 @@ function TimeSeriesCard({ title, hint, data, dataKey, color, type, xKey = 'd', p
 // ─────────────────────────────────────────────────────────────
 // Section E — Team performance table
 // ─────────────────────────────────────────────────────────────
-function TeamTable() {
+function TeamTable({ rows }) {
   return (
     <div className="glass-card overflow-hidden rounded-xl">
       <div className="border-b border-slate-800/60 px-5 py-4">
@@ -384,7 +411,7 @@ function TeamTable() {
             </tr>
           </thead>
           <tbody>
-            {TEAM.map((t) => (
+            {(rows || TEAM).map((t) => (
               <tr key={t.id} className="border-t border-slate-800/40 hover:bg-surface2/30">
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2">

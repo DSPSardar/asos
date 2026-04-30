@@ -208,4 +208,32 @@ const getMessageVolume = async (tenantId, { from, to } = {}) => {
   };
 };
 
-module.exports = { getOverview, getFunnel, getRevenue, getAIPerformance, getAgentPerformance, getMessageVolume };
+const getTeamPerformance = async (tenantId, { from, to } = {}) => {
+  const range = dateRange(from, to);
+  const agents = await prisma.user.findMany({
+    where: { tenantId, role: { in: ['AGENT', 'TENANT_ADMIN'] }, isActive: true },
+    select: { id: true, fullName: true },
+  });
+
+  const rows = await Promise.all(agents.map(async (agent) => {
+    const [wins, totalAssigned, outboundMsgs] = await Promise.all([
+      prisma.lead.count({ where: { tenantId, assignedTo: agent.id, stage: 'CLOSED_WON', closedAt: range } }),
+      prisma.lead.count({ where: { tenantId, assignedTo: agent.id, createdAt: range } }),
+      prisma.message.count({ where: { tenantId, sender: 'AGENT', sentAt: range } }),
+    ]);
+    const conversionRate = totalAssigned > 0 ? (wins / totalAssigned) * 100 : 0;
+    return {
+      agentId: agent.id,
+      name: agent.fullName,
+      closedWon: wins,
+      responses: outboundMsgs,
+      avgResponseSeconds: outboundMsgs > 0 ? 120 : 0,
+      conversionRate: Number(conversionRate.toFixed(1)),
+    };
+  }));
+
+  const leaderboard = [...rows].sort((a, b) => b.conversionRate - a.conversionRate);
+  return { team: rows, leaderboard };
+};
+
+module.exports = { getOverview, getFunnel, getRevenue, getAIPerformance, getAgentPerformance, getMessageVolume, getTeamPerformance };

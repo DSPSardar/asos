@@ -86,8 +86,10 @@ export const contactsAPI = {
 
 export const conversationsAPI = {
   list:       (params) => api.get('/conversations', { params }),
+  byClient:   (clientId) => api.get(`/conversations/client/${clientId}`),
   get:        (id) => api.get(`/conversations/${id}`),
   sendMessage:(id, content) => api.post(`/conversations/${id}/messages`, { content }),
+  suggestion: (id) => api.get(`/conversations/${id}/suggestion`),
   toggleAI:   (id, aiEnabled) => api.patch(`/conversations/${id}/ai`, { aiEnabled }),
   takeover:   (id) => api.post(`/conversations/${id}/takeover`),
   handback:   (id) => api.post(`/conversations/${id}/handback`),
@@ -102,6 +104,8 @@ export const campaignsAPI = {
   update: (id, data) => api.patch(`/campaigns/${id}`, data),
   sync:   (id) => api.post(`/campaigns/${id}/sync`),
   roi:    (id) => api.get(`/campaigns/${id}/roi`),
+  underperforming: () => api.get('/campaigns/underperforming/list'),
+  recommendations: (id) => api.get(`/campaigns/${id}/recommendations`),
 };
 
 export const analyticsAPI = {
@@ -111,6 +115,21 @@ export const analyticsAPI = {
   aiPerformance: (params) => api.get('/analytics/ai-performance', { params }),
   agents:        (params) => api.get('/analytics/agents', { params }),
   messages:      (params) => api.get('/analytics/messages', { params }),
+  teamPerformance: (params) => api.get('/analytics/team-performance', { params }),
+};
+
+export const contentStudioAPI = {
+  extract: (data) => api.post('/content-studio/extract', data),
+  generate: (data) => api.post('/content-studio/generate', data),
+  image: (prompt) => api.post('/content-studio/image', { prompt }),
+  updateDraft: (id, data) => api.patch(`/content-studio/drafts/${id}`, data),
+  publish: (id) => api.post(`/content-studio/drafts/${id}/publish`),
+  sendApproval: (id, phone) => api.post(`/content-studio/drafts/${id}/send-approval`, { phone }),
+};
+
+export const reportsAPI = {
+  list: () => api.get('/reports'),
+  generate: (data) => api.post('/reports/generate', data),
 };
 
 export const billingAPI = {

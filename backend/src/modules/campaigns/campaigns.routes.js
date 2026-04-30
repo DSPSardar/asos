@@ -15,5 +15,7 @@ router.get('/:id',           ctrl.getOne);
 router.patch('/:id',         ctrl.update);
 router.post('/:id/sync',     ctrl.sync);
 router.get('/:id/roi',       ctrl.roi);
+router.get('/underperforming/list', ctrl.underperforming);
+router.get('/:id/recommendations', ctrl.recommendations);
 
 module.exports = router;

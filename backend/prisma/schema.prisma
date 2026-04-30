@@ -90,6 +90,14 @@ enum CampaignStatus {
   ENDED
 }
 
+enum ContentDraftStatus {
+  GENERATED
+  SAVED
+  SKIPPED
+  PUBLISHED
+  SENT_FOR_APPROVAL
+}
+
 enum ActivityType {
   NOTE
   STAGE_CHANGE
@@ -147,6 +155,10 @@ model Tenant {
   aiConfig        AiConfig?
   subscription    Subscription?
   adsTracking     AdsTracking[]
+  brandProfiles   BrandProfile[]
+  contentSessions ContentSession[]
+  contentDrafts   ContentDraft[]
+  clientReports   ClientReport[]
 
   @@map("tenants")
 }
@@ -234,6 +246,7 @@ model Lead {
   problemSummary          String?    @map("problem_summary")
   nextAction              String?    @map("next_action")
   humanFollowupRequired   Boolean    @default(false) @map("human_followup_required")
+  leadTemperature         String?    @default("WARM") @map("lead_temperature")
 
   // Meta Ads attribution
   metaAdId            String?    @map("meta_ad_id")
@@ -335,6 +348,10 @@ model Campaign {
   spend            Decimal        @default(0) @db.Decimal(12, 2)
   impressions      Int            @default(0)
   clicks           Int            @default(0)
+  ctr              Float          @default(0)
+  cpm              Float          @default(0)
+  cpl              Float          @default(0)
+  conversions      Int            @default(0)
   status           CampaignStatus @default(ACTIVE)
   startedAt        DateTime?      @map("started_at")
   endedAt          DateTime?      @map("ended_at")
@@ -344,9 +361,102 @@ model Campaign {
 
   tenant           Tenant         @relation(fields: [tenantId], references: [id])
   leads            Lead[]
+  contentDrafts    ContentDraft[]
 
   @@index([tenantId])
   @@map("campaigns")
+}
+
+model BrandProfile {
+  id              String    @id @default(uuid())
+  tenantId        String    @map("tenant_id")
+  sourceUrl       String?   @map("source_url")
+  sourceClientId  String?   @map("source_client_id")
+  brandName       String?   @map("brand_name")
+  tone            String?   @db.Text
+  products        Json      @default("[]")
+  audience        Json      @default("[]")
+  colors          Json      @default("[]")
+  logoUrl         String?   @map("logo_url")
+  languageDefault String    @default("en") @map("language_default")
+  rawExtraction   Json      @default("{}") @map("raw_extraction")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  contentSessions ContentSession[]
+  contentDrafts   ContentDraft[]
+
+  @@index([tenantId, createdAt])
+  @@map("brand_profiles")
+}
+
+model ContentSession {
+  id              String    @id @default(uuid())
+  tenantId        String    @map("tenant_id")
+  brandProfileId  String?   @map("brand_profile_id")
+  sourceUrl       String?   @map("source_url")
+  sourceClientId  String?   @map("source_client_id")
+  language        String    @default("en")
+  generatedCount  Int       @default(0) @map("generated_count")
+  swipeDecisions  Json      @default("{}") @map("swipe_decisions")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  brandProfile    BrandProfile? @relation(fields: [brandProfileId], references: [id])
+  drafts          ContentDraft[]
+
+  @@index([tenantId, createdAt])
+  @@map("content_sessions")
+}
+
+model ContentDraft {
+  id              String            @id @default(uuid())
+  tenantId        String            @map("tenant_id")
+  sessionId       String            @map("session_id")
+  brandProfileId  String?           @map("brand_profile_id")
+  campaignId      String?           @map("campaign_id")
+  language        String            @default("en")
+  channel         String
+  subject         String?
+  body            String            @db.Text
+  imageUrl        String?           @map("image_url")
+  palette         Json              @default("{}")
+  status          ContentDraftStatus @default(GENERATED)
+  metadata        Json              @default("{}")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  tenant          Tenant            @relation(fields: [tenantId], references: [id])
+  session         ContentSession    @relation(fields: [sessionId], references: [id])
+  brandProfile    BrandProfile?     @relation(fields: [brandProfileId], references: [id])
+  campaign        Campaign?         @relation(fields: [campaignId], references: [id])
+
+  @@index([tenantId, sessionId])
+  @@index([tenantId, status])
+  @@map("content_drafts")
+}
+
+model ClientReport {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  periodType    String   @map("period_type")
+  language      String   @default("en")
+  reportFrom    DateTime @map("report_from")
+  reportTo      DateTime @map("report_to")
+  summary       String   @db.Text
+  pdfPath       String?  @map("pdf_path")
+  sentToPhone   String?  @map("sent_to_phone")
+  sentAt        DateTime? @map("sent_at")
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("client_reports")
 }
 
 // ─────────────────────────────────────────────

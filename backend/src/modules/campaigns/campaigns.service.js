@@ -62,7 +62,7 @@ const syncMetaData = async (tenantId, campaignId) => {
     const res = await axios.get(url, {
       params: {
         access_token: tenant.metaAccessToken,
-        fields: 'spend,impressions,clicks,cpc,ctr,reach',
+        fields: 'spend,impressions,clicks,cpc,ctr,reach,actions,action_values,conversions',
         date_preset: 'maximum',
       },
       timeout: 10000,
@@ -77,6 +77,10 @@ const syncMetaData = async (tenantId, campaignId) => {
         spend:       parseFloat(data.spend || 0),
         impressions: parseInt(data.impressions || 0),
         clicks:      parseInt(data.clicks || 0),
+        ctr:         parseFloat(data.ctr || 0),
+        cpm:         parseFloat(data.cpm || 0),
+        cpl:         parseFloat(data.cpc || 0),
+        conversions: parseInt(data.conversions || 0),
       },
     });
 
@@ -112,4 +116,27 @@ const getCampaignROI = async (tenantId, campaignId) => {
   };
 };
 
-module.exports = { listCampaigns, getCampaign, createCampaign, updateCampaign, syncMetaData, getCampaignROI };
+const underperforming = async (tenantId) => {
+  const campaigns = await prisma.campaign.findMany({ where: { tenantId } });
+  return campaigns
+    .filter((c) => Number(c.ctr || 0) < 1 || Number(c.cpl || 0) > 1000)
+    .map((c) => ({ id: c.id, name: c.name, reasons: [Number(c.ctr || 0) < 1 ? 'low_ctr' : null, Number(c.cpl || 0) > 1000 ? 'high_cpl' : null].filter(Boolean) }));
+};
+
+const recommendations = async (tenantId, campaignId) => {
+  const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, tenantId } });
+  if (!campaign) throw Object.assign(new Error('Campaign not found'), { statusCode: 404, expose: true });
+  const aiConfig = await prisma.aiConfig.findUnique({ where: { tenantId } });
+  const claudeService = require('../../services/claude.service');
+  const out = await claudeService.runCloser({
+    aiConfig,
+    lead: { id: 'campaign', stage: 'DIAGNOSED' },
+    contact: { name: 'Marketer' },
+    messageHistory: [],
+    newMessage: `Suggest campaign optimization for ${campaign.name} with metrics CTR:${campaign.ctr}, CPM:${campaign.cpm}, CPL:${campaign.cpl}, conversions:${campaign.conversions}`,
+    qualifierOutput: { lead_status: 'WARM', score: 7, intent: 'medium', problem_summary: 'campaign optimization', next_action: 'continue_qualifying' },
+  });
+  return { recommendation: out.reply_message };
+};
+
+module.exports = { listCampaigns, getCampaign, createCampaign, updateCampaign, syncMetaData, getCampaignROI, underperforming, recommendations };

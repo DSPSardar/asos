@@ -63,4 +63,18 @@ const summary = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { list, getOne, sendMessage, toggleAI, takeover, handback, close, summary };
+const suggestion = async (req, res, next) => {
+  try {
+    const data = await svc.getSuggestedReply(req.tenantId, req.params.id);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const byClient = async (req, res, next) => {
+  try {
+    const data = await svc.listByClient({ tenantId: req.tenantId, clientId: req.params.clientId });
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+module.exports = { list, getOne, sendMessage, toggleAI, takeover, handback, close, summary, suggestion, byClient };

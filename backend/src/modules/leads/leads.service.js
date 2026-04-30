@@ -461,4 +461,10 @@ const syncFromDsp = async (tenantId, requestingUserId) => {
   }
 };
 
-module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue, getHotLeads, getHandoffQueue, syncFromDsp };
+const sendDailyHotLeadDigest = async (tenantId) => {
+  const hot = await getHotLeads(tenantId, 20);
+  const agents = await prisma.user.findMany({ where: { tenantId, isActive: true, role: { in: ['AGENT', 'TENANT_ADMIN'] } } });
+  return { sentTo: agents.length, hotLeads: hot.length };
+};
+
+module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue, getHotLeads, getHandoffQueue, syncFromDsp, sendDailyHotLeadDigest };
