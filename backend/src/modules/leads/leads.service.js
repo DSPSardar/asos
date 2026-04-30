@@ -259,7 +259,10 @@ const getHandoffQueue = async (tenantId) => {
   const convs = await prisma.conversation.findMany({
     where: {
       tenantId,
-      status: 'NEEDS_HUMAN',
+      OR: [
+        { status: 'HUMAN_TAKEOVER' },
+        { lead: { humanFollowupRequired: true, stage: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] } } },
+      ],
     },
     orderBy: { lastMessageAt: 'desc' },
     include: {
