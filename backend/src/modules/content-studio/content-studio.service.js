@@ -105,6 +105,7 @@ const BRAND_SCHEMA = `Return ONLY valid JSON. No prose, no markdown.
 
 {
   "brand_name": "<string>",
+  "industry": "<one of: real_estate | software | ecommerce | saas | finance | education | healthcare | hospitality | retail | agency | manufacturing | other>",
   "tagline": "<short brand tagline or null>",
   "tone": "<2–4 sentences: writing style, voice, personality, formality level>",
   "products": ["<product or service 1>", "..."],
@@ -117,8 +118,9 @@ const BRAND_SCHEMA = `Return ONLY valid JSON. No prose, no markdown.
 }
 
 Rules:
+- Extract brand DNA for ANY type of business — real estate, e-commerce, SaaS, software, retail, restaurant, agency, anything
 - Use null or [] for any field that cannot be determined from the content
-- Do NOT invent data — extract only what is clearly present
+- Do NOT invent data — extract only what is clearly present on the page
 - colors: only hex values genuinely used as brand colors (not incidental values)
 - logo_url: only if an image clearly represents the brand logo`;
 
@@ -367,9 +369,8 @@ const extractBrandDNA = async ({ tenantId, sourceUrl, language = 'en', forceRefr
       model:      QUALIFIER_MODEL,
       max_tokens: 900,
       temperature: 0,
-      system: `You are a professional brand analyst. Extract structured brand DNA from website content.
-Return strict JSON only. Never invent data — use null or [] for anything not clearly present in the content.
-Do not apply any sales or real estate perspective. Extract only what is genuinely on this page.`,
+      system: `You are a professional brand analyst. Your job is to extract structured brand DNA from any website — real estate, e-commerce, software, SaaS, retail, finance, healthcare, or any other industry. Every legitimate business has a brand and you can extract it.
+Return strict JSON only. Never invent data — use null or [] for anything not clearly present in the content. Never refuse to extract — always return the JSON structure with whatever data is available.`,
       userContent,
     }));
   } catch (err) {
@@ -378,8 +379,10 @@ Do not apply any sales or real estate perspective. Extract only what is genuinel
   }
 
   // 6. Normalize — merge scraped signals with Claude output
+  const KNOWN_INDUSTRIES = ['real_estate','software','ecommerce','saas','finance','education','healthcare','hospitality','retail','agency','manufacturing','other'];
   const normalized = {
     brand_name:            parsed.brand_name           || domainToBrand(sourceUrl),
+    industry:              KNOWN_INDUSTRIES.includes(parsed.industry) ? parsed.industry : 'other',
     tagline:               typeof parsed.tagline === 'string' ? parsed.tagline.trim() : null,
     tone:                  typeof parsed.tone === 'string' ? parsed.tone.trim() : '',
     products:              normalizeArray(parsed.products),
@@ -422,12 +425,32 @@ Do not apply any sales or real estate perspective. Extract only what is genuinel
 // GENERATE AD COPY VARIANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Industry-specific copy guidance — adapts channel tone and angle selection
+// to the actual type of business, not a generic one-size-fits-all template.
+const INDUSTRY_COPY_HINTS = {
+  real_estate:  'Focus on location value, ROI, lifestyle uplift, and investment security. For WhatsApp: conversational tone, Urdu-English mix if relevant.',
+  software:     'Focus on efficiency gains, time saved, and technical credibility. Avoid jargon — lead with the outcome, not the feature.',
+  ecommerce:    'Focus on product benefits, deals, social proof, and ease of purchase. WhatsApp: urgent, deal-driven. Instagram: visual and aspirational.',
+  saas:         'Focus on pain elimination, time-to-value, and integrations. Use numbers (e.g. "10x faster") only if stated in brand profile.',
+  finance:      'Focus on trust, returns, security, and regulatory credibility. Tone: authoritative but approachable.',
+  education:    'Focus on outcomes (career, skills, income), flexibility, and credibility. Tone: motivational and supportive.',
+  healthcare:   'Focus on patient outcomes, convenience, and trust. Avoid over-promising. Tone: warm and reassuring.',
+  hospitality:  'Focus on experience, comfort, and memorable moments. Visual language. Instagram and Meta are primary channels.',
+  retail:       'Focus on product quality, value, and the lifestyle it enables. WhatsApp: promotional/deal-driven.',
+  agency:       'Focus on results delivered, client wins, and expertise. Tone: confident but not boastful.',
+  manufacturing:'Focus on quality, reliability, and scale. B2B tone: professional, specification-aware.',
+  other:        'Use the extracted tone and USPs to guide copy style. Lead with the strongest value proposition.',
+};
+
 const buildGenerationPrompt = (profile, count, language) => {
-  const raw  = profile.rawExtraction || {};
-  const lang = language === 'ur' ? 'Urdu-English mix (Pakistani urban professional register)' : 'English';
+  const raw      = profile.rawExtraction || {};
+  const lang     = language === 'ur' ? 'Urdu-English mix (Pakistani urban professional register)' : 'English';
+  const industry = raw.industry || 'other';
+  const hint     = INDUSTRY_COPY_HINTS[industry] || INDUSTRY_COPY_HINTS.other;
 
   const brandContext = [
     `Brand: ${profile.brandName}`,
+    `Industry: ${industry}`,
     raw.tagline                        && `Tagline: ${raw.tagline}`,
     `Tone: ${profile.tone || 'Professional and trustworthy'}`,
     profile.products?.length           && `Products/Services: ${profile.products.join(', ')}`,
@@ -438,10 +461,13 @@ const buildGenerationPrompt = (profile, count, language) => {
     `Source: ${profile.sourceUrl}`,
   ].filter(Boolean).join('\n');
 
-  return `You are a senior performance marketing copywriter specializing in high-conversion ad copy.
+  return `You are a senior performance marketing copywriter who writes high-converting ad copy for any industry.
 
 BRAND PROFILE:
 ${brandContext}
+
+INDUSTRY COPY GUIDANCE:
+${hint}
 
 TASK:
 Generate exactly ${count} distinct ad copy variants in ${lang}.
@@ -456,8 +482,9 @@ COPY ANGLES — each variant must use a different one, cycling through:
 fomo | roi | trust | aspiration | scarcity | problem | curiosity
 
 RULES:
-- Never invent specific numbers or claims not stated in the brand profile
-- Every variant must open with a completely different hook
+- Never invent specific numbers or claims not in the brand profile above
+- Every variant must open with a completely different hook — no two variants can start similarly
+- Copy must feel written specifically for this brand's industry and audience, not generic
 - Maximum 1 emoji per variant, only if it genuinely fits the brand tone
 
 Return a JSON array of exactly ${count} objects:

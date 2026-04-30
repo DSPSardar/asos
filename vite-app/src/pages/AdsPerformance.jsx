@@ -53,6 +53,7 @@ export default function AdsPerformance() {
       : typeof v === 'string' && v.trim() ? v.split(',').map((s) => s.trim()).filter(Boolean)
       : [];
     return {
+      industry:   raw.industry || null,
       tagline:    raw.tagline || null,
       products:   toArr(brandProfile?.products  || raw.products),
       audience:   toArr(brandProfile?.audience  || raw.audience),
@@ -231,7 +232,13 @@ export default function AdsPerformance() {
                   {dna.tagline && <p className="text-xs text-slate-400 mt-0.5 italic">"{dna.tagline}"</p>}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Industry badge */}
+                {dna.industry && (
+                  <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-300 capitalize">
+                    {dna.industry.replace(/_/g, ' ')}
+                  </span>
+                )}
                 {/* Scraped indicator */}
                 <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${dna.scraped ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'}`}>
                   {dna.scraped ? '✓ Live scraped' : '⚠ URL-only inference'}
