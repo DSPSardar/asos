@@ -142,13 +142,16 @@ const domainToBrand = (url) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX 3a: DETERMINISTIC JSON PARSING — assistant message prefill
+// DETERMINISTIC JSON PARSING
 //
-// By seeding the assistant's opening token (`{` or `[`), Claude is forced to
-// start outputting the JSON structure immediately — no prose preamble, no
-// markdown fences. We then prepend the seed back onto the completion text
-// and parse strictly, throwing on failure rather than silently swallowing it.
+// Assistant message prefill (`{ role:'assistant', content:'{' }`) is NOT
+// supported by claude-sonnet-4-6. Instead we enforce JSON output via a strong
+// end-of-prompt instruction and extract the first valid JSON block from the
+// raw response text. This works for every Claude model.
 // ─────────────────────────────────────────────────────────────────────────────
+
+const JSON_OBJECT_INSTRUCTION = '\n\nIMPORTANT: Respond with a single raw JSON object only. Start your response with { and end with }. No markdown fences, no prose, no explanation — pure JSON.';
+const JSON_ARRAY_INSTRUCTION  = '\n\nIMPORTANT: Respond with a single raw JSON array only. Start your response with [ and end with ]. No markdown fences, no prose, no explanation — pure JSON.';
 
 const callClaudeForObject = async ({ model, max_tokens, temperature, system, userContent }) => {
   const resp = await anthropic.messages.create({
@@ -157,20 +160,19 @@ const callClaudeForObject = async ({ model, max_tokens, temperature, system, use
     temperature,
     system,
     messages: [
-      { role: 'user',      content: userContent },
-      { role: 'assistant', content: '{' },   // ← prefill forces JSON object output
+      { role: 'user', content: userContent + JSON_OBJECT_INSTRUCTION },
     ],
   });
 
-  const completion = resp.content?.[0]?.text || '';
-  const raw        = '{' + completion;         // reattach the prefill seed
+  const raw = resp.content?.[0]?.text || '';
 
   let parsed;
   try {
     parsed = JSON.parse(raw);
-  } catch (parseErr) {
-    // Attempt to recover by finding the outermost { } block
-    const match = raw.match(/\{[\s\S]*\}/);
+  } catch {
+    // Strip markdown fences if present, then find outermost { } block
+    const stripped = raw.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '');
+    const match = stripped.match(/\{[\s\S]*\}/);
     if (match) {
       try { parsed = JSON.parse(match[0]); }
       catch { parsed = null; }
@@ -195,19 +197,19 @@ const callClaudeForArray = async ({ model, max_tokens, temperature, system, user
     temperature,
     system,
     messages: [
-      { role: 'user',      content: userContent },
-      { role: 'assistant', content: '[' },   // ← prefill forces JSON array output
+      { role: 'user', content: userContent + JSON_ARRAY_INSTRUCTION },
     ],
   });
 
-  const completion = resp.content?.[0]?.text || '';
-  const raw        = '[' + completion;
+  const raw = resp.content?.[0]?.text || '';
 
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    const match = raw.match(/\[[\s\S]*\]/);
+    // Strip markdown fences if present, then find outermost [ ] block
+    const stripped = raw.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '');
+    const match = stripped.match(/\[[\s\S]*\]/);
     if (match) {
       try { parsed = JSON.parse(match[0]); }
       catch { parsed = null; }
@@ -362,7 +364,7 @@ const extractBrandDNA = async ({ tenantId, sourceUrl, language = 'en', forceRefr
     BRAND_SCHEMA,
   ].join('\n');
 
-  // 5. Call Claude — deterministic JSON via assistant prefill
+  // 5. Call Claude — deterministic JSON (JSON_OBJECT_INSTRUCTION appended in callClaudeForObject)
   let parsed, usage;
   try {
     ({ parsed, usage } = await callClaudeForObject({
@@ -502,7 +504,7 @@ const generateVariants = async ({ tenantId, brandProfileId, count = 10, language
     data: { tenantId, brandProfileId, sourceUrl: profile.sourceUrl, language, generatedCount: safeCount },
   });
 
-  // Call Claude Sonnet — deterministic JSON via array prefill
+  // Call Claude Sonnet — deterministic JSON (JSON_ARRAY_INSTRUCTION appended in callClaudeForArray)
   const userContent = buildGenerationPrompt(profile, safeCount, language);
 
   let variants;
