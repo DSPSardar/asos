@@ -27,6 +27,20 @@ export default function AdsPerformance() {
     published: drafts.filter((d) => d.status === 'PUBLISHED').length,
     approval: drafts.filter((d) => d.status === 'SENT_FOR_APPROVAL').length,
   }), [drafts]);
+  const dna = useMemo(() => {
+    const raw = brandProfile?.rawExtraction || {};
+    const toArray = (value) => {
+      if (Array.isArray(value)) return value.filter(Boolean).map(String);
+      if (typeof value === 'string' && value.trim()) return value.split(',').map((v) => v.trim()).filter(Boolean);
+      return [];
+    };
+    return {
+      products: toArray(brandProfile?.products || raw.products),
+      audience: toArray(brandProfile?.audience || raw.audience),
+      colors: toArray(brandProfile?.colors || raw.colors),
+      logoUrl: brandProfile?.logoUrl || raw.logo_url || null,
+    };
+  }, [brandProfile]);
 
   const extract = async () => {
     const res = await contentStudioAPI.extract({ sourceUrl, language });
@@ -93,6 +107,92 @@ export default function AdsPerformance() {
             </div>
           </div>
         </section>
+
+        {brandProfile && (
+          <section className="glass-card rounded-xl p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold tracking-tight text-slate-100">Extracted Brand DNA</h2>
+              <span className="rounded-full border border-slate-700/60 bg-surface/40 px-2 py-0.5 text-[10px] uppercase tracking-wider text-slate-400">
+                {language === 'ur' ? 'Urdu' : 'English'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div className="rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">Brand Name</div>
+                <div className="mt-1 text-sm text-slate-200">{brandProfile.brandName || 'N/A'}</div>
+              </div>
+              <div className="rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">Source URL</div>
+                <div className="mt-1 truncate text-sm text-slate-300">{brandProfile.sourceUrl || 'N/A'}</div>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-slate-500">Tone Summary</div>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">
+                {brandProfile.tone || 'No tone extracted yet.'}
+              </p>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div className="rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">Products</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {dna.products.length
+                    ? dna.products.map((item) => (
+                      <span key={`prod-${item}`} className="rounded-full border border-slate-700/60 bg-bg/50 px-2 py-0.5 text-[11px] text-slate-300">
+                        {item}
+                      </span>
+                    ))
+                    : <span className="text-xs text-slate-500">No products extracted</span>}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">Audience</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {dna.audience.length
+                    ? dna.audience.map((item) => (
+                      <span key={`aud-${item}`} className="rounded-full border border-slate-700/60 bg-bg/50 px-2 py-0.5 text-[11px] text-slate-300">
+                        {item}
+                      </span>
+                    ))
+                    : <span className="text-xs text-slate-500">No audience extracted</span>}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">Brand Colors</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {dna.colors.length
+                    ? dna.colors.map((color) => (
+                      <div key={`color-${color}`} className="flex items-center gap-1.5 rounded border border-slate-700/60 bg-bg/50 px-2 py-1">
+                        <span className="inline-block h-3 w-3 rounded-sm border border-slate-600/60" style={{ backgroundColor: color }} />
+                        <span className="text-[11px] text-slate-300">{color}</span>
+                      </div>
+                    ))
+                    : <span className="text-xs text-slate-500">No colors extracted</span>}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">Logo URL</div>
+                {dna.logoUrl ? (
+                  <a href={dna.logoUrl} target="_blank" rel="noreferrer" className="mt-1 block truncate text-sm text-slate-300 hover:text-slate-100">
+                    {dna.logoUrl}
+                  </a>
+                ) : (
+                  <div className="mt-1 text-xs text-slate-500">No logo URL extracted</div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+              <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">Raw Extraction</div>
+              <pre className="max-h-52 overflow-auto rounded-md border border-slate-800/60 bg-bg/60 p-2 text-[11px] leading-relaxed text-slate-300">
+                {JSON.stringify(brandProfile.rawExtraction || {}, null, 2)}
+              </pre>
+            </div>
+          </section>
+        )}
 
         <section className="glass-card overflow-hidden rounded-xl">
           <div className="flex items-center justify-between border-b border-slate-800/60 px-5 py-4">
