@@ -35,8 +35,9 @@ export default function AdsPerformance() {
   const [approvalPhone,  setApprovalPhone]  = useState('');
   const [status,         setStatus]         = useState('');
   const [error,          setError]          = useState('');
-  const [isExtracting,   setIsExtracting]   = useState(false);
-  const [isGenerating,   setIsGenerating]   = useState(false);
+  const [isExtracting,    setIsExtracting]    = useState(false);
+  const [isGenerating,    setIsGenerating]    = useState(false);
+  const [imageGeneratingId, setImageGeneratingId] = useState(null); // draftId currently generating image
 
   const activeDraft = drafts[activeIdx] || null;
 
@@ -130,6 +131,24 @@ export default function AdsPerformance() {
       setDrafts((p) => p.map((d) => (d.id === activeDraft.id ? { ...d, status: 'SENT_FOR_APPROVAL' } : d)));
       setStatus('Sent for approval via WhatsApp');
     } catch (e) { setError(e.message); }
+  };
+
+  const generateDraftImage = async (draftId) => {
+    setImageGeneratingId(draftId);
+    setError('');
+    try {
+      const res = await contentStudioAPI.draftImage(draftId);
+      // res = { success, data: { draft, imageUrl, prompt }, message }
+      const updatedDraft = res?.data?.draft ?? res?.draft;
+      if (updatedDraft) {
+        setDrafts((p) => p.map((d) => d.id === draftId ? updatedDraft : d));
+      }
+      setStatus('Image generated');
+    } catch (e) {
+      setError(e.message || 'Image generation failed — try again.');
+    } finally {
+      setImageGeneratingId(null);
+    }
   };
 
   const nextCard = () => setActiveIdx((i) => Math.min(i + 1, drafts.length - 1));
@@ -354,7 +373,40 @@ export default function AdsPerformance() {
                     <button type="button" onClick={prevCard} disabled={activeIdx === 0} className="rounded-md border border-slate-700/60 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-30 hover:border-slate-500">← Prev</button>
                     <button type="button" onClick={nextCard} disabled={activeIdx === drafts.length - 1} className="rounded-md border border-slate-700/60 px-3 py-1.5 text-xs text-slate-400 disabled:opacity-30 hover:border-slate-500">Skip →</button>
                     <button type="button" onClick={saveCurrent} className="rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs text-accent hover:bg-accent/20">✓ Save</button>
+                    <button
+                      type="button"
+                      onClick={() => generateDraftImage(activeDraft.id)}
+                      disabled={!!imageGeneratingId}
+                      className="ml-auto flex items-center gap-1.5 rounded-md border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-300 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {imageGeneratingId === activeDraft.id ? <Spinner /> : '🎨'}
+                      {imageGeneratingId === activeDraft.id ? 'Generating…' : 'Generate Image'}
+                    </button>
                   </div>
+
+                  {/* Generated image */}
+                  {activeDraft.imageUrl && (
+                    <div className="overflow-hidden rounded-xl border border-slate-700/60">
+                      <img
+                        src={activeDraft.imageUrl}
+                        alt="AI-generated ad visual"
+                        className="w-full object-cover"
+                        onLoad={(e) => { e.target.style.opacity = 1; }}
+                        style={{ opacity: 0, transition: 'opacity 0.3s ease' }}
+                        onError={(e) => { e.target.parentElement.style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
+                  {/* Image loading placeholder (Pollinations can take a few seconds to render) */}
+                  {imageGeneratingId === activeDraft.id && (
+                    <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-violet-500/30 bg-violet-500/5">
+                      <div className="text-center">
+                        <div className="mx-auto mb-2 h-5 w-5 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-400" />
+                        <p className="text-xs text-violet-400">Creating your ad visual…</p>
+                        <p className="mt-1 text-[10px] text-slate-500">Using AI image generation</p>
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="flex h-44 items-center justify-center rounded-lg border border-dashed border-slate-700 text-sm text-slate-500">

@@ -551,16 +551,84 @@ const generateVariants = async ({ tenantId, brandProfileId, count = 10, language
 // IMAGE GENERATION
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// IMAGE GENERATION
+// Default: Pollinations.ai — free, no token, returns image as a URL
+// Opt-in:  Replicate flux-schnell — if REPLICATE_API_TOKEN is set in env
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CHANNEL_STYLE = {
+  meta_ad:           'Facebook / Instagram ad creative, clean bold design, attention-grabbing',
+  whatsapp_message:  'clean lifestyle photo, warm and approachable, mobile-friendly',
+  instagram_caption: 'vibrant Instagram visual, lifestyle photography, editorial',
+  email:             'professional email header, clean corporate, wide format',
+};
+
+const buildImagePrompt = (draft, brandProfile) => {
+  const raw      = brandProfile?.rawExtraction || {};
+  const brand    = brandProfile?.brandName || 'brand';
+  const industry = raw.industry || 'business';
+  const colors   = (Array.isArray(raw.colors) ? raw.colors : []).slice(0, 3).join(', ');
+  const anchor   = draft.subject || (draft.body || '').slice(0, 80);
+  const style    = CHANNEL_STYLE[draft.channel] || 'professional advertising visual';
+  const colorHint = colors ? `, brand colors: ${colors}` : '';
+  return `${style} for ${brand} (${industry}), visual concept: "${anchor}"${colorHint}, photorealistic, high quality, 4k, no text overlay`;
+};
+
+// Low-level: generate an image URL from a text prompt.
+// Returns a URL string pointing to the generated image.
 const generateImage = async ({ prompt }) => {
-  if (!env.REPLICATE_API_TOKEN) {
-    throw Object.assign(new Error('Replicate token missing'), { statusCode: 400, expose: true });
+  if (env.REPLICATE_API_TOKEN) {
+    // Replicate flux-schnell via the modern Models API
+    const [owner, model] = (env.REPLICATE_MODEL || 'black-forest-labs/flux-schnell').split('/');
+    const createRes = await axios.post(
+      `https://api.replicate.com/v1/models/${owner}/${model}/predictions`,
+      { input: { prompt, aspect_ratio: '1:1', output_format: 'webp', output_quality: 80 } },
+      { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 10000 },
+    );
+    let prediction = createRes.data;
+
+    // Poll until succeeded or failed (max 60s, 3s intervals)
+    for (let i = 0; i < 20 && ['starting', 'processing'].includes(prediction.status); i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const pollRes = await axios.get(
+        `https://api.replicate.com/v1/predictions/${prediction.id}`,
+        { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}` }, timeout: 10000 },
+      );
+      prediction = pollRes.data;
+    }
+
+    if (prediction.status !== 'succeeded') {
+      throw Object.assign(new Error('Replicate image generation failed or timed out'), { statusCode: 503, expose: true });
+    }
+    const output = prediction.output;
+    return Array.isArray(output) ? output[0] : output;
   }
-  const res = await axios.post(
-    'https://api.replicate.com/v1/predictions',
-    { version: env.REPLICATE_MODEL, input: { prompt } },
-    { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}` } },
-  );
-  return res.data;
+
+  // Free fallback: Pollinations.ai — no token needed, just a URL
+  // The URL itself serves the image (generated on first request, cached afterwards)
+  const seed = Math.floor(Math.random() * 999999);
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
+};
+
+// High-level: generate image for a specific draft and persist the URL to DB.
+const generateDraftImage = async ({ tenantId, draftId, prompt }) => {
+  const draft = await prisma.contentDraft.findFirst({
+    where: { id: draftId, tenantId },
+    include: { brandProfile: true },
+  });
+  if (!draft) throw Object.assign(new Error('Draft not found'), { statusCode: 404, expose: true });
+
+  const imagePrompt = (typeof prompt === 'string' && prompt.trim()) ? prompt.trim() : buildImagePrompt(draft, draft.brandProfile);
+  const imageUrl    = await generateImage({ prompt: imagePrompt });
+
+  const updated = await prisma.contentDraft.update({
+    where: { id: draftId },
+    data: { imageUrl },
+  });
+
+  logger.info({ tenantId, draftId, provider: env.REPLICATE_API_TOKEN ? 'replicate' : 'pollinations' }, '🎨 Draft image generated');
+  return { draft: updated, imageUrl, prompt: imagePrompt };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -594,6 +662,7 @@ module.exports = {
   extractBrandDNA,
   generateVariants,
   generateImage,
+  generateDraftImage,
   updateDraft,
   publishToMeta,
   sendForApproval,

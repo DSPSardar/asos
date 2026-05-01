@@ -122,6 +122,7 @@ export const contentStudioAPI = {
   extract: (data) => api.post('/content-studio/extract', data),
   generate: (data) => api.post('/content-studio/generate', data),
   image: (prompt) => api.post('/content-studio/image', { prompt }),
+  draftImage: (id, prompt) => api.post(`/content-studio/drafts/${id}/image`, prompt ? { prompt } : {}),
   updateDraft: (id, data) => api.patch(`/content-studio/drafts/${id}`, data),
   publish: (id) => api.post(`/content-studio/drafts/${id}/publish`),
   sendApproval: (id, phone) => api.post(`/content-studio/drafts/${id}/send-approval`, { phone }),

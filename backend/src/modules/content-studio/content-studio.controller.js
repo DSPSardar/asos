@@ -65,6 +65,16 @@ const image = async (req, res, next) => {
   } catch (e) { return next(e); }
 };
 
+const draftImage = async (req, res, next) => {
+  try {
+    // prompt is optional — omit to let service auto-build it from draft + brand profile
+    const prompt = req.body?.prompt
+      ? z.string().min(1).max(600).parse(req.body.prompt)
+      : undefined;
+    return success(res, await svc.generateDraftImage({ tenantId: req.tenantId, draftId: req.params.id, prompt }), 'Image generated');
+  } catch (e) { return next(e); }
+};
+
 const updateDraft = async (req, res, next) => {
   try {
     return success(res, await svc.updateDraft({ tenantId: req.tenantId, draftId: req.params.id, data: req.body }), 'Draft updated');
@@ -84,4 +94,4 @@ const approval = async (req, res, next) => {
   } catch (e) { return next(e); }
 };
 
-module.exports = { extract, generate, image, updateDraft, publish, approval };
+module.exports = { extract, generate, image, draftImage, updateDraft, publish, approval };

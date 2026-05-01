@@ -10,6 +10,7 @@ router.post('/extract', ctrl.extract);
 router.post('/generate', ctrl.generate);
 router.post('/image', ctrl.image);
 router.patch('/drafts/:id', ctrl.updateDraft);
+router.post('/drafts/:id/image', ctrl.draftImage);
 router.post('/drafts/:id/publish', ctrl.publish);
 router.post('/drafts/:id/send-approval', ctrl.approval);
 
