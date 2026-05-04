@@ -4,14 +4,19 @@ import { useAuthStore } from '@stores/auth.store';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
+/** API origin for static `/uploads/*` (set in production when SPA host ≠ API host). */
+const UPLOADS_ORIGIN = String(import.meta.env.VITE_UPLOADS_ORIGIN || '').trim().replace(/\/+$/, '');
+
 /** Build absolute URL for paths like `/uploads/...` (served by API, not SPA host). */
 export function resolveUploadUrl(pathOrUrl) {
   if (!pathOrUrl) return '';
   const s = String(pathOrUrl).trim();
   if (/^https?:\/\//i.test(s)) return s;
   const rel = s.startsWith('/') ? s : `/${s}`;
+  if (UPLOADS_ORIGIN) return `${UPLOADS_ORIGIN}${rel}`;
   const origin = String(BASE_URL).replace(/\/api\/v1\/?$/i, '').replace(/\/+$/, '');
   if (origin) return `${origin}${rel}`;
+  if (typeof window !== 'undefined') return `${window.location.origin}${rel}`;
   return rel;
 }
 

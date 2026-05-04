@@ -26,6 +26,10 @@ SPA_WEBROOT=${SPA_WEBROOT:-/home/app/public_html}
 LANDING_WEBROOT=${LANDING_WEBROOT:-/var/www/getaisales}
 VITE_API_URL=${VITE_API_URL:-https://api.getaisales.com/api/v1}
 VITE_APP_URL=${VITE_APP_URL:-https://app.getaisales.com}
+# SPA <img> for /uploads/* must hit the API host, not the app host. Derived from VITE_API_URL if unset.
+if [[ -z "${VITE_UPLOADS_ORIGIN:-}" && "${VITE_API_URL:-}" =~ ^https?:// ]]; then
+  export VITE_UPLOADS_ORIGIN="$(printf '%s' "$VITE_API_URL" | sed -E 's#/api/v1/?$##')"
+fi
 # Same value as GOOGLE_CLIENT_ID in .env.production — Google Sign-In embeds it in JS (not secret).
 VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID:-}
 
@@ -131,6 +135,7 @@ if $need_spa_build; then
   cd "$ASOS_DIR/vite-app"
   npm ci --silent
   VITE_API_URL="$VITE_API_URL" VITE_APP_URL="$VITE_APP_URL" \
+  VITE_UPLOADS_ORIGIN="$VITE_UPLOADS_ORIGIN" \
   VITE_GOOGLE_CLIENT_ID="$VITE_GOOGLE_CLIENT_ID" npm run build
   cd "$ASOS_DIR"
 

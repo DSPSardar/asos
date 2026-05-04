@@ -41,6 +41,11 @@ export default function AdsPerformance() {
 
   const activeDraft = drafts[activeIdx] || null;
 
+  const imagePreviewSrc = useMemo(
+    () => (activeDraft?.imageUrl ? resolveUploadUrl(activeDraft.imageUrl) : ''),
+    [activeDraft?.imageUrl],
+  );
+
   const kpis = useMemo(() => ({
     total:    drafts.length,
     saved:    drafts.filter((d) => d.status === 'SAVED').length,
@@ -394,19 +399,30 @@ export default function AdsPerformance() {
                     </button>
                   </div>
 
-                  {/* Generated image */}
+                  {/* Generated image — below Generate Image; src is API origin + /uploads/... */}
                   {activeDraft.imageUrl && (
-                    <div className="overflow-hidden rounded-xl border border-slate-700/60">
-                      <img
-                        src={resolveUploadUrl(activeDraft.imageUrl)}
-                        alt="AI-generated ad visual"
-                        className="w-full object-cover"
-                        onLoad={(e) => { e.target.style.opacity = 1; }}
-                        style={{ opacity: 0, transition: 'opacity 0.3s ease' }}
-                        onError={() => {
-                          setError('Image could not be loaded. Ensure your API serves /uploads (or proxy /uploads to the API).');
-                        }}
-                      />
+                    <div className="space-y-2">
+                      <div className="overflow-hidden rounded-xl border border-slate-700/60 bg-slate-900/40">
+                        <img
+                          src={imagePreviewSrc}
+                          alt="AI-generated ad visual"
+                          className="w-full object-cover"
+                          onError={() => {
+                            setError('Image could not be loaded. Rebuild SPA with VITE_UPLOADS_ORIGIN or proxy /uploads to the API.');
+                          }}
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                        <span className="uppercase tracking-wider text-slate-600">Preview</span>
+                        <a
+                          href={imagePreviewSrc}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="truncate text-violet-400 underline decoration-violet-500/40 hover:text-violet-300"
+                        >
+                          Open image in new tab
+                        </a>
+                      </div>
                     </div>
                   )}
                   {/* Image loading placeholder (Pollinations can take a few seconds to render) */}
