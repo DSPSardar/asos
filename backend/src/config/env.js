@@ -42,7 +42,7 @@ const envSchema = z.object({
   META_API_VERSION:        z.string().default('v20.0'),
 
   REPLICATE_API_TOKEN:     z.string().optional(),
-  REPLICATE_MODEL:         z.string().default('black-forest-labs/flux-schnell'),
+  REPLICATE_MODEL:         z.string().default('black-forest-labs/flux-dev'),
   REPORTS_DIR:             z.string().default('uploads/reports'),
 
   GOOGLE_CLIENT_ID:        z.string().optional(),

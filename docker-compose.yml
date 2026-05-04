@@ -65,6 +65,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads     # Persist generated images across rebuilds
     networks:
       - asos_internal
       - asos_external
@@ -138,6 +140,7 @@ services:
       - certbot_www:/var/www/certbot:ro
       - certbot_conf:/etc/letsencrypt:ro
       - ./vite-app/dist:/var/www/spa:ro     # Built React SPA (built by deploy/update.sh)
+      - uploads_data:/var/www/uploads:ro    # Generated images — served directly by nginx
     depends_on:
       - api
     networks:
@@ -165,3 +168,4 @@ volumes:
   redis_data:
   certbot_www:
   certbot_conf:
+  uploads_data:     # Shared between api (write) and nginx (read) — persists generated images

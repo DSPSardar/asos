@@ -1,5 +1,8 @@
 const axios    = require('axios');
 const dns      = require('dns').promises;
+const fs       = require('fs');
+const path     = require('path');
+const { randomUUID } = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const prisma   = require('../../config/database');
 const env      = require('../../config/env');
@@ -552,10 +555,22 @@ const generateVariants = async ({ tenantId, brandProfileId, count = 10, language
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
-// IMAGE GENERATION
-// Default: Pollinations.ai — free, no token, returns image as a URL
-// Opt-in:  Replicate flux-schnell — if REPLICATE_API_TOKEN is set in env
+// IMAGE GENERATION + LOCAL STORAGE
+//
+// Images are downloaded and saved to disk at /app/uploads/content-images/
+// so they are self-hosted, permanent, and never depend on an external URL.
+//
+// Generator priority:
+//   1. Replicate (default flux-dev) — if REPLICATE_API_TOKEN is set; override with REPLICATE_MODEL
+//   2. Pollinations.ai              — free, no token, good quality (~5-15s)
+//
+// Stored path: /uploads/content-images/{uuid}.{ext}
+// Served via:  nginx /uploads/ → /var/www/uploads (shared Docker volume)
 // ─────────────────────────────────────────────────────────────────────────────
+
+const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads', 'content-images');
+// Ensure directory exists at startup (idempotent)
+try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch {}
 
 const CHANNEL_STYLE = {
   meta_ad:           'Facebook / Instagram ad creative, clean bold design, attention-grabbing',
@@ -565,31 +580,48 @@ const CHANNEL_STYLE = {
 };
 
 const buildImagePrompt = (draft, brandProfile) => {
-  const raw      = brandProfile?.rawExtraction || {};
-  const brand    = brandProfile?.brandName || 'brand';
-  const industry = raw.industry || 'business';
-  const colors   = (Array.isArray(raw.colors) ? raw.colors : []).slice(0, 3).join(', ');
-  const anchor   = draft.subject || (draft.body || '').slice(0, 80);
-  const style    = CHANNEL_STYLE[draft.channel] || 'professional advertising visual';
+  const raw       = brandProfile?.rawExtraction || {};
+  const brand     = brandProfile?.brandName || 'brand';
+  const industry  = raw.industry || 'business';
+  const colors    = (Array.isArray(raw.colors) ? raw.colors : []).slice(0, 3).join(', ');
+  const anchor    = draft.subject || (draft.body || '').slice(0, 80);
+  const style     = CHANNEL_STYLE[draft.channel] || 'professional advertising visual';
   const colorHint = colors ? `, brand colors: ${colors}` : '';
   return `${style} for ${brand} (${industry}), visual concept: "${anchor}"${colorHint}, photorealistic, high quality, 4k, no text overlay`;
 };
 
-// Low-level: generate an image URL from a text prompt.
-// Returns a URL string pointing to the generated image.
+// Download image bytes from a URL and save to disk.
+// Returns the local relative path: /uploads/content-images/{uuid}.{ext}
+const downloadAndSave = async (remoteUrl, ext = 'jpg') => {
+  const response = await axios.get(remoteUrl, {
+    responseType: 'arraybuffer',
+    timeout:      60000,  // Pollinations can take ~15s on first generate
+    headers: { 'User-Agent': 'ASOS-ContentStudio/1.0' },
+  });
+  const contentType = response.headers['content-type'] || '';
+  const resolvedExt = contentType.includes('webp') ? 'webp'
+                    : contentType.includes('png')  ? 'png'
+                    : ext;
+  const filename = `${randomUUID()}.${resolvedExt}`;
+  const filepath = path.join(UPLOADS_DIR, filename);
+  fs.writeFileSync(filepath, Buffer.from(response.data));
+  return `/uploads/content-images/${filename}`;
+};
+
+// Low-level: generate image, download it, return local path.
 const generateImage = async ({ prompt }) => {
   if (env.REPLICATE_API_TOKEN) {
-    // Replicate flux-schnell via the modern Models API
-    const [owner, model] = (env.REPLICATE_MODEL || 'black-forest-labs/flux-schnell').split('/');
+    // Replicate Models API — default model flux-dev (same input shape as flux-schnell: prompt, aspect_ratio, output_*)
+    const [owner, model] = (env.REPLICATE_MODEL || 'black-forest-labs/flux-dev').split('/');
     const createRes = await axios.post(
       `https://api.replicate.com/v1/models/${owner}/${model}/predictions`,
       { input: { prompt, aspect_ratio: '1:1', output_format: 'webp', output_quality: 80 } },
-      { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 10000 },
+      { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 15000 },
     );
     let prediction = createRes.data;
 
-    // Poll until succeeded or failed (max 60s, 3s intervals)
-    for (let i = 0; i < 20 && ['starting', 'processing'].includes(prediction.status); i++) {
+    // Poll until succeeded or failed (flux-dev can exceed schnell; max ~90s, 3s intervals)
+    for (let i = 0; i < 30 && ['starting', 'processing'].includes(prediction.status); i++) {
       await new Promise((r) => setTimeout(r, 3000));
       const pollRes = await axios.get(
         `https://api.replicate.com/v1/predictions/${prediction.id}`,
@@ -601,17 +633,17 @@ const generateImage = async ({ prompt }) => {
     if (prediction.status !== 'succeeded') {
       throw Object.assign(new Error('Replicate image generation failed or timed out'), { statusCode: 503, expose: true });
     }
-    const output = prediction.output;
-    return Array.isArray(output) ? output[0] : output;
+    const remoteUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+    return downloadAndSave(remoteUrl, 'webp');
   }
 
-  // Free fallback: Pollinations.ai — no token needed, just a URL
-  // The URL itself serves the image (generated on first request, cached afterwards)
-  const seed = Math.floor(Math.random() * 999999);
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
+  // Free fallback: Pollinations.ai — triggers image generation on first fetch
+  const seed      = Math.floor(Math.random() * 999999);
+  const pollinUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
+  return downloadAndSave(pollinUrl, 'jpg');
 };
 
-// High-level: generate image for a specific draft and persist the URL to DB.
+// High-level: generate image for a specific draft, save to disk, persist path to DB.
 const generateDraftImage = async ({ tenantId, draftId, prompt }) => {
   const draft = await prisma.contentDraft.findFirst({
     where: { id: draftId, tenantId },
@@ -619,15 +651,20 @@ const generateDraftImage = async ({ tenantId, draftId, prompt }) => {
   });
   if (!draft) throw Object.assign(new Error('Draft not found'), { statusCode: 404, expose: true });
 
-  const imagePrompt = (typeof prompt === 'string' && prompt.trim()) ? prompt.trim() : buildImagePrompt(draft, draft.brandProfile);
-  const imageUrl    = await generateImage({ prompt: imagePrompt });
+  const imagePrompt = (typeof prompt === 'string' && prompt.trim()) ? prompt.trim()
+                    : buildImagePrompt(draft, draft.brandProfile);
+
+  const imageUrl = await generateImage({ prompt: imagePrompt }); // local path
 
   const updated = await prisma.contentDraft.update({
     where: { id: draftId },
-    data: { imageUrl },
+    data:  { imageUrl },
   });
 
-  logger.info({ tenantId, draftId, provider: env.REPLICATE_API_TOKEN ? 'replicate' : 'pollinations' }, '🎨 Draft image generated');
+  logger.info(
+    { tenantId, draftId, imageUrl, provider: env.REPLICATE_API_TOKEN ? 'replicate' : 'pollinations' },
+    '🎨 Draft image generated and saved',
+  );
   return { draft: updated, imageUrl, prompt: imagePrompt };
 };
 

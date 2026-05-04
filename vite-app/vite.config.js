@@ -29,6 +29,11 @@ export default defineConfig({
         target:       'http://localhost:3000',
         changeOrigin: true,
       },
+      // Proxy uploaded files (content images) to backend in development
+      '/uploads': {
+        target:       'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
 

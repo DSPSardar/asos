@@ -74,6 +74,12 @@ const createApp = () => {
     message: { success: false, message: 'Too many auth attempts.' },
   }));
 
+  // ── Serve uploaded files (content images, reports, etc.)
+  // In production nginx serves /uploads/ directly from the shared Docker volume.
+  // This static middleware covers dev and acts as a fallback.
+  const uploadsPath = require('path').resolve(process.cwd(), 'uploads');
+  app.use('/uploads', express.static(uploadsPath, { maxAge: '365d', immutable: true }));
+
   // ── Health check
   app.get('/health', (req, res) => res.json({
     status: 'ok',
