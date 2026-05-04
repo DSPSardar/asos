@@ -729,9 +729,20 @@ const generateDraftImage = async ({ tenantId, draftId, prompt }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const updateDraft = async ({ tenantId, draftId, data }) => {
+  logger.info({ ev: 'content-studio-save', phase: 'request', tenantId, draftId, keys: Object.keys(data || {}) }, 'draft save request');
   const draft = await prisma.contentDraft.findFirst({ where: { id: draftId, tenantId } });
   if (!draft) throw Object.assign(new Error('Draft not found'), { statusCode: 404, expose: true });
-  return prisma.contentDraft.update({ where: { id: draftId }, data });
+  const updated = await prisma.contentDraft.update({ where: { id: draftId }, data });
+  logger.info({
+    ev:      'content-studio-save',
+    phase:   'persisted',
+    tenantId,
+    draftId,
+    status:  updated.status,
+    bodyLen: updated.body?.length || 0,
+    subject: updated.subject ? 'present' : 'empty',
+  }, 'draft save persisted');
+  return updated;
 };
 
 /** Safe relative paths only — prevents path traversal */

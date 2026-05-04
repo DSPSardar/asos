@@ -179,11 +179,11 @@ export default function AdsPerformance() {
         subject: activeDraft.subject ?? null,
       });
       const savedDraft = res?.data;
-      if (savedDraft?.id) {
+      if (savedDraft?.id && savedDraft?.status === 'SAVED') {
         setDrafts((p) => p.map((d) => (d.id === activeDraft.id ? { ...d, ...savedDraft } : d)));
         setStatus('Draft saved');
       } else {
-        setError('Save did not return the updated draft. Check the network response.');
+        setError('Save response did not confirm SAVED status. Check API logs for content-studio-save.');
       }
     } catch (e) { setError(e.message || 'Save failed'); }
   };
