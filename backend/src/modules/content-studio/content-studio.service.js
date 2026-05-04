@@ -734,6 +734,36 @@ const updateDraft = async ({ tenantId, draftId, data }) => {
   return prisma.contentDraft.update({ where: { id: draftId }, data });
 };
 
+/** Safe relative paths only — prevents path traversal */
+const DRAFT_IMAGE_RE = /^\/uploads\/content-images\/[a-f0-9-]{8}-[a-f0-9-]{4}-[a-f0-9-]{4}-[a-f0-9-]{4}-[a-f0-9-]{12}\.(webp|png|jpe?g)$/i;
+
+/**
+ * Resolve on-disk path for a draft’s saved image (tenant-scoped).
+ * Used by authenticated GET so previews work without public /uploads proxy.
+ */
+const getDraftImageFilePath = async ({ tenantId, draftId }) => {
+  const draft = await prisma.contentDraft.findFirst({
+    where: { id: draftId, tenantId },
+    select: { imageUrl: true },
+  });
+  if (!draft?.imageUrl || !DRAFT_IMAGE_RE.test(draft.imageUrl)) {
+    throw Object.assign(new Error('No image for this draft'), { statusCode: 404, expose: true });
+  }
+  const abs = path.normalize(path.join(process.cwd(), draft.imageUrl.replace(/^\//, '')));
+  const root = path.normalize(UPLOADS_DIR);
+  if (!abs.startsWith(root + path.sep) && abs !== root) {
+    throw Object.assign(new Error('Invalid image path'), { statusCode: 400, expose: true });
+  }
+  if (!fs.existsSync(abs)) {
+    throw Object.assign(new Error('Image file missing on disk'), { statusCode: 404, expose: true });
+  }
+  const ext = path.extname(abs).toLowerCase();
+  const contentType = ext === '.webp' ? 'image/webp'
+                    : ext === '.png'  ? 'image/png'
+                    : 'image/jpeg';
+  return { absPath: abs, contentType };
+};
+
 const publishToMeta = async ({ tenantId, draftId }) => {
   const draft = await updateDraft({ tenantId, draftId, data: { status: 'PUBLISHED' } });
   return { draft, published: true };
@@ -757,6 +787,7 @@ module.exports = {
   generateImage,
   generateDraftImage,
   updateDraft,
+  getDraftImageFilePath,
   publishToMeta,
   sendForApproval,
 };

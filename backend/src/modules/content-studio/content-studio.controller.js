@@ -1,3 +1,4 @@
+const fs     = require('fs');
 const { z }  = require('zod');
 const svc    = require('./content-studio.service');
 const { success, created } = require('../../utils/response');
@@ -27,6 +28,16 @@ const approvalSchema = z.object({
   phone: z.string()
           .regex(/^\+[1-9]\d{7,14}$/, 'phone must be in E.164 format (e.g. +923001234567)'),
 });
+
+const draftStatusEnum = z.enum(['GENERATED', 'SAVED', 'SKIPPED', 'PUBLISHED', 'SENT_FOR_APPROVAL']);
+
+const updateDraftSchema = z.object({
+  body:     z.string().max(100000).optional(),
+  subject:  z.union([z.string().max(2000), z.null()]).optional(),
+  status:   draftStatusEnum.optional(),
+  metadata: z.record(z.unknown()).optional(),
+}).strict()
+  .refine((d) => Object.keys(d).length > 0, { message: 'At least one field is required' });
 
 // Helper: parse schema, throw 400 with field errors on failure
 const validate = (schema, body) => {
@@ -77,7 +88,20 @@ const draftImage = async (req, res, next) => {
 
 const updateDraft = async (req, res, next) => {
   try {
-    return success(res, await svc.updateDraft({ tenantId: req.tenantId, draftId: req.params.id, data: req.body }), 'Draft updated');
+    const data = validate(updateDraftSchema, req.body);
+    return success(res, await svc.updateDraft({ tenantId: req.tenantId, draftId: req.params.id, data }), 'Draft updated');
+  } catch (e) { return next(e); }
+};
+
+const getDraftImageFile = async (req, res, next) => {
+  try {
+    const { absPath, contentType } = await svc.getDraftImageFilePath({
+      tenantId: req.tenantId,
+      draftId:  req.params.id,
+    });
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'private, max-age=600');
+    fs.createReadStream(absPath).pipe(res);
   } catch (e) { return next(e); }
 };
 
@@ -94,4 +118,4 @@ const approval = async (req, res, next) => {
   } catch (e) { return next(e); }
 };
 
-module.exports = { extract, generate, image, draftImage, updateDraft, publish, approval };
+module.exports = { extract, generate, image, draftImage, getDraftImageFile, updateDraft, publish, approval };

@@ -9,6 +9,7 @@ router.use(authenticate, requireActiveTenant, authorize('TENANT_ADMIN', 'SUPERAD
 router.post('/extract', ctrl.extract);
 router.post('/generate', ctrl.generate);
 router.post('/image', ctrl.image);
+router.get('/drafts/:id/image-file', ctrl.getDraftImageFile);
 router.patch('/drafts/:id', ctrl.updateDraft);
 router.post('/drafts/:id/image', ctrl.draftImage);
 router.post('/drafts/:id/publish', ctrl.publish);

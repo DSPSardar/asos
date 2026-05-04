@@ -1,5 +1,5 @@
 // src/pages/AdsPerformance.jsx — AI Content Studio (route: /ads)
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@pages/Layout';
 import { contentStudioAPI, resolveUploadUrl } from '@lib/api';
 
@@ -38,13 +38,71 @@ export default function AdsPerformance() {
   const [isExtracting,    setIsExtracting]    = useState(false);
   const [isGenerating,    setIsGenerating]    = useState(false);
   const [imageGeneratingId, setImageGeneratingId] = useState(null); // draftId currently generating image
+  const [blobPreviewUrl, setBlobPreviewUrl] = useState(null);
+  const [blobPreviewLoading, setBlobPreviewLoading] = useState(false);
+  const blobUrlRef = useRef(null);
 
   const activeDraft = drafts[activeIdx] || null;
 
-  const imagePreviewSrc = useMemo(
-    () => (activeDraft?.imageUrl ? resolveUploadUrl(activeDraft.imageUrl) : ''),
-    [activeDraft?.imageUrl],
-  );
+  const imagePreviewSrc = useMemo(() => {
+    if (!activeDraft?.imageUrl) return '';
+    if (/^https?:\/\//i.test(activeDraft.imageUrl)) return activeDraft.imageUrl;
+    return resolveUploadUrl(activeDraft.imageUrl);
+  }, [activeDraft?.imageUrl]);
+
+  const isHttpImage = !!(activeDraft?.imageUrl && /^https?:\/\//i.test(activeDraft.imageUrl));
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const id = activeDraft?.id;
+    const imageUrl = activeDraft?.imageUrl;
+
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+
+    if (!id || !imageUrl) {
+      setBlobPreviewUrl(null);
+      setBlobPreviewLoading(false);
+      return undefined;
+    }
+
+    if (isHttpImage) {
+      setBlobPreviewUrl(null);
+      setBlobPreviewLoading(false);
+      return undefined;
+    }
+
+    setBlobPreviewLoading(true);
+    setBlobPreviewUrl(null);
+
+    contentStudioAPI.getDraftImageFile(id)
+      .then((blob) => {
+        if (cancelled) return;
+        const u = URL.createObjectURL(blob);
+        blobUrlRef.current = u;
+        setBlobPreviewUrl(u);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError('Could not load image preview (authenticated fetch failed).');
+      })
+      .finally(() => {
+        if (!cancelled) setBlobPreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+      setBlobPreviewUrl(null);
+      setBlobPreviewLoading(false);
+    };
+  }, [activeDraft?.id, activeDraft?.imageUrl, isHttpImage]);
 
   const kpis = useMemo(() => ({
     total:    drafts.length,
@@ -113,15 +171,21 @@ export default function AdsPerformance() {
 
   const saveCurrent = async () => {
     if (!activeDraft) return;
+    setError('');
     try {
       const res = await contentStudioAPI.updateDraft(activeDraft.id, {
         status:  'SAVED',
         body:    activeDraft.body,
         subject: activeDraft.subject ?? null,
       });
-      setDrafts((p) => p.map((d) => (d.id === activeDraft.id ? (res.data ?? res) : d)));
-      setStatus('Draft saved');
-    } catch (e) { setError(e.message); }
+      const savedDraft = res?.data;
+      if (savedDraft?.id) {
+        setDrafts((p) => p.map((d) => (d.id === activeDraft.id ? { ...d, ...savedDraft } : d)));
+        setStatus('Draft saved');
+      } else {
+        setError('Save did not return the updated draft. Check the network response.');
+      }
+    } catch (e) { setError(e.message || 'Save failed'); }
   };
 
   const publishCurrent = async () => {
@@ -403,29 +467,44 @@ export default function AdsPerformance() {
                     </button>
                   </div>
 
-                  {/* Generated image — below Generate Image; src is API origin + /uploads/... */}
+                  {/* Generated image — relative paths load via JWT (GET image-file); absolute URLs load directly */}
                   {activeDraft.imageUrl && (
                     <div className="space-y-2">
-                      <div className="overflow-hidden rounded-xl border border-slate-700/60 bg-slate-900/40">
-                        <img
-                          src={imagePreviewSrc}
-                          alt="AI-generated ad visual"
-                          className="w-full object-cover"
-                          onError={() => {
-                            setError('Image could not be loaded. Rebuild SPA with VITE_UPLOADS_ORIGIN or proxy /uploads to the API.');
-                          }}
-                        />
+                      <div className="overflow-hidden rounded-xl border border-slate-700/60 bg-slate-900/40 min-h-[120px] flex items-center justify-center">
+                        {!isHttpImage && blobPreviewLoading && (
+                          <div className="flex flex-col items-center gap-2 py-8 text-xs text-violet-400">
+                            <span className="h-5 w-5 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-400" />
+                            Loading preview…
+                          </div>
+                        )}
+                        {(isHttpImage ? imagePreviewSrc : blobPreviewUrl) && (
+                          <img
+                            src={isHttpImage ? imagePreviewSrc : blobPreviewUrl}
+                            alt="AI-generated ad visual"
+                            className="w-full object-cover"
+                            onError={() => {
+                              if (isHttpImage) {
+                                setError('Image could not be loaded from its URL.');
+                              }
+                            }}
+                          />
+                        )}
+                        {!isHttpImage && !blobPreviewLoading && !blobPreviewUrl && (
+                          <p className="px-4 py-6 text-center text-xs text-slate-500">Preview could not be loaded.</p>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
                         <span className="uppercase tracking-wider text-slate-600">Preview</span>
-                        <a
-                          href={imagePreviewSrc}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="truncate text-violet-400 underline decoration-violet-500/40 hover:text-violet-300"
-                        >
-                          Open image in new tab
-                        </a>
+                        {(blobPreviewUrl || (isHttpImage && imagePreviewSrc)) && (
+                          <a
+                            href={blobPreviewUrl || imagePreviewSrc}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="truncate text-violet-400 underline decoration-violet-500/40 hover:text-violet-300"
+                          >
+                            Open image in new tab
+                          </a>
+                        )}
                       </div>
                     </div>
                   )}
