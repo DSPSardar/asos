@@ -4,6 +4,17 @@ import { useAuthStore } from '@stores/auth.store';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
+/** Build absolute URL for paths like `/uploads/...` (served by API, not SPA host). */
+export function resolveUploadUrl(pathOrUrl) {
+  if (!pathOrUrl) return '';
+  const s = String(pathOrUrl).trim();
+  if (/^https?:\/\//i.test(s)) return s;
+  const rel = s.startsWith('/') ? s : `/${s}`;
+  const origin = String(BASE_URL).replace(/\/api\/v1\/?$/i, '').replace(/\/+$/, '');
+  if (origin) return `${origin}${rel}`;
+  return rel;
+}
+
 export const api = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
@@ -121,8 +132,9 @@ export const analyticsAPI = {
 export const contentStudioAPI = {
   extract: (data) => api.post('/content-studio/extract', data),
   generate: (data) => api.post('/content-studio/generate', data),
-  image: (prompt) => api.post('/content-studio/image', { prompt }),
-  draftImage: (id, prompt) => api.post(`/content-studio/drafts/${id}/image`, prompt ? { prompt } : {}),
+  image: (prompt) => api.post('/content-studio/image', { prompt }, { timeout: 120000 }),
+  draftImage: (id, prompt) =>
+    api.post(`/content-studio/drafts/${id}/image`, prompt ? { prompt } : {}, { timeout: 120000 }),
   updateDraft: (id, data) => api.patch(`/content-studio/drafts/${id}`, data),
   publish: (id) => api.post(`/content-studio/drafts/${id}/publish`),
   sendApproval: (id, phone) => api.post(`/content-studio/drafts/${id}/send-approval`, { phone }),

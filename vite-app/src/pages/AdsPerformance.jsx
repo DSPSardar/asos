@@ -1,7 +1,7 @@
 // src/pages/AdsPerformance.jsx — AI Content Studio (route: /ads)
 import React, { useMemo, useState } from 'react';
 import { PageHeader } from '@pages/Layout';
-import { contentStudioAPI } from '@lib/api';
+import { contentStudioAPI, resolveUploadUrl } from '@lib/api';
 
 // ─────────────────────────────────────────────────────────────
 // Channel + Angle display config
@@ -138,10 +138,14 @@ export default function AdsPerformance() {
     setError('');
     try {
       const res = await contentStudioAPI.draftImage(draftId);
-      // res = { success, data: { draft, imageUrl, prompt }, message }
-      const updatedDraft = res?.data?.draft ?? res?.draft;
-      if (updatedDraft) {
-        setDrafts((p) => p.map((d) => d.id === draftId ? updatedDraft : d));
+      // Interceptor returns body: { success, data: { draft, imageUrl, prompt }, message }
+      const payload = res?.data ?? res;
+      const updatedDraft = payload?.draft;
+      const imageUrl = updatedDraft?.imageUrl ?? payload?.imageUrl;
+      if (updatedDraft || imageUrl) {
+        setDrafts((p) => p.map((d) => (d.id === draftId
+          ? { ...d, ...updatedDraft, ...(imageUrl ? { imageUrl } : {}) }
+          : d)));
       }
       setStatus('Image generated');
     } catch (e) {
@@ -388,12 +392,14 @@ export default function AdsPerformance() {
                   {activeDraft.imageUrl && (
                     <div className="overflow-hidden rounded-xl border border-slate-700/60">
                       <img
-                        src={activeDraft.imageUrl}
+                        src={resolveUploadUrl(activeDraft.imageUrl)}
                         alt="AI-generated ad visual"
                         className="w-full object-cover"
                         onLoad={(e) => { e.target.style.opacity = 1; }}
                         style={{ opacity: 0, transition: 'opacity 0.3s ease' }}
-                        onError={(e) => { e.target.parentElement.style.display = 'none'; }}
+                        onError={() => {
+                          setError('Image could not be loaded. Ensure your API serves /uploads (or proxy /uploads to the API).');
+                        }}
                       />
                     </div>
                   )}
