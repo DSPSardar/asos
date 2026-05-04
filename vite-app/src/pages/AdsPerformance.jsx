@@ -114,7 +114,11 @@ export default function AdsPerformance() {
   const saveCurrent = async () => {
     if (!activeDraft) return;
     try {
-      const res = await contentStudioAPI.updateDraft(activeDraft.id, { status: 'SAVED', body: activeDraft.body });
+      const res = await contentStudioAPI.updateDraft(activeDraft.id, {
+        status:  'SAVED',
+        body:    activeDraft.body,
+        subject: activeDraft.subject ?? null,
+      });
       setDrafts((p) => p.map((d) => (d.id === activeDraft.id ? (res.data ?? res) : d)));
       setStatus('Draft saved');
     } catch (e) { setError(e.message); }
