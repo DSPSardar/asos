@@ -45,10 +45,13 @@ COPY --from=prisma  /app/node_modules/.prisma ./node_modules/.prisma
 COPY src ./src
 COPY prisma ./prisma
 COPY package.json ./
+COPY docker-entrypoint-api.sh /docker-entrypoint-api.sh
 
-# Set ownership
-RUN chown -R asos:nodejs /app
-USER asos
+# su-exec: drop root → asos after fixing /app/uploads (volume is often root-owned)
+RUN apk add --no-cache su-exec && chmod +x /docker-entrypoint-api.sh && chown -R asos:nodejs /app
+
+# Start as root so entrypoint can chown the uploads volume; process becomes asos
+USER root
 
 EXPOSE 3000
 
@@ -56,4 +59,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD wget -qO- http://localhost:3000/health || exit 1
 
+ENTRYPOINT ["/docker-entrypoint-api.sh"]
 CMD ["node", "src/server.js"]

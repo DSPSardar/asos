@@ -9,6 +9,9 @@ const env      = require('../../config/env');
 const whatsappService = require('../../services/whatsapp.service');
 const logger   = require('../../utils/logger');
 
+/** Structured log key for Content Studio image pipeline */
+const CS_IMG = 'content-studio-image';
+
 const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -569,8 +572,15 @@ const generateVariants = async ({ tenantId, brandProfileId, count = 10, language
 // ─────────────────────────────────────────────────────────────────────────────
 
 const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads', 'content-images');
-// Ensure directory exists at startup (idempotent)
-try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch {}
+
+const ensureContentImagesDir = () => {
+  try {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  } catch (err) {
+    logger.error({ ev: CS_IMG, phase: 'mkdir-uploads', path: UPLOADS_DIR, err: err.message }, 'cannot create content-images upload dir');
+    throw err;
+  }
+};
 
 const CHANNEL_STYLE = {
   meta_ad:           'Facebook / Instagram ad creative, clean bold design, attention-grabbing',
@@ -592,9 +602,8 @@ const buildImagePrompt = (draft, brandProfile) => {
 
 // Download image bytes from a URL and save to disk.
 // Returns the local relative path: /uploads/content-images/{uuid}.{ext}
-const CS_IMG = 'content-studio-image';
-
 const downloadAndSave = async (remoteUrl, ext = 'jpg') => {
+  ensureContentImagesDir();
   const response = await axios.get(remoteUrl, {
     responseType: 'arraybuffer',
     timeout:      60000,  // Pollinations can take ~15s on first generate
