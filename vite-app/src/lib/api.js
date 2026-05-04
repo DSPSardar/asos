@@ -140,6 +140,7 @@ export const contentStudioAPI = {
   image: (prompt) => api.post('/content-studio/image', { prompt }, { timeout: 120000 }),
   draftImage: (id, prompt) =>
     api.post(`/content-studio/drafts/${id}/image`, prompt ? { prompt } : {}, { timeout: 120000 }),
+  listSavedDrafts: (limit = 50) => api.get('/content-studio/drafts', { params: { limit } }),
   /** Authenticated image bytes — works when public /uploads is not proxied */
   getDraftImageFile: (id) =>
     api.get(`/content-studio/drafts/${id}/image-file`, { responseType: 'blob', timeout: 60000 }),

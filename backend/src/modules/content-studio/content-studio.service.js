@@ -745,6 +745,21 @@ const updateDraft = async ({ tenantId, draftId, data }) => {
   return updated;
 };
 
+const listSavedDrafts = async ({ tenantId, limit = 50 }) => {
+  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const drafts = await prisma.contentDraft.findMany({
+    where: { tenantId, status: 'SAVED' },
+    include: {
+      brandProfile: true,
+      session: { select: { id: true, language: true, sourceUrl: true, createdAt: true } },
+    },
+    orderBy: [{ updatedAt: 'desc' }],
+    take: safeLimit,
+  });
+  logger.info({ ev: 'content-studio-save', phase: 'list-saved', tenantId, count: drafts.length, limit: safeLimit }, 'saved drafts listed');
+  return { drafts };
+};
+
 /** Safe relative paths only — prevents path traversal */
 const DRAFT_IMAGE_RE = /^\/uploads\/content-images\/[a-f0-9-]{8}-[a-f0-9-]{4}-[a-f0-9-]{4}-[a-f0-9-]{4}-[a-f0-9-]{12}\.(webp|png|jpe?g)$/i;
 
@@ -798,6 +813,7 @@ module.exports = {
   generateImage,
   generateDraftImage,
   updateDraft,
+  listSavedDrafts,
   getDraftImageFilePath,
   publishToMeta,
   sendForApproval,

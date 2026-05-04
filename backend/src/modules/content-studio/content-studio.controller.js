@@ -39,6 +39,10 @@ const updateDraftSchema = z.object({
 }).strict()
   .refine((d) => Object.keys(d).length > 0, { message: 'At least one field is required' });
 
+const listSavedDraftsSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
 // Helper: parse schema, throw 400 with field errors on failure
 const validate = (schema, body) => {
   const result = schema.safeParse(body);
@@ -93,6 +97,13 @@ const updateDraft = async (req, res, next) => {
   } catch (e) { return next(e); }
 };
 
+const listSavedDrafts = async (req, res, next) => {
+  try {
+    const q = validate(listSavedDraftsSchema, req.query || {});
+    return success(res, await svc.listSavedDrafts({ tenantId: req.tenantId, limit: q.limit }), 'Saved drafts loaded');
+  } catch (e) { return next(e); }
+};
+
 const getDraftImageFile = async (req, res, next) => {
   try {
     const { absPath, contentType } = await svc.getDraftImageFilePath({
@@ -118,4 +129,4 @@ const approval = async (req, res, next) => {
   } catch (e) { return next(e); }
 };
 
-module.exports = { extract, generate, image, draftImage, getDraftImageFile, updateDraft, publish, approval };
+module.exports = { extract, generate, image, draftImage, listSavedDrafts, getDraftImageFile, updateDraft, publish, approval };

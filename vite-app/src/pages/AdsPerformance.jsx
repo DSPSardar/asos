@@ -40,6 +40,7 @@ export default function AdsPerformance() {
   const [imageGeneratingId, setImageGeneratingId] = useState(null); // draftId currently generating image
   const [blobPreviewUrl, setBlobPreviewUrl] = useState(null);
   const [blobPreviewLoading, setBlobPreviewLoading] = useState(false);
+  const [loadingSaved, setLoadingSaved] = useState(false);
   const blobUrlRef = useRef(null);
 
   const activeDraft = drafts[activeIdx] || null;
@@ -110,6 +111,36 @@ export default function AdsPerformance() {
     published:drafts.filter((d) => d.status === 'PUBLISHED').length,
     approval: drafts.filter((d) => d.status === 'SENT_FOR_APPROVAL').length,
   }), [drafts]);
+
+  const loadSavedDrafts = async (silent = false) => {
+    if (!silent) setError('');
+    setLoadingSaved(true);
+    try {
+      const res = await contentStudioAPI.listSavedDrafts(50);
+      const saved = res?.data?.drafts ?? [];
+      setDrafts(saved);
+      setActiveIdx(0);
+      if (saved.length > 0) {
+        const first = saved[0];
+        if (first?.brandProfile) {
+          setBrandProfile(first.brandProfile);
+          if (first?.session?.sourceUrl) setSourceUrl(first.session.sourceUrl);
+          if (first?.session?.language) setLanguage(first.session.language);
+        }
+        setStatus(`Loaded ${saved.length} saved drafts`);
+      } else {
+        setStatus('No saved drafts yet');
+      }
+    } catch (e) {
+      if (!silent) setError(e.message || 'Failed to load saved drafts');
+    } finally {
+      setLoadingSaved(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSavedDrafts(true);
+  }, []);
 
   const dna = useMemo(() => {
     const raw = brandProfile?.rawExtraction || {};
@@ -303,6 +334,15 @@ export default function AdsPerformance() {
               <option value="ur">Urdu</option>
             </select>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => loadSavedDrafts(false)}
+                disabled={loadingSaved}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {loadingSaved ? <Spinner /> : null}
+                {loadingSaved ? 'Loading…' : 'Load Saved'}
+              </button>
               <button
                 type="button"
                 onClick={() => extract(false)}
