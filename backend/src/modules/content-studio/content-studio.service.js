@@ -592,6 +592,8 @@ const buildImagePrompt = (draft, brandProfile) => {
 
 // Download image bytes from a URL and save to disk.
 // Returns the local relative path: /uploads/content-images/{uuid}.{ext}
+const CS_IMG = 'content-studio-image';
+
 const downloadAndSave = async (remoteUrl, ext = 'jpg') => {
   const response = await axios.get(remoteUrl, {
     responseType: 'arraybuffer',
@@ -605,7 +607,9 @@ const downloadAndSave = async (remoteUrl, ext = 'jpg') => {
   const filename = `${randomUUID()}.${resolvedExt}`;
   const filepath = path.join(UPLOADS_DIR, filename);
   fs.writeFileSync(filepath, Buffer.from(response.data));
-  return `/uploads/content-images/${filename}`;
+  const rel = `/uploads/content-images/${filename}`;
+  logger.info({ ev: CS_IMG, phase: 'saved', bytes: Buffer.byteLength(response.data), path: rel }, 'image file written');
+  return rel;
 };
 
 // Low-level: generate image, download it, return local path.
@@ -613,12 +617,23 @@ const generateImage = async ({ prompt }) => {
   if (env.REPLICATE_API_TOKEN) {
     // Replicate Models API — default model flux-dev (same input shape as flux-schnell: prompt, aspect_ratio, output_*)
     const [owner, model] = (env.REPLICATE_MODEL || 'black-forest-labs/flux-dev').split('/');
-    const createRes = await axios.post(
-      `https://api.replicate.com/v1/models/${owner}/${model}/predictions`,
-      { input: { prompt, aspect_ratio: '1:1', output_format: 'webp', output_quality: 80 } },
-      { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 15000 },
-    );
-    let prediction = createRes.data;
+    logger.info({ ev: CS_IMG, phase: 'replicate-start', owner, model, promptLen: String(prompt || '').length }, 'Replicate prediction create');
+
+    let prediction;
+    try {
+      const createRes = await axios.post(
+        `https://api.replicate.com/v1/models/${owner}/${model}/predictions`,
+        { input: { prompt, aspect_ratio: '1:1', output_format: 'webp', output_quality: 80 } },
+        { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 15000 },
+      );
+      prediction = createRes.data;
+    } catch (err) {
+      const detail = err.response?.data || err.message;
+      logger.error({ ev: CS_IMG, phase: 'replicate-create', status: err.response?.status, detail }, 'Replicate create request failed');
+      throw Object.assign(new Error('Replicate create failed — check token and model'), { statusCode: 502, expose: true });
+    }
+
+    logger.info({ ev: CS_IMG, phase: 'replicate-created', predictionId: prediction.id, status: prediction.status }, 'Replicate prediction created');
 
     // Poll until succeeded or failed (flux-dev can exceed schnell; max ~90s, 3s intervals)
     for (let i = 0; i < 30 && ['starting', 'processing'].includes(prediction.status); i++) {
@@ -628,16 +643,31 @@ const generateImage = async ({ prompt }) => {
         { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}` }, timeout: 10000 },
       );
       prediction = pollRes.data;
+      logger.info({ ev: CS_IMG, phase: 'replicate-poll', predictionId: prediction.id, status: prediction.status, i }, 'Replicate poll');
     }
 
     if (prediction.status !== 'succeeded') {
+      logger.error({
+        ev:            CS_IMG,
+        phase:         'replicate-final',
+        predictionId:  prediction.id,
+        status:        prediction.status,
+        replicateErr:  prediction.error,
+      }, 'Replicate did not succeed');
       throw Object.assign(new Error('Replicate image generation failed or timed out'), { statusCode: 503, expose: true });
     }
     const remoteUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-    return downloadAndSave(remoteUrl, 'webp');
+    logger.info({ ev: CS_IMG, phase: 'replicate-output', predictionId: prediction.id, outputType: typeof remoteUrl }, 'Replicate succeeded; downloading');
+    try {
+      return await downloadAndSave(remoteUrl, 'webp');
+    } catch (err) {
+      logger.error({ ev: CS_IMG, phase: 'download-replicate-output', err: err.message, remoteUrl: String(remoteUrl).slice(0, 120) }, 'download Replicate output failed');
+      throw err;
+    }
   }
 
   // Free fallback: Pollinations.ai — triggers image generation on first fetch
+  logger.info({ ev: CS_IMG, phase: 'pollinations', promptLen: String(prompt || '').length }, 'Pollinations image (no Replicate token)');
   const seed      = Math.floor(Math.random() * 999999);
   const pollinUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
   return downloadAndSave(pollinUrl, 'jpg');
@@ -645,6 +675,8 @@ const generateImage = async ({ prompt }) => {
 
 // High-level: generate image for a specific draft, save to disk, persist path to DB.
 const generateDraftImage = async ({ tenantId, draftId, prompt }) => {
+  logger.info({ ev: CS_IMG, phase: 'draft-request', tenantId, draftId, hasCustomPrompt: !!(typeof prompt === 'string' && prompt.trim()) }, 'draft image endpoint');
+
   const draft = await prisma.contentDraft.findFirst({
     where: { id: draftId, tenantId },
     include: { brandProfile: true },
@@ -654,18 +686,33 @@ const generateDraftImage = async ({ tenantId, draftId, prompt }) => {
   const imagePrompt = (typeof prompt === 'string' && prompt.trim()) ? prompt.trim()
                     : buildImagePrompt(draft, draft.brandProfile);
 
-  const imageUrl = await generateImage({ prompt: imagePrompt }); // local path
+  let imageUrl;
+  try {
+    imageUrl = await generateImage({ prompt: imagePrompt }); // local path
+  } catch (err) {
+    logger.error({ ev: CS_IMG, phase: 'draft-generate-failed', tenantId, draftId, err: err.message }, 'generateImage threw');
+    throw err;
+  }
 
   const updated = await prisma.contentDraft.update({
     where: { id: draftId },
     data:  { imageUrl },
   });
 
-  logger.info(
-    { tenantId, draftId, imageUrl, provider: env.REPLICATE_API_TOKEN ? 'replicate' : 'pollinations' },
-    '🎨 Draft image generated and saved',
-  );
-  return { draft: updated, imageUrl, prompt: imagePrompt };
+  const base = env.PUBLIC_UPLOADS_BASE ? String(env.PUBLIC_UPLOADS_BASE).replace(/\/+$/, '') : '';
+  const imageAbsoluteUrl = base ? `${base}${imageUrl}` : undefined;
+
+  logger.info({
+    ev:       CS_IMG,
+    phase:    'draft-done',
+    tenantId,
+    draftId,
+    imageUrl,
+    imageAbsoluteUrl: imageAbsoluteUrl || null,
+    provider:         env.REPLICATE_API_TOKEN ? 'replicate' : 'pollinations',
+  }, '🎨 Draft image generated and saved');
+
+  return { draft: updated, imageUrl, ...(imageAbsoluteUrl ? { imageAbsoluteUrl } : {}), prompt: imagePrompt };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

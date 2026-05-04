@@ -141,13 +141,19 @@ export default function AdsPerformance() {
       // Interceptor returns body: { success, data: { draft, imageUrl, prompt }, message }
       const payload = res?.data ?? res;
       const updatedDraft = payload?.draft;
-      const imageUrl = updatedDraft?.imageUrl ?? payload?.imageUrl;
-      if (updatedDraft || imageUrl) {
+      const rel = updatedDraft?.imageUrl ?? payload?.imageUrl;
+      const abs = payload?.imageAbsoluteUrl;
+      const displayUrl = abs || rel;
+      if (updatedDraft || displayUrl) {
         setDrafts((p) => p.map((d) => (d.id === draftId
-          ? { ...d, ...updatedDraft, ...(imageUrl ? { imageUrl } : {}) }
+          ? { ...d, ...updatedDraft, ...(displayUrl ? { imageUrl: displayUrl } : {}) }
           : d)));
       }
-      setStatus('Image generated');
+      if (!displayUrl) {
+        setError('Server did not return an image URL. Check API logs for ev=content-studio-image.');
+      } else {
+        setStatus('Image generated');
+      }
     } catch (e) {
       setError(e.message || 'Image generation failed — try again.');
     } finally {

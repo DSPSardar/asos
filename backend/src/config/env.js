@@ -43,6 +43,8 @@ const envSchema = z.object({
 
   REPLICATE_API_TOKEN:     z.string().optional(),
   REPLICATE_MODEL:         z.string().default('black-forest-labs/flux-dev'),
+  /** Optional. If set (e.g. https://api.yourdomain.com), draft image API returns imageAbsoluteUrl so the SPA works when only /api is proxied to Node and /uploads needs the full API origin. */
+  PUBLIC_UPLOADS_BASE:     z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().url().optional()),
   REPORTS_DIR:             z.string().default('uploads/reports'),
 
   GOOGLE_CLIENT_ID:        z.string().optional(),
