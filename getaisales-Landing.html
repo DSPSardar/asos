@@ -1,16 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ur">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>getaisales.com — AI Sales Automation via WhatsApp</title>
-<meta name="description" content="Claude AI qualifies every lead, diagnoses their problem, and sends the perfect WhatsApp message — automatically. Close deals while you sleep.">
+<title>DSP — Agentic AI Mastery | AI Se Paisa Kamana Seekho | 14 Din Intensive Program</title>
+<meta name="description" content="Pakistan ka pehla Agentic AI Mastery program. 14 din mein seekho AI agents banana aur dollar income shuru karo. DSP — Digital Skills Platform by Sardar Group.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  /* Brand — refined */
   --indigo:#6366f1;
   --indigo-2:#818cf8;
   --violet:#8b5cf6;
@@ -19,34 +18,26 @@
   --emerald:#10b981;
   --amber:#f59e0b;
   --red:#ef4444;
-  /* Surfaces */
+  --green:#22c55e;
   --bg:#05060d;
   --s0:#0a0d1a;
   --s1:#0f1424;
   --s2:#1a2138;
   --s3:#2a3354;
-  /* Text */
   --t0:#ffffff;
   --t1:#e5e9f5;
   --t2:#9aa3bd;
   --t3:#5e6885;
   --t4:#3a4360;
-  /* Light surface (for the globe panel) */
-  --warm:#f5f0e6;
-  --warm-2:#ebe5d6;
-  --ink:#0d1020;
-  /* Type */
   --display:'Plus Jakarta Sans',sans-serif;
   --body:'Space Grotesk',sans-serif;
   --mono:'JetBrains Mono',monospace;
-  /* Rhythm */
   --r-sm:8px;
   --r:12px;
   --r-md:16px;
   --r-lg:20px;
   --r-xl:28px;
-  /* Container */
-  --max:1180px;
+  --max:1100px;
 }
 
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -56,18 +47,16 @@ body{
   color:var(--t1);
   font-family:var(--body);
   font-size:16px;
-  line-height:1.5;
+  line-height:1.6;
   overflow-x:hidden;
   -webkit-font-smoothing:antialiased;
-  text-rendering:optimizeLegibility;
 }
 
-/* ── Background fabric ── */
 body::before{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
   background-image:
-    linear-gradient(rgba(129,140,248,0.04) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(129,140,248,0.04) 1px,transparent 1px);
+    linear-gradient(rgba(129,140,248,0.035) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(129,140,248,0.035) 1px,transparent 1px);
   background-size:48px 48px;
   mask-image:radial-gradient(ellipse 100% 80% at 50% 0%, #000 30%, transparent 80%);
   -webkit-mask-image:radial-gradient(ellipse 100% 80% at 50% 0%, #000 30%, transparent 80%);
@@ -75,631 +64,401 @@ body::before{
 body::after{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
   background:
-    radial-gradient(ellipse 700px 500px at 50% -10%, rgba(99,102,241,0.16), transparent 70%),
-    radial-gradient(ellipse 600px 400px at 100% 10%, rgba(139,92,246,0.10), transparent 60%),
-    radial-gradient(ellipse 500px 400px at 0% 20%, rgba(103,232,249,0.05), transparent 60%);
+    radial-gradient(ellipse 700px 500px at 50% -5%, rgba(99,102,241,0.18), transparent 70%),
+    radial-gradient(ellipse 500px 400px at 95% 10%, rgba(139,92,246,0.10), transparent 60%),
+    radial-gradient(ellipse 400px 300px at 5% 15%, rgba(16,185,129,0.06), transparent 55%);
 }
 
-section{position:relative;z-index:1;}
-.container{max-width:var(--max);margin:0 auto;padding:0 32px;}
+.container{max-width:var(--max);margin:0 auto;padding:0 24px;position:relative;z-index:1;}
 
 /* ── NAV ── */
 nav.top{
   position:fixed;top:0;left:0;right:0;z-index:100;
-  background:rgba(5,6,13,0.7);
-  backdrop-filter:blur(20px) saturate(180%);
-  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  background:rgba(5,6,13,0.85);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
   border-bottom:1px solid rgba(255,255,255,0.06);
 }
 .nav-inner{
-  max-width:var(--max);margin:0 auto;height:68px;
-  display:flex;align-items:center;padding:0 32px;gap:0;
+  max-width:var(--max);margin:0 auto;padding:0 24px;
+  height:64px;display:flex;align-items:center;gap:24px;
 }
-.brand{display:flex;align-items:center;gap:12px;text-decoration:none;}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0;}
 .brand-mark{
-  width:36px;height:36px;border-radius:10px;flex-shrink:0;
-  background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);
+  width:36px;height:36px;border-radius:10px;
+  background:linear-gradient(135deg,var(--indigo),var(--violet));
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 4px 16px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
 }
-.brand-name{
-  font-family:var(--display);font-weight:800;font-size:17px;
-  color:var(--t0);letter-spacing:-0.4px;
+.brand-name{font-family:var(--display);font-weight:800;font-size:17px;color:var(--t0);letter-spacing:-0.3px;}
+.brand-sub{font-size:10px;color:var(--t3);letter-spacing:0.5px;text-transform:uppercase;margin-left:2px;}
+.nav-links{display:flex;align-items:center;gap:4px;margin-left:auto;}
+.nav-link{color:var(--t2);text-decoration:none;font-size:14px;font-weight:500;padding:6px 14px;border-radius:8px;transition:color .2s,background .2s;}
+.nav-link:hover{color:var(--t0);background:rgba(255,255,255,0.06);}
+.nav-toggle{display:none;background:none;border:none;cursor:pointer;padding:6px;gap:4px;flex-direction:column;}
+.nav-toggle span{display:block;width:20px;height:2px;background:var(--t2);border-radius:2px;transition:.2s;}
+.btn{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-family:var(--display);font-weight:700;border-radius:var(--r-md);transition:all .2s;border:none;cursor:pointer;white-space:nowrap;}
+.btn-primary{background:linear-gradient(135deg,var(--indigo),var(--violet));color:#fff;padding:10px 22px;font-size:14px;box-shadow:0 4px 20px rgba(99,102,241,0.35);}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 28px rgba(99,102,241,0.5);}
+.btn-wa{background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;padding:12px 28px;font-size:15px;box-shadow:0 4px 24px rgba(37,211,102,0.35);}
+.btn-wa:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(37,211,102,0.45);}
+.btn-wa-lg{padding:16px 36px;font-size:16px;font-weight:800;border-radius:16px;}
+.btn-ghost{background:transparent;color:var(--t1);padding:10px 20px;font-size:14px;border:1px solid rgba(255,255,255,0.12);}
+.btn-ghost:hover{background:rgba(255,255,255,0.06);}
+.nav-mobile{display:none;flex-direction:column;gap:4px;padding:12px 16px;background:var(--s0);border-bottom:1px solid rgba(255,255,255,0.06);}
+.nav-mobile.open{display:flex;}
+.nav-mobile .nav-link{padding:10px 14px;}
+
+/* ── URGENCY BAR ── */
+.urgency-bar{
+  background:linear-gradient(90deg,rgba(239,68,68,0.15),rgba(245,158,11,0.15));
+  border-bottom:1px solid rgba(239,68,68,0.2);
+  text-align:center;padding:10px 24px;font-size:13px;font-weight:600;
+  color:#fca5a5;letter-spacing:0.3px;margin-top:64px;position:relative;z-index:10;
 }
-.brand-name .accent{color:var(--indigo-2);}
-.nav-links{display:flex;gap:4px;margin-left:auto;margin-right:24px;}
-.nav-link{
-  color:var(--t2);font-size:14px;font-weight:500;text-decoration:none;
-  padding:8px 14px;border-radius:8px;transition:all .15s ease;
-}
-.nav-link:hover{color:var(--t1);background:rgba(255,255,255,0.05);}
-.btn{
-  display:inline-flex;align-items:center;gap:8px;
-  font-family:var(--body);font-weight:700;font-size:14px;
-  text-decoration:none;cursor:pointer;border:none;
-  transition:all .2s ease;line-height:1;
-  white-space:nowrap;
-}
-.btn-primary{
-  padding:11px 20px;border-radius:10px;color:#fff;
-  background:linear-gradient(135deg,#6366f1,#8b5cf6);
-  box-shadow:0 4px 16px rgba(99,102,241,0.35),inset 0 1px 0 rgba(255,255,255,0.18);
-}
-.btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(99,102,241,0.5);}
-.btn-ghost{
-  padding:11px 20px;border-radius:10px;color:var(--t1);
-  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
-}
-.btn-ghost:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.14);}
-.btn-lg{padding:15px 28px;border-radius:12px;font-size:15px;}
+.urgency-bar span{color:#fcd34d;}
 
 /* ── HERO ── */
-.hero{
-  padding:160px 0 100px;
-  display:flex;flex-direction:column;align-items:center;text-align:center;
-  position:relative;
-}
-
+.hero{padding:80px 0 70px;text-align:center;}
 .eyebrow{
-  display:inline-flex;align-items:center;gap:12px;
-  padding:11px 20px 11px 16px;
-  border-radius:100px;
-  background:linear-gradient(135deg, rgba(99,102,241,0.18), rgba(139,92,246,0.12));
-  border:1px solid rgba(129,140,248,0.35);
-  font-family:var(--display);
-  font-size:18px;font-weight:700;color:var(--t0);
-  letter-spacing:-0.2px;margin-bottom:36px;
-  box-shadow:0 8px 32px -8px rgba(99,102,241,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
-  text-shadow:0 1px 0 rgba(0,0,0,0.2);
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.25);
+  border-radius:50px;padding:7px 18px;font-size:13px;font-weight:600;
+  color:var(--indigo-2);letter-spacing:0.3px;margin-bottom:28px;
 }
-.eyebrow-dot{
-  width:9px;height:9px;border-radius:50%;background:var(--emerald);
-  box-shadow:0 0 0 4px rgba(16,185,129,0.22), 0 0 12px rgba(16,185,129,0.6);
-  animation:pulse 2.4s ease-in-out infinite;
-}
-
+.eyebrow-dot{width:7px;height:7px;border-radius:50%;background:var(--indigo-2);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 .hero h1{
-  font-family:var(--display);
-  font-size:clamp(44px, 7.2vw, 88px);
-  font-weight:800;
-  letter-spacing:-2.8px;
-  line-height:0.98;
-  margin-bottom:24px;
-  max-width:14ch;
-  color:var(--t0);
+  font-family:var(--display);font-weight:800;
+  font-size:clamp(34px,6vw,70px);
+  line-height:1.08;letter-spacing:-1.5px;
+  color:var(--t0);margin-bottom:20px;
 }
 .hero h1 .grad{
-  background:linear-gradient(110deg,#a78bfa 0%,#818cf8 50%,#67e8f9 100%);
+  background:linear-gradient(135deg,var(--indigo-2) 0%,var(--violet-2) 50%,var(--cyan) 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
 }
-.hero-sub{
-  font-size:clamp(16px, 1.6vw, 19px);
-  color:var(--t2);
-  max-width:600px;
-  margin:0 auto 40px;
-  line-height:1.6;
+.hero h1 .grad-green{
+  background:linear-gradient(135deg,#22c55e,#67e8f9);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
 }
-.hero-ctas{
-  display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:24px;
+.hero-sub{font-size:clamp(16px,2.5vw,20px);color:var(--t2);max-width:680px;margin:0 auto 32px;line-height:1.6;}
+.hero-bullets{
+  display:flex;flex-direction:column;gap:10px;
+  max-width:560px;margin:0 auto 36px;text-align:left;
 }
-.hero-meta{
-  font-family:var(--mono);font-size:12px;color:var(--t3);
-  letter-spacing:0.5px;
+.hero-bullet{
+  display:flex;align-items:flex-start;gap:12px;
+  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
+  border-radius:12px;padding:12px 16px;font-size:14.5px;color:var(--t1);
 }
-.hero-meta .pipe{margin:0 10px;color:var(--t4);}
-.hero-meta .domain{color:var(--indigo-2);font-weight:600;}
+.hero-bullet svg{flex-shrink:0;margin-top:1px;}
+.hero-ctas{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+.hero-meta{font-size:13px;color:var(--t3);margin-top:12px;}
+.hero-meta strong{color:var(--t2);}
 
-/* ── HERO VISUAL — Standalone Globe ── */
-.hero-visual{
-  margin-top:80px;
-  width:100%;max-width:880px;
-  position:relative;
-  aspect-ratio: 16 / 9;
-  background:transparent;
-  border:0;
-  box-shadow:none;
-  overflow:visible;
-}
-
-/* Globe stage */
-.globe-stage{
-  position:absolute;inset:0;
-  display:flex;align-items:center;justify-content:center;
-}
-.globe-wrap{
-  position:relative;width:480px;height:480px;
-  display:flex;align-items:center;justify-content:center;
-}
-
-/* The globe SVG */
-.globe-svg{
-  width:460px;height:460px;display:block;position:relative;z-index:3;
-  filter:drop-shadow(0 30px 60px rgba(99,102,241,0.35)) drop-shadow(0 0 80px rgba(99,102,241,0.15));
-}
-.globe-svg .ocean{
-  fill:url(#oceanGrad);
-  stroke:rgba(129,140,248,0.55);stroke-width:1.2;
-}
-.globe-svg .meridian{fill:none;stroke:rgba(255,255,255,0.18);stroke-width:0.4;}
-.globe-svg .meridian-strong{fill:none;stroke:rgba(255,255,255,0.32);stroke-width:0.55;}
-
-/* colorful continents */
-.globe-svg .c-na{fill:#34d399;}   /* North America - emerald */
-.globe-svg .c-sa{fill:#f59e0b;}   /* South America - amber */
-.globe-svg .c-eu{fill:#a78bfa;}   /* Europe - violet */
-.globe-svg .c-af{fill:#f472b6;}   /* Africa - pink */
-.globe-svg .c-as{fill:#67e8f9;}   /* Asia - cyan */
-.globe-svg .c-oc{fill:#fbbf24;}   /* Oceania - yellow */
-.globe-svg .c-gr{fill:#e0e7ff;}   /* Greenland/Iceland - icy */
-.globe-svg .c-me{fill:#fb7185;}   /* Middle East - rose */
-.globe-svg .land{fill:#0d1020;}   /* fallback */
-
-.globe-svg .country-label{
-  font-family:'JetBrains Mono', monospace;
-  font-size:5.4px;font-weight:700;letter-spacing:0.5px;
-  fill:rgba(255,255,255,0.92);
-  text-anchor:middle;
-  paint-order:stroke fill;
-  stroke:rgba(13,16,32,0.65);stroke-width:1.2;stroke-linejoin:round;
-  pointer-events:none;
-}
-
-.globe-svg .spin{animation:globeRotate 32s linear infinite;}
-
-@keyframes globeRotate{
-  0%{transform:translateX(0);}
-  100%{transform:translateX(-360px);}
-}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-
-.hero-visual{animation:float 6s ease-in-out infinite;}
-.hero h1, .hero-sub, .hero-ctas, .hero-meta, .hero-visual, .eyebrow{
-  animation:fadeUp 0.8s ease both;
-}
-.hero h1{animation-delay:.1s;}
-.hero-sub{animation-delay:.2s;}
-.hero-ctas{animation-delay:.3s;}
-.hero-meta{animation-delay:.35s;}
-.hero-visual{animation:fadeUp 0.8s .4s ease both, float 6s 1.2s ease-in-out infinite;}
-
-/* ── STATS ── */
+/* ── STATS STRIP ── */
 .stats{
-  margin-top:120px;
-  padding:32px 0;
+  background:linear-gradient(180deg,rgba(99,102,241,0.06),transparent);
   border-top:1px solid rgba(255,255,255,0.06);
   border-bottom:1px solid rgba(255,255,255,0.06);
-  background:
-    linear-gradient(180deg, rgba(99,102,241,0.04), rgba(99,102,241,0.02));
+  padding:32px 0;
 }
 .stats-grid{
-  max-width:var(--max);margin:0 auto;padding:0 32px;
-  display:grid;grid-template-columns:repeat(5,1fr);gap:0;
+  max-width:var(--max);margin:0 auto;padding:0 24px;
+  display:flex;flex-wrap:wrap;justify-content:center;gap:0;
 }
 .stat{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;padding:8px 16px;
-  border-right:1px solid rgba(255,255,255,0.05);
+  flex:1;min-width:140px;text-align:center;
+  padding:16px 12px;border-right:1px solid rgba(255,255,255,0.06);
 }
 .stat:last-child{border-right:none;}
-.stat-val{
-  font-family:var(--display);font-size:40px;font-weight:800;
-  letter-spacing:-1.6px;line-height:1;
-  background:linear-gradient(135deg,#a78bfa,#67e8f9);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-}
-.stat-label{
-  font-size:11px;color:var(--t3);font-weight:600;
-  text-transform:uppercase;letter-spacing:1.5px;margin-top:8px;
-  font-family:var(--mono);
-}
+.stat-val{font-family:var(--display);font-size:28px;font-weight:800;color:var(--t0);letter-spacing:-0.5px;}
+.stat-label{font-size:12px;color:var(--t3);margin-top:4px;font-weight:500;}
 
-/* ── SECTION SCAFFOLD ── */
-.section-pad{padding:120px 0;}
-.section-head{margin-bottom:64px;max-width:680px;}
-.section-head.center{margin-left:auto;margin-right:auto;text-align:center;}
+/* ── SECTION BASE ── */
+.section-pad{padding:96px 0;}
+.section-head{margin-bottom:60px;}
+.section-head.center{text-align:center;margin-left:auto;margin-right:auto;max-width:720px;}
 .section-eyebrow{
-  display:inline-block;
-  font-size:11px;letter-spacing:3px;text-transform:uppercase;
-  font-weight:700;color:var(--indigo-2);margin-bottom:16px;
-  font-family:var(--mono);
+  display:inline-block;font-size:11px;font-weight:700;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--indigo-2);margin-bottom:14px;
 }
 .section-h2{
-  font-family:var(--display);
-  font-size:clamp(34px, 4.6vw, 56px);
-  font-weight:800;letter-spacing:-1.6px;line-height:1.05;
-  margin-bottom:18px;color:var(--t0);
+  font-family:var(--display);font-size:clamp(28px,4.5vw,46px);
+  font-weight:800;letter-spacing:-0.8px;color:var(--t0);line-height:1.12;margin-bottom:16px;
 }
-.section-sub{
-  font-size:17px;color:var(--t2);
-  max-width:540px;line-height:1.6;
-}
-.section-head.center .section-sub{margin-left:auto;margin-right:auto;}
+.section-sub{font-size:16px;color:var(--t2);line-height:1.7;max-width:600px;}
+.section-head.center .section-sub{margin:0 auto;}
 
-/* ── FEATURES ── */
-.features-grid{
-  display:grid;grid-template-columns:repeat(3, 1fr);gap:16px;
+/* ── PAIN + DREAM ── */
+.pain-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:16px;
 }
-.feat-card{
-  background:linear-gradient(180deg, rgba(15,20,36,0.85), rgba(15,20,36,0.6));
-  border:1px solid rgba(255,255,255,0.06);
-  border-radius:var(--r-md);
-  padding:32px 28px;
-  backdrop-filter:blur(12px);
-  transition:all .25s ease;
+.pain-card{
+  background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);
+  border-radius:20px;padding:28px;
+}
+.dream-card{
+  background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);
+  border-radius:20px;padding:28px;
+}
+.pain-label{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:16px;}
+.pain-label.red{color:#f87171;}
+.pain-label.green{color:#4ade80;}
+.pain-list{list-style:none;display:flex;flex-direction:column;gap:10px;}
+.pain-list li{display:flex;align-items:flex-start;gap:10px;font-size:15px;color:var(--t1);}
+.pain-list li .icon-red{color:#f87171;flex-shrink:0;font-size:16px;}
+.pain-list li .icon-green{color:#4ade80;flex-shrink:0;font-size:16px;}
+
+/* ── PROBLEM AGITATION ── */
+.prob-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;}
+.prob-card{
+  background:var(--s1);border:1px solid rgba(255,255,255,0.07);
+  border-radius:18px;padding:24px 22px;
+}
+.prob-icon{
+  width:48px;height:48px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:24px;margin-bottom:16px;
+}
+.prob-h3{font-family:var(--display);font-weight:700;font-size:16px;color:var(--t0);margin-bottom:8px;}
+.prob-p{font-size:14px;color:var(--t2);line-height:1.6;}
+
+/* ── SOLUTION ── */
+.solution-highlight{
+  background:linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.08));
+  border:1px solid rgba(99,102,241,0.25);border-radius:24px;
+  padding:48px 40px;margin-top:40px;
+}
+.vs-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:24px;align-items:center;margin-top:32px;}
+.vs-box{
+  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
+  border-radius:16px;padding:24px;text-align:center;
+}
+.vs-box.loser{border-color:rgba(239,68,68,0.2);}
+.vs-box.winner{
+  background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);
+  box-shadow:0 0 40px rgba(99,102,241,0.15);
+}
+.vs-label{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;}
+.vs-label.red{color:#f87171;}
+.vs-label.blue{color:var(--indigo-2);}
+.vs-title{font-family:var(--display);font-size:20px;font-weight:800;color:var(--t0);margin-bottom:8px;}
+.vs-desc{font-size:13px;color:var(--t2);line-height:1.5;}
+.vs-sep{font-family:var(--display);font-size:28px;font-weight:800;color:var(--t3);}
+
+/* ── LEARN ── */
+.learn-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;}
+.learn-card{
+  background:var(--s1);border:1px solid rgba(255,255,255,0.07);
+  border-radius:18px;padding:24px;display:flex;gap:16px;align-items:flex-start;
+  transition:border-color .2s,transform .2s;
+}
+.learn-card:hover{border-color:rgba(99,102,241,0.35);transform:translateY(-2px);}
+.learn-num{
+  width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--indigo),var(--violet));
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:13px;font-weight:600;color:#fff;
+}
+.learn-h3{font-family:var(--display);font-weight:700;font-size:15px;color:var(--t0);margin-bottom:6px;}
+.learn-p{font-size:13.5px;color:var(--t2);line-height:1.55;}
+.learn-tag{
+  display:inline-block;margin-top:8px;font-size:11px;font-weight:600;
+  letter-spacing:0.5px;padding:3px 10px;border-radius:50px;
+  background:rgba(99,102,241,0.12);color:var(--indigo-2);border:1px solid rgba(99,102,241,0.2);
+}
+
+/* ── USE CASES ── */
+.usecase-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+.usecase-card{
+  background:var(--s1);border:1px solid rgba(255,255,255,0.07);
+  border-radius:20px;padding:28px;text-align:center;
+  transition:transform .2s,box-shadow .2s;
+}
+.usecase-card:hover{transform:translateY(-4px);box-shadow:0 16px 48px rgba(0,0,0,0.3);}
+.usecase-emoji{font-size:40px;margin-bottom:16px;display:block;}
+.usecase-h3{font-family:var(--display);font-weight:700;font-size:17px;color:var(--t0);margin-bottom:10px;}
+.usecase-p{font-size:14px;color:var(--t2);line-height:1.6;}
+.usecase-income{
+  display:inline-block;margin-top:14px;
+  background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);
+  border-radius:50px;padding:5px 16px;
+  font-size:13px;font-weight:700;color:#4ade80;
+}
+
+/* ── OFFER BOX ── */
+.offer-box{
+  background:linear-gradient(135deg,rgba(99,102,241,0.1),rgba(139,92,246,0.08));
+  border:1px solid rgba(99,102,241,0.3);border-radius:28px;padding:48px 40px;
   position:relative;overflow:hidden;
 }
-.feat-card::before{
-  content:"";position:absolute;inset:0;border-radius:inherit;
-  background:linear-gradient(135deg, rgba(99,102,241,0.06), transparent 60%);
-  opacity:0;transition:opacity .25s;
+.offer-box::before{
+  content:"";position:absolute;top:-60px;right:-60px;
+  width:260px;height:260px;border-radius:50%;
+  background:radial-gradient(circle,rgba(139,92,246,0.15),transparent 70%);
+  pointer-events:none;
 }
-.feat-card:hover{
-  border-color:rgba(129,140,248,0.25);
-  transform:translateY(-3px);
-  box-shadow:0 20px 50px -10px rgba(99,102,241,0.18);
+.offer-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
+.offer-details{display:flex;flex-direction:column;gap:16px;}
+.offer-item{display:flex;gap:14px;align-items:flex-start;}
+.offer-icon{
+  width:44px;height:44px;border-radius:12px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:20px;
 }
-.feat-card:hover::before{opacity:1;}
-.feat-card > *{position:relative;z-index:1;}
-.feat-icon{
-  width:48px;height:48px;border-radius:12px;
-  display:flex;align-items:center;justify-content:center;
-  margin-bottom:22px;
-  background:rgba(99,102,241,0.12);
-  border:1px solid rgba(129,140,248,0.2);
-}
-.feat-icon svg{width:22px;height:22px;}
-.feat-h3{
-  font-family:var(--display);font-size:19px;font-weight:700;
-  margin-bottom:10px;color:var(--t0);letter-spacing:-0.3px;
-}
-.feat-p{font-size:14.5px;color:var(--t2);line-height:1.65;}
-
-/* ── HOW IT WORKS ── */
-.steps{display:flex;flex-direction:column;}
-.step-row{
-  display:grid;grid-template-columns:80px 1fr;gap:24px;
-  position:relative;padding-bottom:8px;
-}
-.step-track{display:flex;flex-direction:column;align-items:center;}
-.step-num{
-  width:54px;height:54px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  font-family:var(--mono);font-size:15px;font-weight:700;
-  flex-shrink:0;position:relative;z-index:1;
-  border:1.5px solid;
-  background:var(--bg);
-}
-.step-line{width:1.5px;flex:1;min-height:36px;margin:8px 0;
-  background:linear-gradient(180deg, currentColor 0%, transparent 100%);}
-.step-row:last-child .step-line{display:none;}
-.step-body{padding:6px 0 48px;}
-.step-h3{
-  font-family:var(--display);font-size:22px;font-weight:700;
-  margin-bottom:10px;color:var(--t0);letter-spacing:-0.4px;
-}
-.step-p{font-size:15px;color:var(--t2);line-height:1.65;max-width:580px;}
-.step-tag{
+.offer-item-h3{font-family:var(--display);font-weight:700;font-size:15px;color:var(--t0);margin-bottom:4px;}
+.offer-item-p{font-size:13.5px;color:var(--t2);}
+.offer-cta-side{text-align:center;}
+.offer-cta-title{font-family:var(--display);font-size:26px;font-weight:800;color:var(--t0);margin-bottom:8px;line-height:1.2;}
+.offer-cta-sub{font-size:14px;color:var(--t2);margin-bottom:24px;}
+.offer-badge{
   display:inline-flex;align-items:center;gap:6px;margin-top:14px;
-  padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;
-  font-family:var(--mono);letter-spacing:0.3px;
+  background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);
+  border-radius:50px;padding:6px 16px;font-size:12px;font-weight:600;color:#4ade80;
 }
 
-/* ── PRICING ── */
-.price-toggle{
-  display:inline-flex;align-items:center;gap:4px;margin:24px auto 0;
-  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
-  border-radius:999px;padding:5px;
+/* ── BONUSES ── */
+.bonus-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+.bonus-card{
+  background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(239,68,68,0.05));
+  border:1px solid rgba(245,158,11,0.2);border-radius:20px;padding:28px;
+  text-align:center;position:relative;overflow:hidden;
 }
-.price-toggle button{
-  font-family:var(--body);font-weight:600;font-size:13.5px;
-  padding:9px 18px;border-radius:999px;border:0;cursor:pointer;
-  background:transparent;color:var(--t2);transition:all .2s ease;
-  letter-spacing:-0.1px;
+.bonus-badge{
+  position:absolute;top:16px;right:16px;
+  background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);
+  border-radius:50px;padding:3px 10px;font-size:11px;font-weight:700;color:#fbbf24;
 }
-.price-toggle button.active{
-  background:var(--t0);color:#0b0f1c;
-  box-shadow:0 2px 8px rgba(0,0,0,0.35);
+.bonus-emoji{font-size:38px;margin-bottom:14px;display:block;}
+.bonus-h3{font-family:var(--display);font-weight:700;font-size:16px;color:var(--t0);margin-bottom:8px;}
+.bonus-p{font-size:13.5px;color:var(--t2);line-height:1.55;}
+.bonus-val{
+  display:inline-block;margin-top:12px;
+  background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);
+  border-radius:50px;padding:4px 14px;font-size:12px;font-weight:700;color:#fbbf24;
 }
-.price-toggle .save-pill{
-  display:inline-block;font-size:10.5px;font-weight:700;
-  padding:2px 7px;border-radius:999px;margin-left:6px;
-  background:rgba(16,185,129,0.18);color:#34d399;
-  letter-spacing:0.2px;
-}
-.price-toggle button.active .save-pill{background:rgba(16,185,129,0.22);color:#10b981;}
-.pricing-grid{
-  display:grid;grid-template-columns:repeat(4, 1fr);gap:14px;
-  margin-top:40px;
-}
-.price-card{
-  background:linear-gradient(180deg, rgba(15,20,36,0.85), rgba(15,20,36,0.6));
-  border:1px solid rgba(255,255,255,0.06);
-  border-radius:var(--r-lg);
-  padding:28px 24px;
-  position:relative;
-  transition:all .25s ease;
-  display:flex;flex-direction:column;
-}
-.price-card:hover{border-color:rgba(255,255,255,0.12);transform:translateY(-2px);}
-.price-card.featured{
-  border-color:rgba(129,140,248,0.4);
-  background:
-    linear-gradient(180deg, rgba(99,102,241,0.10), rgba(99,102,241,0.04));
-  box-shadow:0 30px 80px -20px rgba(99,102,241,0.30);
-}
-.price-head{
-  display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:22px;gap:10px;
-}
-.price-plan{
-  display:inline-block;
-  font-size:12px;font-weight:700;letter-spacing:0.2px;
-  color:var(--t1);font-family:var(--body);
-  padding:5px 11px;border-radius:8px;
-  background:rgba(255,255,255,0.05);
-  border:1px solid rgba(255,255,255,0.08);
-}
-.price-card.featured .price-plan{
-  background:rgba(129,140,248,0.14);
-  border-color:rgba(129,140,248,0.30);
-  color:var(--indigo-2);
-}
-.price-badge{
-  position:static;transform:none;
-  background:rgba(16,185,129,0.16);
-  color:#34d399;
-  font-family:var(--body);font-size:11.5px;font-weight:700;
-  letter-spacing:0;text-transform:none;
-  padding:5px 11px;border-radius:8px;
-  border:1px solid rgba(16,185,129,0.28);
-  box-shadow:none;
-}
-.price-amount{
-  font-family:var(--display);font-size:46px;font-weight:800;
-  letter-spacing:-2px;line-height:1;color:var(--t0);
-  display:flex;align-items:baseline;gap:6px;
-}
-.price-card.featured .price-amount{
-  background:linear-gradient(135deg,#a78bfa,#67e8f9);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-}
-.price-currency{font-size:22px;color:var(--t2);font-weight:700;
-  vertical-align:baseline;margin-right:0;letter-spacing:-0.5px;}
-.price-per{font-size:14px;color:var(--t3);font-weight:500;
-  margin-left:2px;letter-spacing:-0.1px;}
-.price-card .price-amount .price-per{margin-bottom:0;}
-.price-desc{
-  font-size:13.5px;color:var(--t2);line-height:1.5;
-  margin-top:14px;margin-bottom:22px;min-height:42px;
-}
-.price-divider{
-  height:1px;background:rgba(255,255,255,0.06);
-  margin:0 0 18px;
-}
-.price-features{list-style:none;display:flex;flex-direction:column;gap:13px;margin-bottom:24px;flex:1;}
-.price-features li{
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  font-size:13.5px;color:var(--t2);line-height:1.4;
-}
-.price-feat-label{display:flex;align-items:center;gap:9px;color:var(--t2);}
-.price-feat-icon{
-  width:16px;height:16px;flex-shrink:0;color:var(--t3);
-  stroke-width:1.8;
-}
-.price-feat-val{
-  font-family:var(--mono);font-size:13px;font-weight:600;
-  color:var(--t1);letter-spacing:-0.2px;
-}
-.price-card.featured .price-feat-val{color:var(--t0);}
-.price-cta{
-  display:flex;width:100%;padding:12px;border-radius:10px;
-  font-size:14px;font-weight:700;text-decoration:none;
-  align-items:center;justify-content:center;
-  font-family:var(--body);transition:all .2s;letter-spacing:-0.1px;
-}
-.price-cta-primary{
-  background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;
-  box-shadow:0 4px 16px rgba(99,102,241,0.35);
-}
-.price-cta-primary:hover{box-shadow:0 8px 24px rgba(99,102,241,0.5);transform:translateY(-1px);}
-.price-cta-ghost{
-  background:rgba(255,255,255,0.04);color:var(--t1);
-  border:1px solid rgba(255,255,255,0.1);
-}
-.price-cta-ghost:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.18);}
 
 /* ── TESTIMONIALS ── */
-.testi-grid{
-  display:grid;grid-template-columns:repeat(2, 1fr);gap:16px;
-}
+.testi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;}
 .testi-card{
-  background:linear-gradient(180deg, rgba(15,20,36,0.85), rgba(15,20,36,0.6));
-  border:1px solid rgba(255,255,255,0.06);
-  border-radius:var(--r-md);
-  padding:32px 28px;backdrop-filter:blur(12px);
-  position:relative;
+  background:var(--s1);border:1px solid rgba(255,255,255,0.07);
+  border-radius:20px;padding:28px;transition:border-color .2s;
 }
-.testi-quote-mark{
-  position:absolute;top:18px;right:24px;
-  font-family:var(--display);font-size:48px;line-height:1;
-  color:rgba(129,140,248,0.18);font-weight:800;
-}
-.testi-stars{color:var(--amber);font-size:13px;margin-bottom:16px;letter-spacing:3px;}
-.testi-quote{
-  font-size:15px;color:var(--t1);line-height:1.7;margin-bottom:24px;
-  font-weight:400;
-}
+.testi-card:hover{border-color:rgba(99,102,241,0.3);}
+.testi-stars{color:#f59e0b;font-size:15px;margin-bottom:12px;letter-spacing:2px;}
+.testi-quote{font-size:14.5px;color:var(--t1);line-height:1.7;margin-bottom:20px;font-style:italic;}
+.testi-quote strong{color:#fff;font-style:normal;}
 .testi-author{display:flex;align-items:center;gap:12px;}
 .testi-avatar{
-  width:42px;height:42px;border-radius:50%;
+  width:42px;height:42px;border-radius:50%;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-weight:700;font-size:15px;color:#fff;flex-shrink:0;
+  font-family:var(--display);font-weight:700;font-size:13px;color:#fff;
 }
-.testi-name{font-size:14.5px;font-weight:700;color:var(--t0);}
-.testi-role{font-size:12px;color:var(--t3);font-family:var(--mono);margin-top:2px;}
+.testi-name{font-weight:700;font-size:14px;color:var(--t0);}
+.testi-role{font-size:12px;color:var(--t3);margin-top:2px;}
 
-/* ── CTA ── */
-.cta-section{padding:120px 0;text-align:center;position:relative;}
-.cta-section::before{
-  content:"";position:absolute;top:50%;left:50%;
-  transform:translate(-50%,-50%);
-  width:700px;height:400px;
-  background:radial-gradient(ellipse, rgba(99,102,241,0.18), transparent 70%);
-  filter:blur(20px);pointer-events:none;
+/* ── AUTHORITY ── */
+.authority-box{
+  background:linear-gradient(135deg,var(--s1),var(--s2));
+  border:1px solid rgba(255,255,255,0.08);border-radius:28px;padding:56px 48px;
+  text-align:center;
 }
-.cta-box{
-  max-width:760px;margin:0 auto;position:relative;z-index:1;
-  background:
-    linear-gradient(180deg, rgba(20,25,45,0.9), rgba(15,20,36,0.7));
-  border:1px solid rgba(129,140,248,0.2);
-  border-radius:var(--r-xl);
-  padding:72px 56px;backdrop-filter:blur(20px);
-  box-shadow:0 40px 100px -20px rgba(99,102,241,0.25);
+.authority-logos{
+  display:flex;justify-content:center;flex-wrap:wrap;gap:20px;margin-top:40px;
 }
-.cta-h2{
-  font-family:var(--display);font-size:clamp(34px,5vw,52px);font-weight:800;
-  letter-spacing:-1.6px;line-height:1.05;margin-bottom:18px;color:var(--t0);
+.auth-pill{
+  background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);
+  border-radius:50px;padding:10px 24px;font-size:13.5px;font-weight:600;color:var(--t2);
+  display:flex;align-items:center;gap:8px;
 }
-.cta-h2 .grad{
-  background:linear-gradient(110deg,#a78bfa,#818cf8 50%,#67e8f9);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+.auth-flag{font-size:18px;}
+
+/* ── FAQ ── */
+.faq-list{display:flex;flex-direction:column;gap:12px;max-width:800px;margin:0 auto;}
+.faq-item{
+  background:var(--s1);border:1px solid rgba(255,255,255,0.07);
+  border-radius:16px;overflow:hidden;
 }
-.cta-sub{font-size:17px;color:var(--t2);margin-bottom:36px;line-height:1.6;}
-.cta-form{display:flex;gap:10px;max-width:480px;margin:0 auto 16px;}
-.cta-input{
-  flex:1;background:rgba(10,13,26,0.8);
-  border:1px solid rgba(255,255,255,0.1);
-  border-radius:12px;padding:14px 18px;font-size:14.5px;color:var(--t1);
-  font-family:var(--body);outline:none;transition:all .2s;
+.faq-q{
+  padding:20px 24px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;
+  font-weight:600;font-size:15px;color:var(--t0);user-select:none;
 }
-.cta-input:focus{
-  border-color:rgba(129,140,248,0.5);
-  box-shadow:0 0 0 3px rgba(129,140,248,0.15);
+.faq-q:hover{background:rgba(255,255,255,0.03);}
+.faq-q svg{flex-shrink:0;transition:transform .25s;color:var(--indigo-2);}
+.faq-item.open .faq-q svg{transform:rotate(45deg);}
+.faq-a{
+  max-height:0;overflow:hidden;transition:max-height .3s ease;
+  padding:0 24px;font-size:14.5px;color:var(--t2);line-height:1.7;
 }
-.cta-input::placeholder{color:var(--t4);}
-.cta-note{font-size:12.5px;color:var(--t3);font-family:var(--mono);}
+.faq-item.open .faq-a{max-height:300px;padding:0 24px 20px;}
+
+/* ── CTA SECTIONS ── */
+.cta-band{
+  background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.10));
+  border-top:1px solid rgba(99,102,241,0.2);border-bottom:1px solid rgba(99,102,241,0.2);
+  padding:64px 0;text-align:center;
+}
+.cta-band h2{font-family:var(--display);font-size:clamp(26px,4vw,42px);font-weight:800;color:var(--t0);margin-bottom:12px;line-height:1.15;}
+.cta-band p{font-size:16px;color:var(--t2);margin-bottom:32px;max-width:520px;margin-left:auto;margin-right:auto;}
+.cta-group{display:flex;justify-content:center;align-items:center;gap:16px;flex-wrap:wrap;}
+.cta-note{font-size:12px;color:var(--t3);margin-top:14px;}
+.cta-note strong{color:var(--t2);}
+
+.urgency-counter{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);
+  border-radius:50px;padding:6px 18px;font-size:13px;font-weight:700;color:#f87171;
+  margin-bottom:24px;
+}
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:#ef4444;animation:pulse 1.5s infinite;}
 
 /* ── FOOTER ── */
-footer{
-  border-top:1px solid rgba(255,255,255,0.06);
-  padding:64px 0 32px;margin-top:40px;
-}
-.footer-inner{max-width:var(--max);margin:0 auto;padding:0 32px;}
-.footer-top{
-  display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;
-  gap:48px;margin-bottom:56px;
-}
-.footer-brand-block{max-width:300px;}
-.footer-brand-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
-.footer-desc{font-size:13.5px;color:var(--t3);line-height:1.7;}
-.footer-col h4{
-  font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
-  color:var(--t3);margin-bottom:18px;font-family:var(--mono);
-}
-.footer-col a{
-  display:block;font-size:14px;color:var(--t2);text-decoration:none;
-  margin-bottom:10px;transition:color .15s;
-}
-.footer-col a:hover{color:var(--indigo-2);}
-.footer-bottom{
-  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;
-  padding-top:28px;border-top:1px solid rgba(255,255,255,0.05);
-}
-.footer-copy{font-size:12.5px;color:var(--t3);font-family:var(--mono);}
-.footer-soc{display:flex;gap:14px;}
-.footer-soc a{
-  width:34px;height:34px;border-radius:8px;
-  display:flex;align-items:center;justify-content:center;
-  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);
-  color:var(--t2);transition:all .2s;
-}
-.footer-soc a:hover{color:var(--indigo-2);border-color:rgba(129,140,248,0.3);background:rgba(99,102,241,0.08);}
+footer{background:var(--s0);border-top:1px solid rgba(255,255,255,0.06);padding:48px 0 28px;}
+.footer-inner{max-width:var(--max);margin:0 auto;padding:0 24px;}
+.footer-top{display:flex;gap:48px;flex-wrap:wrap;margin-bottom:40px;}
+.footer-brand-block{flex:1;min-width:200px;}
+.footer-desc{font-size:13.5px;color:var(--t3);margin-top:12px;line-height:1.6;max-width:280px;}
+.footer-col{min-width:120px;}
+.footer-col h4{font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--t3);margin-bottom:14px;}
+.footer-col a{display:block;font-size:13.5px;color:var(--t2);text-decoration:none;margin-bottom:8px;transition:color .2s;}
+.footer-col a:hover{color:var(--t0);}
+.footer-bottom{border-top:1px solid rgba(255,255,255,0.06);padding-top:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+.footer-copy{font-size:12.5px;color:var(--t3);}
+.footer-soc{display:flex;gap:12px;}
+.footer-soc a{color:var(--t3);transition:color .2s;width:20px;height:20px;display:flex;align-items:center;justify-content:center;}
+.footer-soc a:hover{color:var(--t0);}
 .footer-soc svg{width:16px;height:16px;}
 
-/* scrollbar */
-::-webkit-scrollbar{width:8px;}
-::-webkit-scrollbar-track{background:var(--bg);}
-::-webkit-scrollbar-thumb{background:rgba(99,102,241,.25);border-radius:4px;}
-::-webkit-scrollbar-thumb:hover{background:rgba(99,102,241,.4);}
+/* ── DIVIDER ── */
+.divider{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent);margin:0;}
 
-/* ── Mobile nav (hamburger + slide-down panel) ── */
-.nav-toggle{display:none;}
-.nav-mobile{display:none;}
+/* ── ANIM ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+.hero>*,.hero h1,.hero-sub,.hero-bullets,.hero-ctas,.hero-meta,.eyebrow{animation:fadeUp .7s ease both;}
+.eyebrow{animation-delay:0s}
+.hero h1{animation-delay:.08s}
+.hero-sub{animation-delay:.15s}
+.hero-bullets{animation-delay:.22s}
+.hero-ctas{animation-delay:.3s}
+.hero-meta{animation-delay:.35s}
 
 /* ── RESPONSIVE ── */
-@media(max-width:960px){
-  .features-grid,.testi-grid{grid-template-columns:1fr 1fr;}
-  .pricing-grid{grid-template-columns:1fr 1fr;}
-  .footer-top{grid-template-columns:1fr 1fr;}
-  .stats-grid{grid-template-columns:repeat(5,1fr);gap:0;}
-  .stat-val{font-size:30px;}
+@media(max-width:900px){
+  .pain-grid,.usecase-grid,.bonus-grid,.offer-grid{grid-template-columns:1fr;}
+  .vs-grid{grid-template-columns:1fr;gap:16px;}
+  .vs-sep{display:none;}
+  .offer-box{padding:32px 24px;}
+  .authority-box{padding:40px 24px;}
 }
 @media(max-width:680px){
-  .container,.nav-inner,.footer-inner,.stats-grid{padding-left:20px;padding-right:20px;}
-  .nav-links{display:none;}
-  .nav-toggle{
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
-    width:38px;height:38px;margin-left:auto;margin-right:10px;
-    background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
-    border-radius:9px;cursor:pointer;padding:0;
-    transition:background .15s, border-color .15s;
-  }
-  .nav-toggle:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.14);}
-  .nav-toggle span{
-    display:block;width:16px;height:1.5px;background:var(--t1);border-radius:1px;
-    transition:transform .2s ease, opacity .15s ease;
-  }
-  .nav-toggle.open span:nth-child(1){transform:translateY(6.5px) rotate(45deg);}
-  .nav-toggle.open span:nth-child(2){opacity:0;}
-  .nav-toggle.open span:nth-child(3){transform:translateY(-6.5px) rotate(-45deg);}
-  .nav-mobile{
-    position:fixed;top:68px;left:0;right:0;z-index:99;
-    background:rgba(5,6,13,0.96);
-    backdrop-filter:blur(20px) saturate(180%);
-    -webkit-backdrop-filter:blur(20px) saturate(180%);
-    border-bottom:1px solid rgba(255,255,255,0.08);
-    padding:12px 20px 16px;
-    flex-direction:column;gap:2px;
-    transform:translateY(-8px);opacity:0;pointer-events:none;
-    transition:transform .2s ease, opacity .2s ease;
-  }
-  .nav-mobile.open{display:flex;transform:translateY(0);opacity:1;pointer-events:auto;}
-  .nav-mobile a{
-    color:var(--t1);font-size:15px;font-weight:500;text-decoration:none;
-    padding:12px 14px;border-radius:8px;
-    transition:background .15s, color .15s;
-  }
-  .nav-mobile a:hover,.nav-mobile a:active{background:rgba(255,255,255,0.05);color:var(--t0);}
-
-  .hero{padding:120px 0 60px;}
-  .eyebrow{
-    font-size:13px;
-    padding:9px 14px 9px 12px;
-    border-radius:18px;
-    line-height:1.4;
-    margin-bottom:26px;
-    text-align:left;
-    max-width:100%;
-  }
-  .hero-visual{margin-top:40px;}
-  .globe-wrap{width:320px;height:320px;}
-  .globe-svg{width:300px;height:300px;}
-
-  .features-grid,.pricing-grid,.testi-grid,.footer-top{grid-template-columns:1fr;}
-  .stats-grid{grid-template-columns:repeat(2, 1fr);gap:0;border:none;}
-  .stat{border-right:none;padding:18px;border-bottom:1px solid rgba(255,255,255,0.05);}
-  .section-pad{padding:80px 0;}
-  .cta-box{padding:48px 28px;}
-  .cta-form{flex-direction:column;}
-  .step-row{grid-template-columns:54px 1fr;gap:16px;}
-  .step-num{width:42px;height:42px;font-size:13px;}
-}
-@media(max-width:480px){
-  .globe-wrap{width:280px;height:280px;}
-  .globe-svg{width:260px;height:260px;}
-  .eyebrow{font-size:12.5px;padding:8px 12px;}
+  .nav-links,.btn-primary.nav-btn{display:none;}
+  .nav-toggle{display:flex;}
+  .hero{padding:60px 0 56px;}
+  .section-pad{padding:64px 0;}
+  .stats-grid{flex-direction:column;}
+  .stat{border-right:none;border-bottom:1px solid rgba(255,255,255,0.06);}
+  .stat:last-child{border-bottom:none;}
+  .hero-ctas{flex-direction:column;align-items:center;}
 }
 </style>
 </head>
@@ -715,143 +474,89 @@ footer{
           <circle cx="12" cy="12" r="2.5" fill="white" opacity="0.4"/>
         </svg>
       </div>
+      <span class="brand-name">DSP</span>
     </a>
     <div class="nav-links">
-      <a href="#features" class="nav-link">Features</a>
-      <a href="#how" class="nav-link">How it Works</a>
-      <a href="#pricing" class="nav-link">Pricing</a>
-      <a href="#testimonials" class="nav-link">Reviews</a>
+      <a href="#program" class="nav-link">Program</a>
+      <a href="#learn" class="nav-link">Kya Seekhenge</a>
+      <a href="#testimonials" class="nav-link">Results</a>
+      <a href="#faq" class="nav-link">FAQ</a>
     </div>
     <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="navMobile">
       <span></span><span></span><span></span>
     </button>
-    <a href="https://app.getaisales.com/auth" class="btn btn-primary">Start Free Trial</a>
+    <a href="https://wa.me/923001234567?text=Agentic+AI+Mastery+mein+enroll+karna+hai" class="btn btn-wa" target="_blank">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.886a9.86 9.86 0 001.51 5.26l-.999 3.648 3.978-1.609zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+      Abhi Apply Karein
+    </a>
   </div>
 </nav>
 <div class="nav-mobile" id="navMobile">
-  <a href="#features" class="nav-link">Features</a>
-  <a href="#how" class="nav-link">How it Works</a>
-  <a href="#pricing" class="nav-link">Pricing</a>
-  <a href="#testimonials" class="nav-link">Reviews</a>
+  <a href="#program" class="nav-link">Program</a>
+  <a href="#learn" class="nav-link">Kya Seekhenge</a>
+  <a href="#testimonials" class="nav-link">Results</a>
+  <a href="#faq" class="nav-link">FAQ</a>
 </div>
 
-<!-- ── HERO ── -->
+<!-- ── URGENCY BAR ── -->
+<div class="urgency-bar">
+  🔥 Limited Seats: Agli batch mein <span>sirf 30 seats baqi hain</span> — Aaj hi apply karein warna slot close ho jata hai
+</div>
+
+<!-- ════════════════════════════════════════════
+     HERO — Above the Fold
+═══════════════════════════════════════════════ -->
 <section class="hero">
   <div class="container">
     <div class="eyebrow">
       <span class="eyebrow-dot"></span>
-      Your Social Media Runs Day &amp; Night, AI Handles Everything 24/7
+      Pakistan ka #1 Agentic AI Income Program
     </div>
 
-    <h1>Close deals while<br><span class="grad">you sleep.</span></h1>
+    <h1>
+      Agar aap AI use nahi kar rahe,<br>
+      <span class="grad">to AI aapko replace karega.</span>
+    </h1>
 
     <p class="hero-sub">
-      Your AI Sales Agent Qualifies, Diagnoses &amp; Closes Every WhatsApp Lead — Automatically.
+      Sirf <strong>14 din</strong> mein seekho AI agents banana — aur shuru karo <span style="color:#4ade80;font-weight:700;">international dollar income</span>. Pakistan mein baith kar, ghar se.
     </p>
 
+    <div class="hero-bullets">
+      <div class="hero-bullet">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>
+        <span>AI agents banana seekho jo <strong>24/7 aapke liye kaam karein</strong> — bina salary ke</span>
+      </div>
+      <div class="hero-bullet">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>
+        <span><strong>Freelancing, business automation, ya side hustle</strong> — teen raastein, ek skill</span>
+      </div>
+      <div class="hero-bullet">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>
+        <span><strong>Live + Practical training</strong> — sirf theory nahi, real kaam karo</span>
+      </div>
+      <div class="hero-bullet">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>
+        <span>Program complete karo aur <strong>internationally recognized certificate</strong> hasil karo</span>
+      </div>
+      <div class="hero-bullet">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>
+        <span>Koi bhi background? Koi masla nahi — <strong>zero technical experience</strong> se shuru kar sakte hain</span>
+      </div>
+    </div>
+
     <div class="hero-ctas">
-      <a href="https://app.getaisales.com/auth" class="btn btn-primary btn-lg">Start Free Trial — 14 Days Free
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      <a href="https://wa.me/923001234567?text=Agentic+AI+Mastery+mein+enroll+karna+hai" class="btn btn-wa btn-wa-lg" target="_blank">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.886a9.86 9.86 0 001.51 5.26l-.999 3.648 3.978-1.609zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+        WhatsApp Par Apply Karein
       </a>
-      <a href="#how" class="btn btn-ghost btn-lg">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-        See How It Works
+      <a href="#learn" class="btn btn-ghost" style="padding:16px 28px;font-size:15px;border-radius:16px;">
+        Pehle Program Dekhein ↓
       </a>
     </div>
 
     <div class="hero-meta">
-      <span class="domain">getaisales.com</span>
-      <span class="pipe">·</span>
-      No credit card required
-      <span class="pipe">·</span>
-      Setup in 1 day
-    </div>
-
-    <!-- Hero visual: standalone globe -->
-    <div class="hero-visual">
-      <div class="globe-stage">
-        <div class="globe-wrap">
-          <svg class="globe-svg" viewBox="-110 -110 220 220" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <radialGradient id="oceanGrad" cx="35%" cy="30%" r="75%">
-                <stop offset="0%" stop-color="#1e293b"/>
-                <stop offset="55%" stop-color="#0f172a"/>
-                <stop offset="100%" stop-color="#020617"/>
-              </radialGradient>
-              <clipPath id="globeClip"><circle cx="0" cy="0" r="100"/></clipPath>
-              <g id="continents">
-                <!-- North America -->
-                <path class="c-na" d="M -88,-58 L -76,-62 L -64,-58 L -54,-50 L -48,-40 L -52,-30 L -46,-22 L -38,-18 L -34,-10 L -40,-4 L -50,-6 L -58,-14 L -68,-16 L -78,-26 L -86,-38 L -90,-48 Z"/>
-                <path class="c-na" d="M -50,-6 L -44,2 L -36,8 L -32,16 L -28,18 L -30,12 L -38,4 L -44,-2 Z"/>
-                <text class="country-label" x="-64" y="-36">USA</text>
-                <text class="country-label" x="-44" y="-12">MEX</text>
-                <!-- South America -->
-                <path class="c-sa" d="M -34,18 L -26,22 L -22,32 L -22,46 L -26,58 L -32,68 L -38,72 L -42,66 L -42,54 L -38,40 L -36,28 Z"/>
-                <text class="country-label" x="-32" y="42">BRA</text>
-                <!-- Greenland / Iceland -->
-                <path class="c-gr" d="M -28,-72 L -18,-76 L -10,-70 L -12,-62 L -22,-58 L -30,-64 Z"/>
-                <path class="c-gr" d="M -16,-54 L -10,-56 L -8,-52 L -14,-50 Z"/>
-                <text class="country-label" x="-19" y="-66">GRL</text>
-                <!-- Europe -->
-                <path class="c-eu" d="M -8,-46 L 0,-50 L 8,-48 L 14,-44 L 18,-38 L 12,-32 L 4,-30 L -4,-34 L -8,-40 Z"/>
-                <path class="c-eu" d="M -8,-50 L -4,-54 L 0,-50 L -2,-44 L -8,-44 Z"/>
-                <path class="c-eu" d="M 6,-60 L 16,-62 L 22,-54 L 18,-46 L 10,-48 L 4,-54 Z"/>
-                <text class="country-label" x="4" y="-40">EUR</text>
-                <!-- Africa -->
-                <path class="c-af" d="M -4,-26 L 8,-26 L 20,-22 L 26,-14 L 28,-4 L 22,4 L 14,8 L 6,4 L -2,-2 L -6,-14 Z"/>
-                <path class="c-af" d="M 6,4 L 18,8 L 24,18 L 22,30 L 16,38 L 8,42 L 0,36 L -2,24 L 0,12 Z"/>
-                <path class="c-af" d="M 30,22 L 34,26 L 34,34 L 30,36 L 28,30 Z"/>
-                <text class="country-label" x="11" y="-10">NGA</text>
-                <text class="country-label" x="12" y="22">KEN</text>
-                <!-- Middle East -->
-                <path class="c-me" d="M 22,-22 L 32,-20 L 38,-12 L 36,-4 L 28,-2 L 22,-8 L 22,-16 Z"/>
-                <text class="country-label" x="30" y="-10">UAE</text>
-                <!-- Asia -->
-                <path class="c-as" d="M 22,-62 L 40,-66 L 60,-66 L 78,-62 L 90,-58 L 86,-50 L 70,-46 L 50,-46 L 32,-48 L 24,-54 Z"/>
-                <path class="c-as" d="M 38,-46 L 60,-44 L 76,-38 L 80,-28 L 74,-20 L 60,-18 L 46,-22 L 38,-30 L 36,-40 Z"/>
-                <path class="c-as" d="M 28,-22 L 38,-22 L 44,-16 L 42,-8 L 34,-8 L 28,-14 Z"/>
-                <path class="c-as" d="M 44,-14 L 52,-12 L 56,-4 L 54,6 L 48,10 L 42,4 L 42,-6 Z"/>
-                <path class="c-as" d="M 60,-12 L 70,-10 L 76,-2 L 70,4 L 62,4 L 58,-4 Z"/>
-                <path class="c-as" d="M 64,8 L 72,8 L 76,12 L 72,16 L 64,14 Z"/>
-                <path class="c-as" d="M 80,4 L 86,6 L 86,12 L 82,12 Z"/>
-                <path class="c-as" d="M 78,-8 L 84,-8 L 84,-2 L 78,-2 Z"/>
-                <path class="c-as" d="M 86,-32 L 92,-30 L 92,-22 L 88,-22 Z"/>
-                <text class="country-label" x="62" y="-58">RUS</text>
-                <text class="country-label" x="60" y="-32">CHN</text>
-                <text class="country-label" x="48" y="-2">IND</text>
-                <text class="country-label" x="69" y="-4">JPN</text>
-                <!-- Oceania -->
-                <path class="c-oc" d="M 64,28 L 80,26 L 92,30 L 96,38 L 90,46 L 78,48 L 66,46 L 60,38 Z"/>
-                <path class="c-oc" d="M 80,52 L 86,52 L 86,58 L 80,58 Z"/>
-                <path class="c-oc" d="M 100,42 L 106,42 L 106,52 L 100,52 Z"/>
-                <text class="country-label" x="78" y="40">AUS</text>
-              </g>
-            </defs>
-
-            <!-- ocean fill + sphere outline -->
-            <circle class="ocean" cx="0" cy="0" r="100"/>
-
-            <g clip-path="url(#globeClip)">
-              <!-- meridians -->
-              <ellipse class="meridian" cx="0" cy="0" rx="30" ry="100"/>
-              <ellipse class="meridian" cx="0" cy="0" rx="60" ry="100"/>
-              <ellipse class="meridian" cx="0" cy="0" rx="90" ry="100"/>
-              <line class="meridian-strong" x1="-100" y1="0" x2="100" y2="0"/>
-              <ellipse class="meridian" cx="0" cy="-50" rx="86.6" ry="14"/>
-              <ellipse class="meridian" cx="0" cy="50" rx="86.6" ry="14"/>
-              <ellipse class="meridian" cx="0" cy="-75" rx="66.1" ry="9"/>
-              <ellipse class="meridian" cx="0" cy="75" rx="66.1" ry="9"/>
-
-              <!-- spinning continents (3x for seamless wrap) -->
-              <g class="spin">
-                <g class="land"><use href="#continents"/></g>
-                <g class="land" transform="translate(180,0)"><use href="#continents"/></g>
-                <g class="land" transform="translate(360,0)"><use href="#continents"/></g>
-              </g>
-            </g>
-          </svg>
-        </div>
-      </div>
+      <strong>DSP — Digital Skills Platform</strong> &nbsp;·&nbsp; Sardar Group &nbsp;·&nbsp; Canada-Pakistan &nbsp;·&nbsp; Live Batch Starting Soon
     </div>
   </div>
 </section>
@@ -860,497 +565,458 @@ footer{
 <div class="stats">
   <div class="stats-grid">
     <div class="stat">
-      <div class="stat-val">78%</div>
-      <div class="stat-label">AI Handling Rate</div>
+      <div class="stat-val">14</div>
+      <div class="stat-label">Din ka Intensive Program</div>
     </div>
     <div class="stat">
-      <div class="stat-val">11.1%</div>
-      <div class="stat-label">Conversion Rate</div>
+      <div class="stat-val">500+</div>
+      <div class="stat-label">Trained Professionals</div>
     </div>
     <div class="stat">
-      <div class="stat-val">5.68×</div>
-      <div class="stat-label">Average ROAS</div>
-    </div>
-    <div class="stat">
-      <div class="stat-val">&lt;30s</div>
-      <div class="stat-label">Response Time</div>
+      <div class="stat-val">$300–$1,500</div>
+      <div class="stat-label">Monthly Earning Potential</div>
     </div>
     <div class="stat">
       <div class="stat-val">24/7</div>
-      <div class="stat-label">Always On</div>
+      <div class="stat-label">AI Agents Kaam Karte Hain</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">🌍</div>
+      <div class="stat-label">Pakistan · Canada · Dubai</div>
     </div>
   </div>
 </div>
 
-<!-- ── FEATURES ── -->
-<section id="features" class="section-pad">
-  <div class="container">
-    <div class="section-head">
-      <div class="section-eyebrow">Features</div>
-      <h2 class="section-h2">Everything your sales team<br>needs &mdash; automated.</h2>
-      <p class="section-sub">One platform that turns Meta Ads traffic into WhatsApp conversations, qualifies leads with AI, and closes deals.</p>
-    </div>
+<div class="divider"></div>
 
-    <div class="features-grid">
-      <div class="feat-card">
-        <div class="feat-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/>
-          </svg>
-        </div>
-        <h3 class="feat-h3">Claude AI Engine</h3>
-        <p class="feat-p">The most advanced AI model qualifies leads, diagnoses problems, and crafts personalised sales messages. Reads 100% human.</p>
-      </div>
-
-      <div class="feat-card">
-        <div class="feat-icon" style="background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.25);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-          </svg>
-        </div>
-        <h3 class="feat-h3">WhatsApp Automation</h3>
-        <p class="feat-p">Every inbound WhatsApp message gets a qualified AI response in under 30 seconds &mdash; 24/7, even while you sleep.</p>
-      </div>
-
-      <div class="feat-card">
-        <div class="feat-icon" style="background:rgba(245,158,11,0.12);border-color:rgba(245,158,11,0.25);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
-          </svg>
-        </div>
-        <h3 class="feat-h3">Meta Ads Attribution</h3>
-        <p class="feat-p">Server-side Conversions API tracks every lead back to the exact ad. Know your true ROAS, not just clicks.</p>
-      </div>
-
-      <div class="feat-card">
-        <div class="feat-icon" style="background:rgba(139,92,246,0.12);border-color:rgba(139,92,246,0.25);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-          </svg>
-        </div>
-        <h3 class="feat-h3">Built-in CRM</h3>
-        <p class="feat-p">Full Kanban pipeline, lead scoring, conversation history, activity timeline and agent management &mdash; all in one place.</p>
-      </div>
-
-      <div class="feat-card">
-        <div class="feat-icon" style="background:rgba(103,232,249,0.10);border-color:rgba(103,232,249,0.25);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#67e8f9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-          </svg>
-        </div>
-        <h3 class="feat-h3">AI Insights Dashboard</h3>
-        <p class="feat-p">Claude analyses your entire pipeline and tells you exactly what to fix &mdash; response speed, BANT gaps, closing opportunities.</p>
-      </div>
-
-      <div class="feat-card">
-        <div class="feat-icon" style="background:rgba(239,68,68,0.10);border-color:rgba(239,68,68,0.25);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/>
-          </svg>
-        </div>
-        <h3 class="feat-h3">Multi-tenant SaaS</h3>
-        <p class="feat-p">Each business gets their own isolated workspace, WhatsApp number, AI persona, and analytics &mdash; white-label ready.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ── HOW IT WORKS ── -->
-<section id="how" class="section-pad" style="background:rgba(99,102,241,0.025);border-top:1px solid rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.05);">
-  <div class="container">
-    <div class="section-head">
-      <div class="section-eyebrow">How It Works</div>
-      <h2 class="section-h2">From ad click to<br>closed deal &mdash; automated.</h2>
-      <p class="section-sub">Five steps. Zero manual work. The AI runs the whole pipeline; your team only steps in for the closes that matter.</p>
-    </div>
-
-    <div class="steps">
-      <div class="step-row">
-        <div class="step-track">
-          <div class="step-num" style="border-color:#6366f1;color:#818cf8;">1</div>
-          <div class="step-line" style="color:rgba(99,102,241,0.3)"></div>
-        </div>
-        <div class="step-body">
-          <h3 class="step-h3">Customer clicks your Meta Ad</h3>
-          <p class="step-p">Click-to-WhatsApp ad fires. The customer lands in your WhatsApp Business chat. Campaign attribution (ad ID, adset, campaign) is captured automatically.</p>
-          <span class="step-tag" style="background:rgba(99,102,241,0.1);color:#818cf8;border:1px solid rgba(99,102,241,0.25);">META ADS</span>
-        </div>
-      </div>
-
-      <div class="step-row">
-        <div class="step-track">
-          <div class="step-num" style="border-color:#8b5cf6;color:#a78bfa;">2</div>
-          <div class="step-line" style="color:rgba(139,92,246,0.3)"></div>
-        </div>
-        <div class="step-body">
-          <h3 class="step-h3">Claude AI takes over instantly</h3>
-          <p class="step-p">Within 30 seconds, the Qualifier agent replies in your brand voice. It asks BANT questions naturally &mdash; budget, need, timeline, authority &mdash; and reads sentiment.</p>
-          <span class="step-tag" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.25);">CLAUDE AI</span>
-        </div>
-      </div>
-
-      <div class="step-row">
-        <div class="step-track">
-          <div class="step-num" style="border-color:#10b981;color:#10b981;">3</div>
-          <div class="step-line" style="color:rgba(16,185,129,0.3)"></div>
-        </div>
-        <div class="step-body">
-          <h3 class="step-h3">Lead is scored and CRM updated</h3>
-          <p class="step-p">Every response updates lead score (HOT / WARM / COLD), stage, and BANT data &mdash; in real time. Pipeline is always current; no manual entry.</p>
-          <span class="step-tag" style="background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.25);">CRM</span>
-        </div>
-      </div>
-
-      <div class="step-row">
-        <div class="step-track">
-          <div class="step-num" style="border-color:#f59e0b;color:#f59e0b;">4</div>
-          <div class="step-line" style="color:rgba(245,158,11,0.3)"></div>
-        </div>
-        <div class="step-body">
-          <h3 class="step-h3">HOT leads handed to your agent</h3>
-          <p class="step-p">When the AI detects buying intent, the Closer agent alerts your sales rep instantly with a full context brief. No cold handoffs, no lost deals.</p>
-          <span class="step-tag" style="background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.25);">HANDOFF</span>
-        </div>
-      </div>
-
-      <div class="step-row">
-        <div class="step-track">
-          <div class="step-num" style="border-color:#ef4444;color:#ef4444;">5</div>
-        </div>
-        <div class="step-body">
-          <h3 class="step-h3">Deal closed. Meta CAPI fires.</h3>
-          <p class="step-p">On every close, a server-side Purchase event fires to Meta Conversions API &mdash; feeding the algorithm real revenue data to optimise your next campaign.</p>
-          <span class="step-tag" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.25);">CLOSED WON</span>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ── PRICING ── -->
-<section id="pricing" class="section-pad">
+<!-- ════════════════════════════════════════════
+     HOOK — Pain + Dream
+═══════════════════════════════════════════════ -->
+<section class="section-pad" id="pain" style="background:rgba(99,102,241,0.02);">
   <div class="container">
     <div class="section-head center">
-      <div class="section-eyebrow">Pricing</div>
-      <h2 class="section-h2">Affordable pricing.</h2>
-      <p class="section-sub">Plans for every team — from solo founders to scaling agencies.<br>Try any plan free for 14 days. No credit card required.</p>
-
-      <div class="price-toggle" role="tablist">
-        <button type="button" class="active" data-bill="monthly">Monthly</button>
-        <button type="button" data-bill="yearly">Yearly <span class="save-pill">save 20%</span></button>
-      </div>
+      <div class="section-eyebrow">Aap Kahan Hain Aaj?</div>
+      <h2 class="section-h2">Aik sach jo aap jaante hain, lekin koi nahi kehta</h2>
+      <p class="section-sub">Mehngai har din barh rahi hai. Bank profit real income nahi de raha. Aur AI ke baare mein sab baat karte hain — lekin koi sikhata nahi hai.</p>
     </div>
 
-    <div class="pricing-grid">
-
-      <!-- ── STARTER ── -->
-      <div class="price-card">
-        <div class="price-head">
-          <span class="price-plan">Starter</span>
-        </div>
-        <div class="price-amount">
-          <span class="price-currency">$</span><span class="price-num" data-m="29" data-y="23">29</span>
-          <span class="price-per">/month</span>
-        </div>
-        <p class="price-desc">For solo founders just starting with WhatsApp sales automation.</p>
-        <div class="price-divider"></div>
-        <ul class="price-features">
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-              Contacts
-            </span>
-            <span class="price-feat-val">500</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-              AI messages
-            </span>
-            <span class="price-feat-val">2,000/mo</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              WhatsApp numbers
-            </span>
-            <span class="price-feat-val">1</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-              CRM pipelines
-            </span>
-            <span class="price-feat-val">1</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
-              Meta Ads attribution
-            </span>
-            <span class="price-feat-val">Basic</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-              Support
-            </span>
-            <span class="price-feat-val">Email</span>
-          </li>
+    <div class="pain-grid">
+      <div class="pain-card">
+        <div class="pain-label red">😔 Aaj ki Reality (Zyada-Tar Pakistan)</div>
+        <ul class="pain-list">
+          <li><span class="icon-red">✗</span> <span>Mehngai ki wajah se savings khatam, salary same</span></li>
+          <li><span class="icon-red">✗</span> <span>Degree hai lekin job nahi, ya job hai lekin growth nahi</span></li>
+          <li><span class="icon-red">✗</span> <span>AI ke baare mein sunna hai lekin samajh nahi aaya kya karna hai</span></li>
+          <li><span class="icon-red">✗</span> <span>Freelancing try ki — client nahi mila, ya nahi pata tha kya karna hai</span></li>
+          <li><span class="icon-red">✗</span> <span>Ghar mein zaroorat hai, rupya gir raha hai, dollar door lagta hai</span></li>
+          <li><span class="icon-red">✗</span> <span>Sab log AI wave ki baat karte hain, aap peeche reh rahe hain</span></li>
         </ul>
-        <a href="https://app.getaisales.com/auth" class="price-cta price-cta-ghost">Start free trial</a>
       </div>
-
-      <!-- ── GROWTH ── -->
-      <div class="price-card">
-        <div class="price-head">
-          <span class="price-plan">Growth</span>
-        </div>
-        <div class="price-amount">
-          <span class="price-currency">$</span><span class="price-num" data-m="79" data-y="63">79</span>
-          <span class="price-per">/month</span>
-        </div>
-        <p class="price-desc">For small teams running active Meta Ad campaigns.</p>
-        <div class="price-divider"></div>
-        <ul class="price-features">
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-              Contacts
-            </span>
-            <span class="price-feat-val">2,500</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-              AI messages
-            </span>
-            <span class="price-feat-val">10,000/mo</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              WhatsApp numbers
-            </span>
-            <span class="price-feat-val">2</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-              CRM pipelines
-            </span>
-            <span class="price-feat-val">3</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
-              Meta Ads + CAPI
-            </span>
-            <span class="price-feat-val">Full</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-              Support
-            </span>
-            <span class="price-feat-val">Chat</span>
-          </li>
+      <div class="dream-card">
+        <div class="pain-label green">🚀 14 Din Baad Aap</div>
+        <ul class="pain-list">
+          <li><span class="icon-green">✓</span> <span>AI agents banate hain jo clients ke liye kaam karte hain — ghar baith kar</span></li>
+          <li><span class="icon-green">✓</span> <span>Fiverr aur Upwork par AI projects se <strong>dollar income</strong> lete hain</span></li>
+          <li><span class="icon-green">✓</span> <span>Apne kisi bhi business ko AI se automate karte hain — cost zero</span></li>
+          <li><span class="icon-green">✓</span> <span>Internationally recognized certificate — resume mein value badh jati hai</span></li>
+          <li><span class="icon-green">✓</span> <span>Aap AI user nahi, <strong>AI earner</strong> ban jaate hain</span></li>
+          <li><span class="icon-green">✓</span> <span>DSP community ka hissa — Canada se Pakistan tak ek network</span></li>
         </ul>
-        <a href="https://app.getaisales.com/auth" class="price-cta price-cta-ghost">Start free trial</a>
-      </div>
-
-      <!-- ── PRO (most popular) ── -->
-      <div class="price-card featured">
-        <div class="price-head">
-          <span class="price-plan">Pro</span>
-          <span class="price-badge">Most popular</span>
-        </div>
-        <div class="price-amount">
-          <span class="price-currency">$</span><span class="price-num" data-m="149" data-y="119">149</span>
-          <span class="price-per">/month</span>
-        </div>
-        <p class="price-desc">For sales teams scaling WhatsApp + Meta into a real revenue engine.</p>
-        <div class="price-divider"></div>
-        <ul class="price-features">
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-              Contacts
-            </span>
-            <span class="price-feat-val">10,000</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-              AI messages
-            </span>
-            <span class="price-feat-val">50,000/mo</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              WhatsApp numbers
-            </span>
-            <span class="price-feat-val">5</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-              CRM pipelines
-            </span>
-            <span class="price-feat-val">10</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-              Custom AI persona
-            </span>
-            <span class="price-feat-val">✓</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-              Support
-            </span>
-            <span class="price-feat-val">Priority</span>
-          </li>
-        </ul>
-        <a href="https://app.getaisales.com/auth" class="price-cta price-cta-primary">Start free trial
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="margin-left:6px"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-        </a>
-      </div>
-
-      <!-- ── AGENCY ── -->
-      <div class="price-card">
-        <div class="price-head">
-          <span class="price-plan">Agency</span>
-        </div>
-        <div class="price-amount">
-          <span class="price-currency">$</span><span class="price-num" data-m="349" data-y="279">349</span>
-          <span class="price-per">/month</span>
-        </div>
-        <p class="price-desc">For agencies reselling AI sales automation under their own brand.</p>
-        <div class="price-divider"></div>
-        <ul class="price-features">
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-              Contacts
-            </span>
-            <span class="price-feat-val">∞</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-              AI messages
-            </span>
-            <span class="price-feat-val">250,000/mo</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              Sub-tenants
-            </span>
-            <span class="price-feat-val">25</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              White-label
-            </span>
-            <span class="price-feat-val">✓</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-              Custom integrations
-            </span>
-            <span class="price-feat-val">✓</span>
-          </li>
-          <li>
-            <span class="price-feat-label">
-              <svg class="price-feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-              Support
-            </span>
-            <span class="price-feat-val">Dedicated</span>
-          </li>
-        </ul>
-        <a href="https://app.getaisales.com/auth" class="price-cta price-cta-ghost">Talk to sales</a>
       </div>
     </div>
-
-    <script>
-      (function(){
-        const wrap = document.querySelector('.price-toggle');
-        if(!wrap) return;
-        const btns = wrap.querySelectorAll('button');
-        btns.forEach(b => b.addEventListener('click', () => {
-          btns.forEach(x => x.classList.remove('active'));
-          b.classList.add('active');
-          const mode = b.dataset.bill;
-          document.querySelectorAll('.price-num').forEach(n => {
-            n.textContent = mode === 'yearly' ? n.dataset.y : n.dataset.m;
-          });
-        }));
-      })();
-    </script>
   </div>
 </section>
 
-<!-- ── TESTIMONIALS ── -->
-<section id="testimonials" class="section-pad" style="padding-top:80px;">
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════
+     PROBLEM AGITATION
+═══════════════════════════════════════════════ -->
+<section class="section-pad" id="problem">
+  <div class="container">
+    <div class="section-head center">
+      <div class="section-eyebrow">Asli Masla Kya Hai?</div>
+      <h2 class="section-h2">Pakistan mein <span style="color:#f87171">4 problems</span> hain jo aapko rok rahi hain</h2>
+      <p class="section-sub">Yeh sirf aapki problem nahi hai. Lekin inka hal aapke paas hi hai — agar sahi skill ho.</p>
+    </div>
+
+    <div class="prob-grid">
+      <div class="prob-card">
+        <div class="prob-icon" style="background:rgba(239,68,68,0.1);">💸</div>
+        <h3 class="prob-h3">Mehngai ka Pressure</h3>
+        <p class="prob-p">Rupee 300+ per dollar tak gir gaya. Petrol, bijli, grocery — sab mehenga. Jo salary ek saal pehle kaafi thi, aaj woh guzara bhi mushkil se hoti hai.</p>
+      </div>
+
+      <div class="prob-card">
+        <div class="prob-icon" style="background:rgba(245,158,11,0.1);">🎓</div>
+        <h3 class="prob-h3">Degree vs Skill Gap</h3>
+        <p class="prob-p">4 saal degree ki, lakhon kharcha kiya — lekin interview mein poochhte hain "kya kaam aata hai?" Employers skill chahte hain, certificates nahi.</p>
+      </div>
+
+      <div class="prob-card">
+        <div class="prob-icon" style="background:rgba(99,102,241,0.1);">🤖</div>
+        <h3 class="prob-h3">AI Aapki Job Le Raha Hai</h3>
+        <p class="prob-p">Content writer, data entry, customer service, basic coding — AI ne in sab fields mein logon ki zaroorat kum kar di. Agar aap AI use nahi kar rahe, to aap already peeche hain.</p>
+      </div>
+
+      <div class="prob-card">
+        <div class="prob-icon" style="background:rgba(16,185,129,0.1);">🌐</div>
+        <h3 class="prob-h3">Dollar Income Door Lagta Hai</h3>
+        <p class="prob-p">Fiverr aur Upwork par log dollars kama rahe hain — lekin koi nahi batata exactly kya karna hai. Sab log kehte hain "AI seekho" lekin koi practical system nahi deta.</p>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:48px;">
+      <p style="font-size:20px;font-weight:700;color:var(--t0);margin-bottom:8px;">Yeh sab masle ek skill se solve ho sakte hain.</p>
+      <p style="font-size:16px;color:var(--t2);">Agentic AI mastery — jo aapko <strong style="color:#4ade80">AI user se AI earner</strong> bana deti hai.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════
+     CTA #1
+═══════════════════════════════════════════════ -->
+<div class="cta-band">
+  <div class="container">
+    <div class="urgency-counter">
+      <span class="pulse-dot"></span>
+      Abhi 23 log yeh page dekh rahe hain
+    </div>
+    <h2>"Pakistan mein baith kar<br><span style="color:#4ade80">dollar income possible hai</span>"</h2>
+    <p>Agar aap sahi skill seekhein. Aur woh skill hai — Agentic AI.<br>DSP ka 14-day program woh shortcut hai jo koi aur nahi de raha.</p>
+    <div class="cta-group">
+      <a href="https://wa.me/923001234567?text=Agentic+AI+Mastery+mein+enroll+karna+hai" class="btn btn-wa btn-wa-lg" target="_blank">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.886a9.86 9.86 0 001.51 5.26l-.999 3.648 3.978-1.609zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+        Seat Reserve Karein — WhatsApp
+      </a>
+    </div>
+    <div class="cta-note"><strong>Free consultation</strong> bhi available hai — sirf poochhna chahte hain? Message karein.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SOLUTION — Agentic AI kya hai?
+═══════════════════════════════════════════════ -->
+<section class="section-pad" id="solution" style="background:rgba(99,102,241,0.02);">
   <div class="container">
     <div class="section-head">
-      <div class="section-eyebrow">Reviews</div>
-      <h2 class="section-h2">Trusted by sales teams<br>across the globe.</h2>
+      <div class="section-eyebrow">Solution</div>
+      <h2 class="section-h2">AI user mat bano —<br><span class="grad">AI earner bano.</span></h2>
+      <p class="section-sub">Zyada-tar log AI sirf use karte hain. Chatbot se poochho, jawab lo. Woh AI user hain. Aap kuch alag seekhenge.</p>
+    </div>
+
+    <div class="solution-highlight">
+      <p style="font-size:18px;color:var(--t1);line-height:1.7;max-width:700px;">
+        <strong style="color:#fff">Agentic AI</strong> matlab — aise AI systems banana jo khud sochen, decisions karein, aur kaam karein. Aap unhe ek baar set karte hain, woh baar baar aapke liye ya aapke clients ke liye kaam karte rehte hain.
+      </p>
+      <p style="font-size:16px;color:var(--t2);margin-top:16px;max-width:700px;">
+        Sochiye: ek AI agent jo automatically customer WhatsApp handle kare, ek AI agent jo social media posts likhta rahe, ek AI agent jo data analyze karta rahe — aur yeh sab aapka banaya hua hoga.
+      </p>
+
+      <div class="vs-grid">
+        <div class="vs-box loser">
+          <div class="vs-label red">❌ AI User</div>
+          <div class="vs-title">ChatGPT use karna</div>
+          <div class="vs-desc">Har baar manually type karo, jawab lo, koi automation nahi, koi income nahi. Sirf ek tool hai aapke paas.</div>
+        </div>
+        <div class="vs-sep">VS</div>
+        <div class="vs-box winner">
+          <div class="vs-label blue">✅ AI Earner (Aap — 14 din baad)</div>
+          <div class="vs-title">AI Employees Banana</div>
+          <div class="vs-desc">Agentic systems banao jo khud chaltay rahin. Clients ko becho, apne business mein lagao — yah ek system hai jo income generate karta hai.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════
+     WHAT YOU WILL LEARN — Benefit-Based
+═══════════════════════════════════════════════ -->
+<section class="section-pad" id="learn">
+  <div class="container">
+    <div class="section-head center">
+      <div class="section-eyebrow">14 Din Ka Safar</div>
+      <h2 class="section-h2">Yeh sirf seekhna nahi —<br>yeh <span class="grad">karna</span> hai</h2>
+      <p class="section-sub">Har module ek real skill hai jo aap doosre din hi use kar sakte hain. Theory nahi — practical outcomes.</p>
+    </div>
+
+    <div class="learn-grid">
+      <div class="learn-card">
+        <div class="learn-num">01</div>
+        <div>
+          <h3 class="learn-h3">AI se Kaam Karwana Seekho</h3>
+          <p class="learn-p">Sirf question mat poochho — AI ko assign karo kaam. Prompts likhna seekho jo real results dein, na sirf generic answers.</p>
+          <span class="learn-tag">Prompt Mastery</span>
+        </div>
+      </div>
+
+      <div class="learn-card">
+        <div class="learn-num">02</div>
+        <div>
+          <h3 class="learn-h3">Apna Pehla AI Agent Banao</h3>
+          <p class="learn-p">Ek agent banana seekho jo ek kaam baar baar karta rahe. Customer support, content writing, data processing — aap choose karo.</p>
+          <span class="learn-tag">Agent Building</span>
+        </div>
+      </div>
+
+      <div class="learn-card">
+        <div class="learn-num">03</div>
+        <div>
+          <h3 class="learn-h3">AI Ko Apne Business Mein Lagao</h3>
+          <p class="learn-p">Aapke paas agar koi business hai — ya aap kisi ke liye kaam karte hain — to seekho kaise uski 10 ghante ki kaam 1 ghante mein ho jati hai.</p>
+          <span class="learn-tag">Business Automation</span>
+        </div>
+      </div>
+
+      <div class="learn-card">
+        <div class="learn-num">04</div>
+        <div>
+          <h3 class="learn-h3">Clients Ko AI Services Becho</h3>
+          <p class="learn-p">Duniya mein hazaron businesses AI solutions chahte hain. Seekho kaise apni service package karo, price karo, aur clients tak pahuncho.</p>
+          <span class="learn-tag">Freelance Setup</span>
+        </div>
+      </div>
+
+      <div class="learn-card">
+        <div class="learn-num">05</div>
+        <div>
+          <h3 class="learn-h3">Multiple AI Tools Ko Ek System Banao</h3>
+          <p class="learn-p">Alag alag AI tools ko connect karo. Jab ek kaam hota hai to doosra automatically shuru ho jata hai. Yahi hai real automation.</p>
+          <span class="learn-tag">AI Workflows</span>
+        </div>
+      </div>
+
+      <div class="learn-card">
+        <div class="learn-num">06</div>
+        <div>
+          <h3 class="learn-h3">Dollar Income Ka Rasta Kholo</h3>
+          <p class="learn-p">International platforms par kaise dikhna hai, profile kaise banani hai, aur pehla $50–$200 ka project kaise hasil karna hai — step by step.</p>
+          <span class="learn-tag">Dollar Income Path</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════
+     REAL-LIFE USE CASES
+═══════════════════════════════════════════════ -->
+<section class="section-pad" id="usecases" style="background:rgba(99,102,241,0.02);">
+  <div class="container">
+    <div class="section-head center">
+      <div class="section-eyebrow">Real Life Mein Kya Kar Sakte Hain</div>
+      <h2 class="section-h2">Teen raasten — ek skill</h2>
+      <p class="section-sub">Program ke baad aap in teen tareeqon se income generate kar sakte hain. Aap choose karein kaunsa aapke liye best hai.</p>
+    </div>
+
+    <div class="usecase-grid">
+      <div class="usecase-card">
+        <span class="usecase-emoji">💻</span>
+        <h3 class="usecase-h3">Freelancing — Dollar Clients</h3>
+        <p class="usecase-p">Fiverr, Upwork, LinkedIn par AI automation services bechein. Chatbots, AI content systems, workflow automation — yeh sab aap bana sakte hain jo international clients chahte hain.</p>
+        <div class="usecase-income">$300–$1,500 per month possible</div>
+      </div>
+
+      <div class="usecase-card">
+        <span class="usecase-emoji">🏪</span>
+        <h3 class="usecase-h3">Business Automation — Cost Save Karein</h3>
+        <p class="usecase-p">Aapka khud ka ya kisi ka business hai? AI se customer support, social media, invoicing, aur reporting automate karein. 20 ghante ka kaam 2 ghante mein.</p>
+        <div class="usecase-income">Lakhs rupees ki savings annually</div>
+      </div>
+
+      <div class="usecase-card">
+        <span class="usecase-emoji">🚀</span>
+        <h3 class="usecase-h3">AI Side Hustle — Ghar Se Income</h3>
+        <p class="usecase-p">Students ya job waale bhi kar sakte hain. Part-time AI services dein local businesses ko. Pakistani market mein bhi AI ki demand tezi se barh rahi hai.</p>
+        <div class="usecase-income">Rs 50,000–200,000 monthly potential</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════
+     OFFER BREAKDOWN
+═══════════════════════════════════════════════ -->
+<section class="section-pad" id="program">
+  <div class="container">
+    <div class="section-head center">
+      <div class="section-eyebrow">Program Details</div>
+      <h2 class="section-h2">Agentic AI Mastery —<br>14 Din Intensive</h2>
+    </div>
+
+    <div class="offer-box">
+      <div class="offer-grid">
+        <div class="offer-details">
+          <div class="offer-item">
+            <div class="offer-icon" style="background:rgba(99,102,241,0.15);">📅</div>
+            <div>
+              <div class="offer-item-h3">14 Din — Live Daily Sessions</div>
+              <div class="offer-item-p">Har din ek live session — weekdays + weekends. Sirf 2 weeks mein complete transformation.</div>
+            </div>
+          </div>
+          <div class="offer-item">
+            <div class="offer-icon" style="background:rgba(16,185,129,0.15);">🎯</div>
+            <div>
+              <div class="offer-item-h3">100% Practical — Real Projects</div>
+              <div class="offer-item-p">Har session mein real AI agent banate hain. Program khatam hote hote aapke paas ek working portfolio hoga.</div>
+            </div>
+          </div>
+          <div class="offer-item">
+            <div class="offer-icon" style="background:rgba(245,158,11,0.15);">🏆</div>
+            <div>
+              <div class="offer-item-h3">Internationally Recognized Certificate</div>
+              <div class="offer-item-p">DSP — Sardar Group ka certificate jo LinkedIn, resume, aur international clients ke liye value rakhta hai.</div>
+            </div>
+          </div>
+          <div class="offer-item">
+            <div class="offer-icon" style="background:rgba(139,92,246,0.15);">💬</div>
+            <div>
+              <div class="offer-item-h3">Private WhatsApp Community</div>
+              <div class="offer-item-p">Batch ke sath ek private group — questions poochho, resources share karo, aur lifetime network banao.</div>
+            </div>
+          </div>
+          <div class="offer-item">
+            <div class="offer-icon" style="background:rgba(103,232,249,0.12);">🔁</div>
+            <div>
+              <div class="offer-item-h3">Session Recordings — Lifetime Access</div>
+              <div class="offer-item-p">Koi session miss ho jaye? Koi masla nahi. Recordings lifetime available rahein gi.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="offer-cta-side">
+          <div class="offer-cta-title">Aaj hi Seat<br>Reserve Karein</div>
+          <div class="offer-cta-sub">Seats limited hain — har batch sirf 30 students tak.</div>
+          <a href="https://wa.me/923001234567?text=Agentic+AI+Mastery+mein+enroll+karna+hai" class="btn btn-wa btn-wa-lg" target="_blank" style="display:inline-flex;margin-bottom:16px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.886a9.86 9.86 0 001.51 5.26l-.999 3.648 3.978-1.609zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+            WhatsApp Karein Abhi
+          </a>
+          <div class="offer-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>
+            Certificate Included
+          </div>
+          <div class="offer-badge" style="margin-top:8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>
+            Lifetime Recording Access
+          </div>
+          <div class="offer-badge" style="margin-top:8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>
+            Private WhatsApp Group
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════
+     BONUSES
+═══════════════════════════════════════════════ -->
+<section class="section-pad" style="background:rgba(99,102,241,0.02);">
+  <div class="container">
+    <div class="section-head center">
+      <div class="section-eyebrow">Exclusive Bonuses</div>
+      <h2 class="section-h2">Enroll karo to yeh bhi milega — <span style="color:#fbbf24">FREE</span></h2>
+      <p class="section-sub">Yeh bonuses akele bhi program se zyada value rakhte hain. Early enrollers ke liye exclusive.</p>
+    </div>
+
+    <div class="bonus-grid">
+      <div class="bonus-card">
+        <span class="bonus-badge">BONUS #1</span>
+        <span class="bonus-emoji">📘</span>
+        <h3 class="bonus-h3">Freelancing Fast-Start Guide</h3>
+        <p class="bonus-p">Pakistani freelancer ke liye ek complete step-by-step guide. Profile setup se lekar pehli payment tak — sab kuch cover hai. Urdu mein.</p>
+        <div class="bonus-val">Value: Rs 5,000 — Aapko FREE</div>
+      </div>
+
+      <div class="bonus-card">
+        <span class="bonus-badge">BONUS #2</span>
+        <span class="bonus-emoji">🎯</span>
+        <h3 class="bonus-h3">Client-Getting Strategy Masterclass</h3>
+        <p class="bonus-p">Exactly kaise approach karna hai potential clients ko — WhatsApp, LinkedIn, aur Fiverr par. Proven scripts included jo actually kaam karte hain.</p>
+        <div class="bonus-val">Value: Rs 8,000 — Aapko FREE</div>
+      </div>
+
+      <div class="bonus-card">
+        <span class="bonus-badge">BONUS #3</span>
+        <span class="bonus-emoji">⚡</span>
+        <h3 class="bonus-h3">50+ Ready-to-Use AI Templates</h3>
+        <p class="bonus-p">50 pre-built AI prompt templates aur agent blueprints. Customer support se content creation tak — copy-paste karo aur instantly use karo.</p>
+        <div class="bonus-val">Value: Rs 6,000 — Aapko FREE</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════
+     SOCIAL PROOF — Testimonials
+═══════════════════════════════════════════════ -->
+<section class="section-pad" id="testimonials">
+  <div class="container">
+    <div class="section-head center">
+      <div class="section-eyebrow">Real Results</div>
+      <h2 class="section-h2">Unke haath se suno<br>jin ki zindagi badli</h2>
+      <p class="section-sub">Yeh log aap jaisi hi jagah se shuru hue thay. Ab woh AI se income le rahe hain.</p>
     </div>
 
     <div class="testi-grid">
       <div class="testi-card">
-        <div class="testi-quote-mark">&ldquo;</div>
         <div class="testi-stars">★★★★★</div>
-        <p class="testi-quote">We went from closing 30 leads a month to 84 &mdash; with the same team. The AI handles qualification perfectly and only sends us the hot ones.</p>
+        <p class="testi-quote">"Main ek struggling freelancer tha — graphic design mein competition bahut zyada tha. DSP ka AI program join kiya. Pehle hi mahine mein <strong>$350 earn kiye</strong> ek AI chatbot project se. Yeh miracle laga!"</p>
         <div class="testi-author">
-          <div class="testi-avatar" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">JM</div>
+          <div class="testi-avatar" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">AM</div>
           <div>
-            <div class="testi-name">Jordan Miller</div>
-            <div class="testi-role">🇺🇸 CEO · Sunrise Digital, Austin</div>
+            <div class="testi-name">Ahmed Mirza</div>
+            <div class="testi-role">🇵🇰 Freelancer · Lahore · Batch 3</div>
           </div>
         </div>
       </div>
+
       <div class="testi-card">
-        <div class="testi-quote-mark">&ldquo;</div>
         <div class="testi-stars">★★★★★</div>
-        <p class="testi-quote">The Meta Ads ROAS attribution is game-changing. We finally know which campaigns actually close deals, not just generate clicks.</p>
+        <p class="testi-quote">"Meri degree complete hone ke baad 8 mahine job nahi mili. DSP join kiya, <strong>14 din mein AI automation service start ki</strong>. Aaj mera pehla Pakistani client hai jo mujhe Rs 25,000 monthly de raha hai."</p>
         <div class="testi-author">
-          <div class="testi-avatar" style="background:linear-gradient(135deg,#10b981,#67e8f9);">EW</div>
+          <div class="testi-avatar" style="background:linear-gradient(135deg,#10b981,#67e8f9);">SR</div>
           <div>
-            <div class="testi-name">Emily Whitfield</div>
-            <div class="testi-role">🇬🇧 Marketing Director · Northgate Studio, London</div>
+            <div class="testi-name">Sara Rehman</div>
+            <div class="testi-role">🇵🇰 Recent Graduate · Karachi · Batch 2</div>
           </div>
         </div>
       </div>
+
       <div class="testi-card">
-        <div class="testi-quote-mark">&ldquo;</div>
         <div class="testi-stars">★★★★★</div>
-        <p class="testi-quote">Set it up in one afternoon. By the end of the week, the AI was handling 200+ conversations a day while we focused on closing. Remarkable.</p>
+        <p class="testi-quote">"Mera chhota sa kapray ka business tha. AI se WhatsApp automation, social media content sab automate kiya. <strong>Costs 40% kum ho gaye</strong>, sales barh gayi. Aur ab mujhe staff pe zyada depend nahi karna parta."</p>
         <div class="testi-author">
-          <div class="testi-avatar" style="background:linear-gradient(135deg,#f59e0b,#ef4444);">LT</div>
+          <div class="testi-avatar" style="background:linear-gradient(135deg,#f59e0b,#ef4444);">BK</div>
           <div>
-            <div class="testi-name">Liam Tremblay</div>
-            <div class="testi-role">🇨🇦 Founder · Maple Growth Co., Toronto</div>
+            <div class="testi-name">Bilal Kamran</div>
+            <div class="testi-role">🇵🇰 Business Owner · Faisalabad · Batch 1</div>
           </div>
         </div>
       </div>
+
       <div class="testi-card">
-        <div class="testi-quote-mark">&ldquo;</div>
         <div class="testi-stars">★★★★★</div>
-        <p class="testi-quote">Our team handles inbound across three time zones. The AI replies in seconds, qualifies properly, and we wake up to a clean shortlist of hot leads every morning.</p>
+        <p class="testi-quote">"Student hoon, part-time kaam kar rahi thi Rs 8,000 mein. Program ke baad <strong>Fiverr par AI gigs shuru kiye</strong>. Pehle 2 mahine mein hi $480 kama li — aur meri fees bhi cover ho gayi, bahut zyada faida hua."</p>
         <div class="testi-author">
-          <div class="testi-avatar" style="background:linear-gradient(135deg,#a78bfa,#67e8f9);">AR</div>
+          <div class="testi-avatar" style="background:linear-gradient(135deg,#a78bfa,#67e8f9);">ZA</div>
           <div>
-            <div class="testi-name">Aisha Rahman</div>
-            <div class="testi-role">🇦🇪 Head of Growth · Meridian Group, Dubai</div>
+            <div class="testi-name">Zainab Akhtar</div>
+            <div class="testi-role">🇵🇰 University Student · Islamabad · Batch 4</div>
           </div>
         </div>
       </div>
@@ -1358,20 +1024,174 @@ footer{
   </div>
 </section>
 
-<!-- ── CTA ── -->
-<section class="cta-section">
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════
+     AUTHORITY — DSP Positioning
+═══════════════════════════════════════════════ -->
+<section class="section-pad" style="background:rgba(99,102,241,0.02);">
   <div class="container">
-    <div class="cta-box">
-      <div class="section-eyebrow" style="display:inline-block;">14-day free trial</div>
-      <h2 class="cta-h2">Ready to close deals<br><span class="grad">while you sleep?</span></h2>
-      <p class="cta-sub">Join hundreds of businesses automating their sales with AI. No credit card required.</p>
-      <form class="cta-form" onsubmit="event.preventDefault();window.location.href='https://app.getaisales.com/auth';">
-        <input class="cta-input" type="email" placeholder="you@company.com" required>
-        <button type="submit" class="btn btn-primary btn-lg">Get Started
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-        </button>
-      </form>
-      <div class="cta-note">getaisales.com · Free 14 days · No credit card · Cancel anytime</div>
+    <div class="authority-box">
+      <div class="section-eyebrow" style="display:block;margin-bottom:16px;">Kyun DSP Trust Karein?</div>
+      <h2 class="section-h2" style="font-size:clamp(26px,4vw,40px);">Sardar Group ka<br><span class="grad">Digital Skills Platform</span></h2>
+      <p style="font-size:16px;color:var(--t2);max-width:640px;margin:16px auto 0;line-height:1.7;">
+        DSP sirf ek institute nahi — yeh ek global AI ecosystem ka hissa hai. Pakistan, Canada, aur UAE mein operations ke sath, hum connect karte hain aapko international opportunities se.
+      </p>
+
+      <div class="authority-logos">
+        <div class="auth-pill"><span class="auth-flag">🇵🇰</span> Pakistan — Islamabad HQ</div>
+        <div class="auth-pill"><span class="auth-flag">🇨🇦</span> Canada — International Presence</div>
+        <div class="auth-pill"><span class="auth-flag">🌐</span> PSX-Listed Sardar Group</div>
+        <div class="auth-pill">🤖 Real AI Systems — Not Theory</div>
+        <div class="auth-pill">🏆 Internationally Recognized Cert</div>
+        <div class="auth-pill">👥 500+ Trained Professionals</div>
+      </div>
+
+      <p style="font-size:14px;color:var(--t3);margin-top:32px;">
+        Sardar Group — Boulevard Tower REIT (PSX-listed, Arif Habib Group managed) ke banaane wale. Inhi logon ka AI education platform hai DSP.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════
+     CTA #2 — Mid-page
+═══════════════════════════════════════════════ -->
+<div class="cta-band">
+  <div class="container">
+    <h2>"Sirf 14 din mein ek aisi skill<br><span class="grad-green" style="background:linear-gradient(135deg,#22c55e,#67e8f9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">jo aapki income change kar sakti hai"</span></h2>
+    <p>Koi technical background nahi chahiye. Sirf seekhne ki khwahish honi chahiye.<br>Seats limited hain — aaj hi apply karein.</p>
+    <div class="cta-group">
+      <a href="https://wa.me/923001234567?text=Agentic+AI+Mastery+mein+enroll+karna+hai" class="btn btn-wa btn-wa-lg" target="_blank">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.886a9.86 9.86 0 001.51 5.26l-.999 3.648 3.978-1.609zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+        Apply Now — WhatsApp
+      </a>
+    </div>
+    <div class="cta-note">Sirf question hai? <strong>Free consultation</strong> ke liye bhi WhatsApp karein — koi pressure nahi.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     FAQ
+═══════════════════════════════════════════════ -->
+<section class="section-pad" id="faq">
+  <div class="container">
+    <div class="section-head center">
+      <div class="section-eyebrow">Aapke Sawaal</div>
+      <h2 class="section-h2">Jo baat dil mein hai —<br>hum jaante hain</h2>
+      <p class="section-sub">Yeh woh questions hain jo har Pakistani ke mann mein aate hain. Seedha jawab:</p>
+    </div>
+
+    <div class="faq-list">
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>"Mujhe kuch nahi aata — kya main kar sakta/sakti hoon?"</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div class="faq-a">Bilkul kar sakte hain! Program specifically un logon ke liye design kiya gaya hai jinhein koi technical background nahi. Hum zero se shuru karte hain. Agar aap WhatsApp use kar sakte hain to aap yeh seekh sakte hain. Humara teaching style Urdu mein, simple aur practical hai.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>"Mera schedule bahut busy hai — time kahan se nikaloonga?"</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div class="faq-a">Sessions evening mein hote hain taake students aur working professionals dono attend kar sakein. Roz 1.5 se 2 ghante chahiye. Recordings available hain agar koi din miss ho jaye. 14 din ka invest — life change karne ke liye. Waqt nikaala jata hai jo cheez important ho.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>"Paise waste na ho jaayein — kya guarantee hai?"</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div class="faq-a">Hum samajhte hain mehngai mein yeh ek bada decision hai. Isliye hum pehle free consultation dete hain — baat karein, sawal karein, phir decide karein. Sardar Group ka naam aur DSP ka track record hamari guarantee hai. 500+ trained professionals ka record dekhein jo actually results le rahe hain.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>"Earning ki guarantee hai kya?"</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div class="faq-a">Seedha jawab: koi bhi honest institute income guarantee nahi de sakta — woh fraud hoga. Jo hum de sakte hain woh hai: ek proven skill, real portfolio, client-getting strategy, aur community support. Jo log mehnat karte hain — unke results hum bahut clearly dikhate hain. Earning aapke effort par depend karti hai — hum sirf best tools aur knowledge dete hain.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>"Online courses to bahut hain — yeh alag kyun hai?"</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div class="faq-a">Fark hai: recorded course sikhata hai, lekin humara program kaam karwata hai. Live sessions mein aap seedha pooch sakte hain. Practical assignments mein real projects banate hain. Community mein peers aur mentors milte hain. Certificate internationally recognized hai. Aur DSP — Sardar Group ki backing ke sath ek real institution hai, koi single freelancer nahi.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>"Laptop ya computer zaroori hai?"</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div class="faq-a">Laptop hona best hai — zyada tar AI tools browser-based hain to koi special hardware nahi chahiye. Agar laptop nahi hai, WhatsApp karein — hum aapke situation ke hisaab se guide karenge. Bahut se tools mobile par bhi kaam karte hain beginning mein.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════════════════════════════════
+     FINAL CTA — Urgency
+═══════════════════════════════════════════════ -->
+<section style="padding:96px 0;text-align:center;position:relative;">
+  <div class="container">
+    <div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.10));border:1px solid rgba(99,102,241,0.3);border-radius:32px;padding:64px 40px;position:relative;overflow:hidden;">
+      <!-- decorative glow -->
+      <div style="position:absolute;top:-80px;left:50%;transform:translateX(-50%);width:400px;height:400px;background:radial-gradient(circle,rgba(99,102,241,0.15),transparent 70%);pointer-events:none;"></div>
+
+      <div class="urgency-counter" style="margin-bottom:28px;">
+        <span class="pulse-dot"></span>
+        Agli batch jaldi bhar rahi hai — sirf limited seats
+      </div>
+
+      <h2 style="font-family:var(--display);font-size:clamp(30px,5vw,52px);font-weight:800;color:var(--t0);margin-bottom:16px;line-height:1.1;letter-spacing:-1px;">
+        Abhi join nahi kiya<br>to <span style="color:#f87171">peeche reh jaoge</span>
+      </h2>
+
+      <p style="font-size:18px;color:var(--t2);max-width:560px;margin:0 auto 36px;line-height:1.7;">
+        AI wave rok nahi sakte. Ya aap is wave par sawaar ho — ya yeh wave aapko baha le jaye gi. 14 din, real skill, real income. Faisla aaj hi karna hoga.
+      </p>
+
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+        <a href="https://wa.me/923001234567?text=Agentic+AI+Mastery+mein+enroll+karna+hai" class="btn btn-wa btn-wa-lg" target="_blank" style="font-size:18px;padding:18px 44px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.886a9.86 9.86 0 001.51 5.26l-.999 3.648 3.978-1.609zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+          Seat Reserve Karein — Abhi
+        </a>
+        <div style="font-size:13px;color:var(--t3);">
+          📞 Sirf baat karni hai? Free consultation ke liye message karein — koi commitment nahi
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:20px;margin-top:40px;padding-top:32px;border-top:1px solid rgba(255,255,255,0.08);">
+        <div style="text-align:center;min-width:100px;">
+          <div style="font-family:var(--display);font-size:24px;font-weight:800;color:var(--t0);">14</div>
+          <div style="font-size:12px;color:var(--t3);">Din ka Program</div>
+        </div>
+        <div style="text-align:center;min-width:100px;">
+          <div style="font-family:var(--display);font-size:24px;font-weight:800;color:var(--t0);">Live</div>
+          <div style="font-size:12px;color:var(--t3);">Daily Sessions</div>
+        </div>
+        <div style="text-align:center;min-width:100px;">
+          <div style="font-family:var(--display);font-size:24px;font-weight:800;color:var(--t0);">🏆</div>
+          <div style="font-size:12px;color:var(--t3);">Certificate</div>
+        </div>
+        <div style="text-align:center;min-width:100px;">
+          <div style="font-family:var(--display);font-size:24px;font-weight:800;color:var(--t0);">500+</div>
+          <div style="font-size:12px;color:var(--t3);">Trained Pros</div>
+        </div>
+        <div style="text-align:center;min-width:100px;">
+          <div style="font-family:var(--display);font-size:24px;font-weight:800;color:var(--t0);">🌍</div>
+          <div style="font-size:12px;color:var(--t3);">Global Network</div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -1381,46 +1201,43 @@ footer{
   <div class="footer-inner">
     <div class="footer-top">
       <div class="footer-brand-block">
-        <div class="footer-brand-row">
+        <div style="display:flex;align-items:center;gap:10px;">
           <div class="brand-mark" style="width:32px;height:32px;border-radius:9px;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="white" opacity="0.95"/>
             </svg>
           </div>
+          <span style="font-family:var(--display);font-weight:800;font-size:16px;color:var(--t0);">DSP</span>
         </div>
-        <p class="footer-desc">AI-powered sales automation via WhatsApp and Meta Ads. Close deals while you sleep.</p>
+        <p class="footer-desc">Digital Skills Platform — Sardar Group ka AI Education Initiative. Pakistan mein international income ke raaston ko khol raha hai.</p>
       </div>
       <div class="footer-col">
-        <h4>Product</h4>
-        <a href="#features">Features</a>
-        <a href="#how">How it Works</a>
-        <a href="#pricing">Pricing</a>
-        <a href="https://app.getaisales.com/dashboard">Dashboard</a>
+        <h4>Program</h4>
+        <a href="#learn">Kya Seekhenge</a>
+        <a href="#program">Program Details</a>
+        <a href="#usecases">Use Cases</a>
+        <a href="#testimonials">Student Results</a>
       </div>
       <div class="footer-col">
         <h4>Company</h4>
-        <a href="about.html">About</a>
-        <a href="blog.html">Blog</a>
-        <a href="careers.html">Careers</a>
-        <a href="contact.html">Contact</a>
+        <a href="#">DSP ke Baare Mein</a>
+        <a href="#">Sardar Group</a>
+        <a href="#">Contact Karein</a>
+        <a href="https://wa.me/923001234567" target="_blank">WhatsApp Us</a>
       </div>
       <div class="footer-col">
         <h4>Legal</h4>
         <a href="privacy.html">Privacy Policy</a>
         <a href="terms.html">Terms of Service</a>
-        <a href="cookies.html">Cookie Policy</a>
       </div>
     </div>
     <div class="footer-bottom">
-      <div class="footer-copy">© 2026 getaisales.com · All rights reserved</div>
+      <div class="footer-copy">© 2026 DSP — Digital Skills Platform · Sardar Group · All rights reserved</div>
       <div class="footer-soc">
-        <a href="#" aria-label="Twitter">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-        </a>
         <a href="#" aria-label="LinkedIn">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
         </a>
-        <a href="#" aria-label="WhatsApp">
+        <a href="https://wa.me/923001234567" aria-label="WhatsApp" target="_blank">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.886a9.86 9.86 0 001.51 5.26l-.999 3.648 3.978-1.609zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
         </a>
       </div>
@@ -1429,19 +1246,52 @@ footer{
 </footer>
 
 <script>
-  (function(){
-    const toggle = document.getElementById('navToggle');
-    const menu   = document.getElementById('navMobile');
-    if (!toggle || !menu) return;
-    const setOpen = (open) => {
-      toggle.classList.toggle('open', open);
-      menu.classList.toggle('open', open);
-      toggle.setAttribute('aria-expanded', String(open));
-    };
-    toggle.addEventListener('click', () => setOpen(!menu.classList.contains('open')));
-    menu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setOpen(false)));
-    window.addEventListener('resize', () => { if (window.innerWidth > 680) setOpen(false); });
-  })();
+// ── Nav toggle ──
+(function(){
+  const toggle = document.getElementById('navToggle');
+  const menu   = document.getElementById('navMobile');
+  if (!toggle || !menu) return;
+  const setOpen = (open) => {
+    toggle.classList.toggle('open', open);
+    menu.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+  };
+  toggle.addEventListener('click', () => setOpen(!menu.classList.contains('open')));
+  menu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setOpen(false)));
+  window.addEventListener('resize', () => { if (window.innerWidth > 680) setOpen(false); });
+})();
+
+// ── FAQ Accordion ──
+function toggleFaq(el) {
+  const item = el.closest('.faq-item');
+  const isOpen = item.classList.contains('open');
+  // Close all
+  document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+  // Open clicked (if it was closed)
+  if (!isOpen) item.classList.add('open');
+}
+
+// ── Intersection Observer for scroll animations ──
+(function(){
+  const els = document.querySelectorAll('.learn-card,.testi-card,.prob-card,.usecase-card,.bonus-card');
+  if (!('IntersectionObserver' in window)) return;
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  els.forEach(el => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(20px)';
+    el.style.transition = 'opacity .5s ease, transform .5s ease';
+    obs.observe(el);
+  });
+})();
 </script>
 
 </body>
