@@ -21,9 +21,42 @@ const generateRefreshToken = (userId) => {
   return { token, hash };
 };
 
+// ── Organic lead creation helper ─────────────────────
+// Called inside a Prisma transaction (tx) to create a Contact + Lead
+// for the new admin user. Tags them as 'organic' so they appear in
+// the CRM with a clear acquisition source.
+
+const createOrganicLead = async (tx, { tenantId, name, email, phone }) => {
+  // Upsert contact — if phone already exists for this tenant, reuse it
+  let contact;
+  try {
+    contact = await tx.contact.upsert({
+      where:  { tenantId_phone: { tenantId, phone } },
+      create: { tenantId, phone, name, email, tags: ['organic'], optIn: true },
+      update: { tags: { set: ['organic'] } },
+    });
+  } catch {
+    // If upsert fails for any reason (e.g., race), skip lead creation silently
+    return null;
+  }
+
+  // Only create a NEW lead if none exists for this contact yet
+  const existing = await tx.lead.findFirst({ where: { contactId: contact.id, tenantId } });
+  if (existing) return existing;
+
+  return tx.lead.create({
+    data: {
+      tenantId,
+      contactId: contact.id,
+      stage:     'NEW',
+      sourceUtm: { source: 'organic_signup' },
+    },
+  });
+};
+
 // ── Register new tenant + admin user ─────────────────
 
-const register = async ({ tenantName, tenantSlug, email, password, fullName }) => {
+const register = async ({ tenantName, tenantSlug, email, password, fullName, phone }) => {
   // Check email not taken
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw Object.assign(new Error('Email already registered'), { statusCode: 409, expose: true });
@@ -85,6 +118,11 @@ Responda SEMPRE em português brasileiro de forma natural e amigável.`,
         messagesLimit: 1000,
       },
     });
+
+    // Organic lead — created only when phone is provided at signup
+    if (phone) {
+      await createOrganicLead(tx, { tenantId: tenant.id, name: fullName, email, phone });
+    }
 
     return { tenant, user };
   });
@@ -240,6 +278,8 @@ const googleAuth = async (token) => {
     include: { tenant: { select: { id: true, slug: true, name: true, plan: true, status: true } } },
   });
 
+  let isNewUser = false;
+
   if (user) {
     // Link googleId if user signed up with email/password before
     if (!user.googleId) {
@@ -253,6 +293,7 @@ const googleAuth = async (token) => {
     if (user.tenant?.status === 'SUSPENDED') throw Object.assign(new Error('Account suspended. Contact support.'), { statusCode: 403, expose: true });
   } else {
     // New user — create tenant + user in one transaction
+    isNewUser = true;
     const baseSlug = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
     const tenantSlug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -288,9 +329,36 @@ const googleAuth = async (token) => {
   return {
     accessToken,
     refreshToken,
+    isNewUser,   // true only for brand-new Google signups — frontend shows phone modal
     user:   { id: user.id, email: user.email, fullName: user.fullName, role: user.role, avatarUrl: user.avatarUrl },
     tenant: user.tenant,
   };
+};
+
+// ── Save phone after OAuth (called post-Google-login) ──
+// Creates the organic Contact + Lead if phone wasn't collected during signup.
+
+const saveOrganicPhone = async ({ userId, tenantId, phone }) => {
+  // Validate E.164 format
+  if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+    throw Object.assign(new Error('Phone must be in E.164 format (e.g. +923001234567)'), { statusCode: 400, expose: true });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404, expose: true });
+
+  // Run in a transaction so Contact + Lead are atomic
+  const lead = await prisma.$transaction(async (tx) => {
+    return createOrganicLead(tx, {
+      tenantId,
+      name:  user.fullName || user.email,
+      email: user.email,
+      phone,
+    });
+  });
+
+  logger.info({ userId, tenantId, phone }, 'Organic phone lead saved');
+  return { lead, phone };
 };
 
 // ── Logout ────────────────────────────────────────────
@@ -302,4 +370,4 @@ const logout = async (userId) => {
   });
 };
 
-module.exports = { register, login, googleAuth, refresh, logout };
+module.exports = { register, login, googleAuth, refresh, logout, saveOrganicPhone };

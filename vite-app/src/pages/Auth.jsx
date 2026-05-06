@@ -45,9 +45,16 @@ export default function Auth() {
   const [regName, setRegName]         = useState('');
   const [regEmail, setRegEmail]       = useState('');
   const [regPassword, setRegPassword] = useState('');
+  const [regPhone, setRegPhone]       = useState('');
   const [showRegPw, setShowRegPw]     = useState(false);
   const [strength, setStrength]       = useState({ score: 0, color: '#1e293b', label: '' });
   const [termsOk, setTermsOk]         = useState(false);
+
+  // Post-OAuth phone capture modal
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [phoneModalValue, setPhoneModalValue] = useState('');
+  const [phoneModalError, setPhoneModalError] = useState('');
+  const [phoneModalSubmitting, setPhoneModalSubmitting] = useState(false);
 
   // forgot password
   const [forgotEmail, setForgotEmail] = useState('');
@@ -114,16 +121,40 @@ export default function Auth() {
     try {
       const res = await authAPI.googleAuth(tokenResponse.access_token);
       const payload = res?.data ?? res;
-      const { accessToken, refreshToken, user, tenant } = payload || {};
+      const { accessToken, refreshToken, user, tenant, isNewUser } = payload || {};
       if (!accessToken) throw new Error('Google login failed.');
       localStorage.setItem('asos_token', accessToken);
       setAuth({ accessToken, refreshToken, user, tenant });
-      setSuccess('Signed in with Google! Redirecting…');
-      setTimeout(() => navigate('/dashboard', { replace: true }), 800);
+      if (isNewUser) {
+        // New signup via Google — show phone modal before navigating to dashboard
+        setShowPhoneModal(true);
+      } else {
+        setSuccess('Signed in with Google! Redirecting…');
+        setTimeout(() => navigate('/dashboard', { replace: true }), 800);
+      }
     } catch (err) {
       setError(err?.message || 'Google sign-in failed. Please try again.');
     } finally {
       setSubmit(false);
+    }
+  };
+
+  // ── Post-OAuth phone submission ────────────────────────────────────────
+  const handlePhoneModalSubmit = async (e) => {
+    e.preventDefault();
+    const cleaned = phoneModalValue.trim();
+    // "Skip" path — no phone entered, just go to dashboard
+    if (!cleaned) { navigate('/dashboard', { replace: true }); return; }
+    setPhoneModalError('');
+    setPhoneModalSubmitting(true);
+    try {
+      await authAPI.savePhone(cleaned);
+      setShowPhoneModal(false);
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      setPhoneModalError(err?.message || 'Could not save number — check format and try again.');
+    } finally {
+      setPhoneModalSubmitting(false);
     }
   };
 
@@ -136,12 +167,14 @@ export default function Auth() {
     setSubmit(true);
     try {
       const slug = slugFromEmail(regEmail);
+      const phoneVal = regPhone.trim();
       const res = await authAPI.register({
         tenantName: regName,
         tenantSlug: slug,
         email:      regEmail,
         password:   regPassword,
         fullName:   regName,
+        ...(phoneVal ? { phone: phoneVal } : {}),
       });
       const payload = res?.data ?? res;
       const { accessToken, refreshToken, user, tenant } = payload || {};
@@ -420,6 +453,20 @@ export default function Auth() {
                   )}
                 </div>
 
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    WhatsApp Number <span className="normal-case font-normal text-slate-600">(optional — for lead tracking)</span>
+                  </label>
+                  <AuthInput
+                    type="tel"
+                    value={regPhone}
+                    onChange={(e) => setRegPhone(e.target.value)}
+                    placeholder="+923001234567"
+                    disabled={submitting}
+                  />
+                  <p className="mt-1 text-[10px] text-slate-600">E.164 format — country code + number, no spaces</p>
+                </div>
+
                 <div className="flex items-start gap-3 py-1">
                   <input type="checkbox" id="terms" checked={termsOk} onChange={(e) => setTermsOk(e.target.checked)}
                          className="mt-0.5 rounded flex-shrink-0 cursor-pointer" style={{ accentColor: '#6366f1' }} />
@@ -509,6 +556,73 @@ export default function Auth() {
                       className="w-full rounded-xl py-3 text-sm font-semibold text-white"
                       style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
                 Send Reset Link →
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Post-Google phone capture modal ── */}
+      {showPhoneModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+             style={{ background: 'rgba(3,7,18,0.88)', backdropFilter: 'blur(10px)' }}>
+          <div className="glass rounded-3xl p-8 w-full max-w-sm relative animate-fade-in">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
+                   style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}>
+                <span className="text-lg">📱</span>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100">Add your WhatsApp</h3>
+                <p className="text-xs text-slate-500">We'll create your first lead profile</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-400 mb-5 leading-relaxed">
+              Enter your WhatsApp number to be tracked as an <span className="text-emerald-400 font-medium">organic lead</span> in your CRM. You can skip this for now.
+            </p>
+
+            {phoneModalError && (
+              <div className="mb-4 p-3 rounded-xl text-xs text-red-400"
+                   style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                {phoneModalError}
+              </div>
+            )}
+
+            <form onSubmit={handlePhoneModalSubmit} className="space-y-4">
+              <div>
+                <AuthInput
+                  type="tel"
+                  value={phoneModalValue}
+                  onChange={(e) => { setPhoneModalValue(e.target.value); setPhoneModalError(''); }}
+                  placeholder="+923001234567"
+                  disabled={phoneModalSubmitting}
+                  autoFocus
+                />
+                <p className="mt-1.5 text-[10px] text-slate-600">E.164 format — include country code, no spaces</p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={phoneModalSubmitting}
+                className="w-full rounded-xl py-3 text-sm font-semibold text-white transition-all disabled:opacity-50 hover:scale-[1.01] active:scale-[0.99]"
+                style={{ background: 'linear-gradient(135deg,#10b981,#059669)', boxShadow: '0 4px 20px rgba(16,185,129,0.25)' }}
+              >
+                {phoneModalSubmitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Saving…
+                  </span>
+                ) : 'Save & Continue →'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard', { replace: true })}
+                className="w-full py-2 text-xs text-slate-600 hover:text-slate-400 transition-colors"
+              >
+                Skip for now
               </button>
             </form>
           </div>

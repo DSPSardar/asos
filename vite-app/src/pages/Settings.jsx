@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@pages/Layout';
+import { settingsAPI, aiConfigAPI } from '@lib/api';
 
 const TABS = [
   { id:'whatsapp',      label:'WhatsApp',         icon:IconWhatsApp,    desc:'Connect your WhatsApp Business number and test the connection.' },
@@ -107,8 +108,8 @@ export default function Settings() {
 
         {/* Right content panel */}
         <div className="min-w-0 flex-1 space-y-6">
-          {tab === 'whatsapp'      && <WhatsAppTab      onSave={() => showToast('WhatsApp settings saved ✓')} />}
-          {tab === 'ai'            && <AITab            onSave={() => showToast('AI configuration saved ✓')} />}
+          {tab === 'whatsapp'      && <WhatsAppTab      showToast={showToast} />}
+          {tab === 'ai'            && <AITab            showToast={showToast} />}
           {tab === 'team'          && <TeamTab          onSave={() => showToast('Team updated ✓')} />}
           {tab === 'notifications' && <NotificationsTab onSave={() => showToast('Notification preferences saved ✓')} />}
           {tab === 'integrations'  && <IntegrationsTab  onSave={(name) => showToast(`${name} connection demo ✓`)} />}
@@ -223,90 +224,187 @@ function SecondaryButton({ children, onClick, type = 'button', tone = 'default' 
 }
 
 // ─────────────────────────────────────────────────────────────
-// TAB 1 — WhatsApp
+// TAB 1 — WhatsApp  (live DB-backed)
 // ─────────────────────────────────────────────────────────────
-function WhatsAppTab({ onSave }) {
+function WhatsAppTab({ showToast }) {
+  const [loading,     setLoading]     = useState(true);
+  const [saving,      setSaving]      = useState(false);
   const [revealToken, setRevealToken] = useState(false);
-  const [testPhone,  setTestPhone]    = useState('+92 333 ');
-  const [testResult, setTestResult]   = useState(null);
-  const [sending,    setSending]      = useState(false);
-  const phoneId      = '102345987612345';
-  const accessToken  = 'EAAGm0PX4ZCpsBO0Z****************************************************jK7Lz2yQX';
-  const webhookUrl   = 'https://api.getaisales.com/webhooks/whatsapp/{tenant_id}';
+  const [testPhone,   setTestPhone]   = useState('+92 ');
+  const [testResult,  setTestResult]  = useState(null);
+  const [sending,     setSending]     = useState(false);
+  const [tenantName,  setTenantName]  = useState('');
+  const [connected,   setConnected]   = useState(false);
 
-  const sendTest = (e) => {
+  // Editable fields
+  const [waPhoneId,     setWaPhoneId]     = useState('');
+  const [waAccessToken, setWaAccessToken] = useState('');
+  const [waAppSecret,   setWaAppSecret]   = useState('');
+  const [waVerifyToken, setWaVerifyToken] = useState('');
+
+  // Derived webhook URL (read-only, populated after load)
+  const [webhookUrl, setWebhookUrl] = useState('');
+
+  useEffect(() => {
+    settingsAPI.get()
+      .then((data) => {
+        const d = data?.data ?? data;
+        setTenantName(d?.name || '');
+        setWaPhoneId(d?.waPhoneId || '');
+        setConnected(!!d?.waPhoneId);
+        // Build webhook URL from current origin
+        const origin = String(import.meta.env.VITE_API_URL || window.location.origin)
+          .replace(/\/api\/v1\/?$/, '')
+          .replace(/\/+$/, '');
+        if (d?.id) setWebhookUrl(`${origin}/webhooks/whatsapp/${d.id}`);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const payload = {};
+      if (waPhoneId.trim())     payload.waPhoneId     = waPhoneId.trim();
+      if (waAccessToken.trim()) payload.waAccessToken = waAccessToken.trim();
+      if (waAppSecret.trim())   payload.waAppSecret   = waAppSecret.trim();
+      if (waVerifyToken.trim()) payload.waVerifyToken = waVerifyToken.trim();
+      await settingsAPI.updateWA(payload);
+      setConnected(!!payload.waPhoneId || connected);
+      // Clear sensitive fields after save so they're not sitting in state
+      setWaAccessToken('');
+      setWaAppSecret('');
+      showToast('WhatsApp settings saved ✓');
+    } catch (err) {
+      showToast(`Save failed: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendTest = async (e) => {
     e.preventDefault();
     setSending(true);
     setTestResult(null);
-    setTimeout(() => {
+    try {
+      const phone = testPhone.trim().replace(/\s+/g, '');
+      await settingsAPI.testWA(phone);
+      setTestResult({ ok: true, msg: `Test message sent to ${phone} ✓` });
+    } catch (err) {
+      setTestResult({ ok: false, msg: err.message });
+    } finally {
       setSending(false);
-      setTestResult({ ok: true, msg: `Test message sent to ${testPhone.trim()} successfully (demo).` });
-    }, 900);
+    }
   };
 
   const copy = (text) => {
     if (navigator.clipboard) navigator.clipboard.writeText(text);
+    showToast('Copied to clipboard ✓');
   };
+
+  if (loading) return <div className="py-12 text-center text-sm text-slate-500">Loading settings…</div>;
 
   return (
     <>
       <Section
         title="WhatsApp Business Connection"
         description="Connected via Meta Cloud API. Inbound messages are routed to the AI worker."
-        footer={<SecondaryButton tone="danger" onClick={() => alert('Demo: would disconnect WhatsApp')}>Disconnect</SecondaryButton>}
+        footer={
+          <>
+            <SecondaryButton tone="danger" onClick={() => { setWaPhoneId(''); setConnected(false); handleSave(); }}>Disconnect</SecondaryButton>
+            <PrimaryButton onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</PrimaryButton>
+          </>
+        }
       >
-        <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+        <div className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${connected ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-slate-700/60 bg-slate-800/30'}`}>
           <span className="relative flex h-2.5 w-2.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+            {connected && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
+            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${connected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
           </span>
           <div className="flex-1">
-            <div className="text-sm font-semibold text-emerald-300">Connected</div>
-            <div className="text-xs tabular-nums text-emerald-300/70">+92 340 0821252 · Acme Co</div>
+            <div className={`text-sm font-semibold ${connected ? 'text-emerald-300' : 'text-slate-400'}`}>
+              {connected ? 'Connected' : 'Not connected'}
+            </div>
+            {connected && waPhoneId && (
+              <div className="text-xs tabular-nums text-emerald-300/70">Phone ID: {waPhoneId} · {tenantName}</div>
+            )}
           </div>
         </div>
 
-        <Field label="Phone Number ID" hint="Read-only">
-          <input readOnly value={phoneId} className="input-dark w-full rounded-lg px-3 py-2 text-sm tabular-nums text-slate-300" />
+        <Field label="Phone Number ID" hint="From Meta Business → WhatsApp → API Setup">
+          <input
+            value={waPhoneId}
+            onChange={(e) => setWaPhoneId(e.target.value)}
+            placeholder="e.g. 102345987612345"
+            className="input-dark w-full rounded-lg px-3 py-2 text-sm tabular-nums"
+          />
         </Field>
 
-        <Field label="Access Token" hint={revealToken ? 'Visible' : 'Masked'}>
+        <Field label="Access Token" hint="Paste new token to update — leave blank to keep existing">
           <div className="relative">
             <input
-              readOnly
-              value={revealToken ? accessToken.replace(/\*/g, 'X') : accessToken}
-              className="input-dark w-full rounded-lg px-3 py-2 pr-20 text-sm tabular-nums text-slate-300"
+              type={revealToken ? 'text' : 'password'}
+              value={waAccessToken}
+              onChange={(e) => setWaAccessToken(e.target.value)}
+              placeholder="EAAGm0PX… (paste to update)"
+              className="input-dark w-full rounded-lg px-3 py-2 pr-20 text-sm tabular-nums"
             />
             <button
               type="button"
               onClick={() => setRevealToken((v) => !v)}
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-medium text-accent transition-colors hover:bg-accent/10"
             >
-              {revealToken ? 'Hide' : 'Reveal'}
+              {revealToken ? 'Hide' : 'Show'}
             </button>
           </div>
         </Field>
 
-        <Field label="Webhook URL" hint="Configure this in Meta Developer Console">
-          <div className="relative">
-            <input readOnly value={webhookUrl} className="input-dark w-full rounded-lg px-3 py-2 pr-16 text-sm text-slate-300" />
-            <button
-              type="button"
-              onClick={() => { copy(webhookUrl); onSave(); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-medium text-accent transition-colors hover:bg-accent/10"
-            >
-              Copy
-            </button>
-          </div>
+        <Field label="App Secret" hint="Leave blank to keep existing">
+          <input
+            type="password"
+            value={waAppSecret}
+            onChange={(e) => setWaAppSecret(e.target.value)}
+            placeholder="Paste to update"
+            className="input-dark w-full rounded-lg px-3 py-2 text-sm tabular-nums"
+          />
         </Field>
+
+        <Field label="Webhook Verify Token" hint="You create this — must match Meta console">
+          <input
+            value={waVerifyToken}
+            onChange={(e) => setWaVerifyToken(e.target.value)}
+            placeholder="e.g. asos-verify-abc123"
+            className="input-dark w-full rounded-lg px-3 py-2 text-sm tabular-nums"
+          />
+        </Field>
+
+        {webhookUrl && (
+          <Field label="Webhook URL" hint="Paste this into Meta Developer Console">
+            <div className="relative">
+              <input readOnly value={webhookUrl} className="input-dark w-full rounded-lg px-3 py-2 pr-16 text-sm text-slate-300" />
+              <button
+                type="button"
+                onClick={() => copy(webhookUrl)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-medium text-accent transition-colors hover:bg-accent/10"
+              >
+                Copy
+              </button>
+            </div>
+          </Field>
+        )}
       </Section>
 
-      <Section title="Send Test Message" description="Sends a one-line test from your business number. Use a verified test recipient.">
+      <Section title="Send Test Message" description="Sends a one-line test from your business number to verify the connection is live.">
         <form onSubmit={sendTest} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <Field label="Recipient phone (+92 format)">
-            <input required value={testPhone} onChange={(e) => setTestPhone(e.target.value)}
-              placeholder="+92 333 1234567"
-              className="input-dark w-full rounded-lg px-3 py-2 text-sm tabular-nums" />
+          <Field label="Recipient phone (E.164 format, e.g. +923001234567)">
+            <input
+              required
+              value={testPhone}
+              onChange={(e) => setTestPhone(e.target.value)}
+              placeholder="+923001234567"
+              className="input-dark w-full rounded-lg px-3 py-2 text-sm tabular-nums"
+            />
           </Field>
           <PrimaryButton type="submit">{sending ? 'Sending…' : 'Send Test'}</PrimaryButton>
         </form>
@@ -326,36 +424,91 @@ function WhatsAppTab({ onSave }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// TAB 2 — AI Configuration
+// TAB 2 — AI Configuration  (live DB-backed)
 // ─────────────────────────────────────────────────────────────
-function AITab({ onSave }) {
+const DEFAULT_RULES = { payment: true, unanswered: true, legal: true, hotProposal: false };
+
+function AITab({ showToast }) {
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+
   const [model,    setModel]    = useState('claude-sonnet-4-6');
   const [prompt,   setPrompt]   = useState(DEFAULT_AI_PROMPT);
   const [tone,     setTone]     = useState('Professional');
   const [language, setLanguage] = useState('Urdu+English');
   const [budget,   setBudget]   = useState(200);
-  const [rules, setRules] = useState({
-    payment: true,
-    unanswered: true,
-    legal: true,
-    hotProposal: false,
-  });
-  const used = 42.18;
-  const pct  = Math.min(100, Math.round((used / budget) * 100));
+  const [rules,    setRules]    = useState(DEFAULT_RULES);
+
+  // Live usage from subscription
+  const [usageUsd,  setUsageUsd]  = useState(null);   // computed from tokens
+  const [usagePct,  setUsagePct]  = useState(0);
+
+  useEffect(() => {
+    Promise.all([
+      aiConfigAPI.get().catch(() => null),
+      aiConfigAPI.usage().catch(() => null),
+    ]).then(([cfgRes, usageRes]) => {
+      const cfg   = cfgRes?.data  ?? cfgRes;
+      const usage = usageRes?.data ?? usageRes;
+
+      if (cfg) {
+        if (cfg.model)          setModel(cfg.model);
+        if (cfg.systemPrompt)   setPrompt(cfg.systemPrompt);
+        if (cfg.tone)           setTone(cfg.tone);
+        if (cfg.language)       setLanguage(cfg.language);
+        if (cfg.monthlyBudget != null) setBudget(Number(cfg.monthlyBudget));
+        if (cfg.handoffRules && typeof cfg.handoffRules === 'object') {
+          setRules({ ...DEFAULT_RULES, ...cfg.handoffRules });
+        }
+      }
+
+      if (usage) {
+        // Rough USD estimate: $0.000003 per token (haiku blended rate)
+        const tokensUsed = usage.aiTokensUsed || 0;
+        const est = (tokensUsed * 0.000003).toFixed(2);
+        setUsageUsd(est);
+        setUsagePct(Math.min(100, Math.round((parseFloat(est) / (budget || 200)) * 100)));
+      }
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await aiConfigAPI.update({
+        model,
+        systemPrompt:  prompt,
+        tone,
+        language,
+        monthlyBudget: budget,
+        handoffRules:  rules,
+      });
+      showToast('AI configuration saved ✓');
+    } catch (err) {
+      showToast(`Save failed: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const pct  = Math.min(100, Math.round((parseFloat(usageUsd || 0) / (budget || 200)) * 100));
+  const used = usageUsd ?? '—';
+
+  if (loading) return <div className="py-12 text-center text-sm text-slate-500">Loading AI configuration…</div>;
 
   return (
     <>
       <Section
         title="AI Configuration"
-        description="Tune the dual-agent (Qualifier + Closer) behavior. Each tenant configures their own system prompt — the example below is the Boulevard Tower REIT demo tenant."
-        footer={<PrimaryButton onClick={onSave}>Save Changes</PrimaryButton>}
+        description="Tune the dual-agent (Qualifier + Closer) behavior. Changes apply to all new conversations immediately."
+        footer={<PrimaryButton onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</PrimaryButton>}
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Model">
+          <Field label="Closer Model">
             <select value={model} onChange={(e) => setModel(e.target.value)} className="input-dark w-full cursor-pointer rounded-lg px-3 py-2 text-sm">
-              <option value="claude-opus-4-7">Claude Opus 4.7 — most capable, slowest</option>
+              <option value="claude-opus-4-6">Claude Opus 4.6 — most capable, slowest</option>
               <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — balanced (default)</option>
-              <option value="claude-haiku-4-5">Claude Haiku 4.5 — fast, cheap</option>
+              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast, cheap</option>
             </select>
           </Field>
           <Field label="Tone">
@@ -389,8 +542,8 @@ function AITab({ onSave }) {
 
         <div>
           <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="text-slate-300">Usage this month</span>
-            <span className="tabular-nums text-slate-400">${used.toFixed(2)} / ${budget} ({pct}%)</span>
+            <span className="text-slate-300">Estimated AI spend this month</span>
+            <span className="tabular-nums text-slate-400">${used} / ${budget} ({pct}%)</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
             <div
@@ -398,13 +551,14 @@ function AITab({ onSave }) {
               style={{ width: `${pct}%` }}
             />
           </div>
+          <p className="mt-1.5 text-[10px] text-slate-600">Estimated at $0.000003/token blended rate</p>
         </div>
       </Section>
 
       <Section
         title="Handoff Rules"
         description="When any toggled rule fires, AI pauses and the conversation is flagged 'Needs human' in the inbox."
-        footer={<PrimaryButton onClick={onSave}>Save Changes</PrimaryButton>}
+        footer={<PrimaryButton onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</PrimaryButton>}
       >
         <Toggle on={rules.payment} onChange={(v) => setRules({ ...rules, payment: v })}
           label="Escalate to human on payment / refund mentions"

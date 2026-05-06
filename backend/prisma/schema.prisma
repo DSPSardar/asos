@@ -565,6 +565,12 @@ model AiConfig {
   temperature           Float     @default(0.3)
   maxTokens             Int       @default(512) @map("max_tokens")
 
+  // ── v1.5 Settings UI fields ──
+  tone                  String    @default("Professional")
+  closerModel           String?   @map("closer_model")
+  monthlyBudget         Decimal?  @db.Decimal(10,2) @map("monthly_budget")
+  handoffRules          Json      @default("{}") @map("handoff_rules")
+
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 

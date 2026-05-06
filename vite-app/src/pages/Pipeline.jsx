@@ -21,14 +21,15 @@ const SCORE_STYLES = {
   COLD: { label:'COLD', dot:'bg-sky-400',   pill:'bg-sky-500/15 text-sky-300 border-sky-500/30' },
 };
 
-const SOURCES = ['DSP CRM', 'WhatsApp Ads', 'Facebook Ads', 'Instagram', 'Website', 'Referral'];
+const SOURCES = ['DSP CRM', 'WhatsApp Ads', 'Facebook Ads', 'Instagram', 'Website', 'Referral', 'Organic'];
 const SOURCE_COLOR = {
   'DSP CRM':       'bg-violet-500/10 text-violet-300 border-violet-500/30',
-  'WhatsApp Ads': 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
-  'Facebook Ads': 'bg-blue-500/10 text-blue-300 border-blue-500/30',
-  'Instagram':    'bg-pink-500/10 text-pink-300 border-pink-500/30',
-  'Website':      'bg-slate-500/10 text-slate-300 border-slate-500/30',
-  'Referral':     'bg-amber-500/10 text-amber-300 border-amber-500/30',
+  'WhatsApp Ads':  'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+  'Facebook Ads':  'bg-blue-500/10 text-blue-300 border-blue-500/30',
+  'Instagram':     'bg-pink-500/10 text-pink-300 border-pink-500/30',
+  'Website':       'bg-slate-500/10 text-slate-300 border-slate-500/30',
+  'Referral':      'bg-amber-500/10 text-amber-300 border-amber-500/30',
+  'Organic':       'bg-teal-500/10 text-teal-300 border-teal-500/30',
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -937,22 +938,32 @@ function mapApiLeadToUi(lead) {
   const scoreMap = { HOT: 'HOT', WARM: 'WARM', COLD: 'COLD' };
 
   const createdAt = lead.createdAt ? new Date(lead.createdAt) : new Date();
-  const cf = lead.contact?.customFields;
+  const cf      = lead.contact?.customFields;
+  const tags    = Array.isArray(lead.contact?.tags) ? lead.contact.tags : [];
+  const isOrganic = tags.includes('organic')
+    || (lead.sourceUtm && typeof lead.sourceUtm === 'object' && lead.sourceUtm.source === 'organic_signup');
+
   const rawSource =
     cf && typeof cf === 'object' && !Array.isArray(cf) ? cf.source : undefined;
-  const source =
-    rawSource === 'DSP_CRM' ? 'DSP CRM' : rawSource ? String(rawSource) : 'Other';
-  const notes =
-    lead.problemSummary || (rawSource === 'DSP_CRM' ? 'Imported from DSP CRM' : `Lead (${source})`);
+  const source = isOrganic    ? 'Organic'
+               : rawSource === 'DSP_CRM' ? 'DSP CRM'
+               : rawSource    ? String(rawSource) : 'Other';
+
+  const notes = lead.problemSummary
+    || (isOrganic     ? `Organic signup — ${lead.contact?.email || ''}`.trim()
+    : rawSource === 'DSP_CRM' ? 'Imported from DSP CRM'
+    : `Lead (${source})`);
 
   return {
     id: `db-${lead.id}`,
     apiId: lead.id,
     name: lead.contact?.name || 'Unknown',
     phone: lead.contact?.phone || '-',
+    email: lead.contact?.email || '',
     stage: stageMap[lead.stage] || 'NEW',
     score: scoreMap[lead.scoreLabel] || 'COLD',
     source,
+    tags,
     lastActivity: timeAgo(createdAt),
     value: Number(lead.dealValue || 0),
     owner: lead.agent?.fullName || 'Unassigned',

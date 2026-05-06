@@ -11,6 +11,7 @@ router.post('/login',    ctrl.login);
 router.post('/google',   ctrl.googleAuth);
 router.post('/refresh',  ctrl.refresh);
 router.post('/logout',   authenticate, ctrl.logout);
+router.post('/phone',    authenticate, ctrl.savePhone);   // Save WhatsApp # post-OAuth
 router.get('/me',        authenticate, ctrl.me);
 
 module.exports = router;

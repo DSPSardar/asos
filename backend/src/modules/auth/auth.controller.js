@@ -10,6 +10,8 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   fullName: z.string().min(2).max(100),
+  // Optional — if provided, creates an organic lead immediately
+  phone: z.string().regex(/^\+[1-9]\d{7,14}$/, 'Phone must be E.164 format').optional(),
 });
 
 const loginSchema = z.object({
@@ -77,4 +79,14 @@ const googleAuth = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, refresh, logout, me, googleAuth };
+const savePhone = async (req, res, next) => {
+  try {
+    const phone = z.string().regex(/^\+[1-9]\d{7,14}$/, 'Phone must be E.164 format (+923001234567)').parse(req.body?.phone ?? '');
+    const result = await authService.saveOrganicPhone({ userId: req.user.id, tenantId: req.tenantId, phone });
+    return success(res, result, 'Phone saved and lead created');
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { register, login, refresh, logout, me, googleAuth, savePhone };
