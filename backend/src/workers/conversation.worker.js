@@ -12,6 +12,7 @@ const metaService = require('../services/meta.service');
 const logger = require('../utils/logger');
 const { publishStatusUpdate } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
+const env = require('../config/env');
 
 // ─────────────────────────────────────────────────────────────────────
 // MAIN JOB PROCESSOR
@@ -34,7 +35,7 @@ const processInboundMessage = async (job) => {
     return;
   }
 
-  if (!tenant.waPhoneId) {
+  if (!tenant.waPhoneId && env.WHATSAPP_MOCK !== 'true') {
     logger.warn({ tenantId }, 'No WA phone configured — skipping');
     return;
   }

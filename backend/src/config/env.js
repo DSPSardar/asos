@@ -24,8 +24,9 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN:  z.string().default('7d'),
 
   WHATSAPP_API_URL:        z.string().url().default('https://graph.facebook.com/v20.0'),
-  WHATSAPP_APP_SECRET:     z.string().min(1),
-  WHATSAPP_VERIFY_TOKEN:   z.string().min(1),
+  WHATSAPP_APP_SECRET:     z.string().optional().default('mock-secret'),
+  WHATSAPP_VERIFY_TOKEN:   z.string().optional().default('mock-verify-token'),
+  WHATSAPP_MOCK:           z.enum(['true','false']).optional().default('false'),
 
   ANTHROPIC_API_KEY:       z.string().startsWith('sk-ant-'),
   CLAUDE_MODEL:            z.string().default('claude-3-5-sonnet-20241022'),

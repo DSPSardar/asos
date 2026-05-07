@@ -224,17 +224,20 @@ function SecondaryButton({ children, onClick, type = 'button', tone = 'default' 
 }
 
 // ─────────────────────────────────────────────────────────────
-// TAB 1 — WhatsApp  (live DB-backed)
+// TAB 1 — WhatsApp  (live DB-backed, production-ready)
 // ─────────────────────────────────────────────────────────────
 function WhatsAppTab({ showToast }) {
-  const [loading,     setLoading]     = useState(true);
-  const [saving,      setSaving]      = useState(false);
-  const [revealToken, setRevealToken] = useState(false);
-  const [testPhone,   setTestPhone]   = useState('+92 ');
-  const [testResult,  setTestResult]  = useState(null);
-  const [sending,     setSending]     = useState(false);
-  const [tenantName,  setTenantName]  = useState('');
-  const [connected,   setConnected]   = useState(false);
+  const [loading,      setLoading]      = useState(true);
+  const [saving,       setSaving]       = useState(false);
+  const [verifying,    setVerifying]    = useState(false);
+  const [revealToken,  setRevealToken]  = useState(false);
+  const [testPhone,    setTestPhone]    = useState('+92 ');
+  const [testResult,   setTestResult]   = useState(null);
+  const [sending,      setSending]      = useState(false);
+  const [tenantName,   setTenantName]   = useState('');
+  const [mockMode,     setMockMode]     = useState(true);
+  const [tokenSaved,   setTokenSaved]   = useState(false);
+  const [verifyResult, setVerifyResult] = useState(null); // { ok, phoneNumber, verifiedName, error, ... }
 
   // Editable fields
   const [waPhoneId,     setWaPhoneId]     = useState('');
@@ -242,8 +245,8 @@ function WhatsAppTab({ showToast }) {
   const [waAppSecret,   setWaAppSecret]   = useState('');
   const [waVerifyToken, setWaVerifyToken] = useState('');
 
-  // Derived webhook URL (read-only, populated after load)
-  const [webhookUrl, setWebhookUrl] = useState('');
+  // Fixed webhook URL — no tenant ID suffix
+  const webhookUrl = 'https://api.getaisales.com/webhooks/whatsapp';
 
   useEffect(() => {
     settingsAPI.get()
@@ -251,12 +254,8 @@ function WhatsAppTab({ showToast }) {
         const d = data?.data ?? data;
         setTenantName(d?.name || '');
         setWaPhoneId(d?.waPhoneId || '');
-        setConnected(!!d?.waPhoneId);
-        // Build webhook URL from current origin
-        const origin = String(import.meta.env.VITE_API_URL || window.location.origin)
-          .replace(/\/api\/v1\/?$/, '')
-          .replace(/\/+$/, '');
-        if (d?.id) setWebhookUrl(`${origin}/webhooks/whatsapp/${d.id}`);
+        setMockMode(d?.mockMode ?? true);
+        setTokenSaved(d?.waTokenSaved ?? false);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -264,6 +263,7 @@ function WhatsAppTab({ showToast }) {
 
   const handleSave = async () => {
     setSaving(true);
+    setVerifyResult(null);
     try {
       const payload = {};
       if (waPhoneId.trim())     payload.waPhoneId     = waPhoneId.trim();
@@ -271,8 +271,7 @@ function WhatsAppTab({ showToast }) {
       if (waAppSecret.trim())   payload.waAppSecret   = waAppSecret.trim();
       if (waVerifyToken.trim()) payload.waVerifyToken = waVerifyToken.trim();
       await settingsAPI.updateWA(payload);
-      setConnected(!!payload.waPhoneId || connected);
-      // Clear sensitive fields after save so they're not sitting in state
+      if (payload.waAccessToken) setTokenSaved(true);
       setWaAccessToken('');
       setWaAppSecret('');
       showToast('WhatsApp settings saved ✓');
@@ -280,6 +279,24 @@ function WhatsAppTab({ showToast }) {
       showToast(`Save failed: ${err.message}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    setVerifying(true);
+    setVerifyResult(null);
+    try {
+      const res = await settingsAPI.verifyWA();
+      const d = res?.data ?? res;
+      setVerifyResult(d);
+      if (d?.ok) {
+        setMockMode(false);
+        showToast('Connection verified with Meta ✓');
+      }
+    } catch (err) {
+      setVerifyResult({ ok: false, error: err.response?.data?.message || err.message });
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -292,7 +309,8 @@ function WhatsAppTab({ showToast }) {
       await settingsAPI.testWA(phone);
       setTestResult({ ok: true, msg: `Test message sent to ${phone} ✓` });
     } catch (err) {
-      setTestResult({ ok: false, msg: err.message });
+      const detail = err.response?.data?.message || err.message;
+      setTestResult({ ok: false, msg: detail });
     } finally {
       setSending(false);
     }
@@ -303,6 +321,10 @@ function WhatsAppTab({ showToast }) {
     showToast('Copied to clipboard ✓');
   };
 
+  // Derived connection state
+  const isLive  = !mockMode && tokenSaved && !!waPhoneId;
+  const isMock  = mockMode || !tokenSaved;
+
   if (loading) return <div className="py-12 text-center text-sm text-slate-500">Loading settings…</div>;
 
   return (
@@ -312,42 +334,87 @@ function WhatsAppTab({ showToast }) {
         description="Connected via Meta Cloud API. Inbound messages are routed to the AI worker."
         footer={
           <>
-            <SecondaryButton tone="danger" onClick={() => { setWaPhoneId(''); setConnected(false); handleSave(); }}>Disconnect</SecondaryButton>
+            <SecondaryButton
+              tone="danger"
+              onClick={() => { setWaPhoneId(''); setTokenSaved(false); setMockMode(true); setVerifyResult(null); handleSave(); }}
+            >
+              Disconnect
+            </SecondaryButton>
+            <SecondaryButton onClick={handleVerify} disabled={verifying || !waPhoneId}>
+              {verifying ? 'Verifying…' : 'Verify Connection'}
+            </SecondaryButton>
             <PrimaryButton onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</PrimaryButton>
           </>
         }
       >
-        <div className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${connected ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-slate-700/60 bg-slate-800/30'}`}>
-          <span className="relative flex h-2.5 w-2.5">
-            {connected && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
-            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${connected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+        {/* ── Status banner ── */}
+        <div className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${
+          isLive ? 'border-emerald-500/30 bg-emerald-500/10'
+          : isMock ? 'border-amber-500/30 bg-amber-500/10'
+          : 'border-slate-700/60 bg-slate-800/30'
+        }`}>
+          <span className="relative mt-0.5 flex h-2.5 w-2.5 shrink-0">
+            {isLive && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
+            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
+              isLive ? 'bg-emerald-400' : isMock ? 'bg-amber-400' : 'bg-slate-600'
+            }`} />
           </span>
-          <div className="flex-1">
-            <div className={`text-sm font-semibold ${connected ? 'text-emerald-300' : 'text-slate-400'}`}>
-              {connected ? 'Connected' : 'Not connected'}
+          <div className="flex-1 min-w-0">
+            <div className={`text-sm font-semibold ${isLive ? 'text-emerald-300' : isMock ? 'text-amber-300' : 'text-slate-400'}`}>
+              {isLive ? 'Live — connected to Meta' : isMock ? 'Mock mode — Claude runs, messages not sent to WhatsApp' : 'Not connected'}
             </div>
-            {connected && waPhoneId && (
-              <div className="text-xs tabular-nums text-emerald-300/70">Phone ID: {waPhoneId} · {tenantName}</div>
+            {isLive && waPhoneId && (
+              <div className="text-xs tabular-nums text-emerald-300/70 mt-0.5">Phone ID: {waPhoneId} · {tenantName}</div>
+            )}
+            {isMock && (
+              <div className="text-xs text-amber-300/70 mt-0.5">
+                {!tokenSaved ? 'No access token saved — paste one below and save to go live' : 'Mock env flag is active on the server'}
+              </div>
             )}
           </div>
         </div>
 
-        <Field label="Phone Number ID" hint="From Meta Business → WhatsApp → API Setup">
+        {/* ── Verify result panel ── */}
+        {verifyResult && (
+          <div className={`rounded-lg border px-4 py-3 text-xs space-y-1 ${
+            verifyResult.ok
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+              : 'border-red-500/30 bg-red-500/10 text-red-300'
+          }`}>
+            {verifyResult.ok ? (
+              <>
+                <div className="font-semibold">✅ Meta confirmed this number</div>
+                <div>Number: <span className="tabular-nums font-medium">{verifyResult.phoneNumber}</span></div>
+                <div>Name: {verifyResult.verifiedName}</div>
+                <div>Status: {verifyResult.status} · Quality: {verifyResult.qualityRating} · Throughput: {verifyResult.throughput}</div>
+              </>
+            ) : (
+              <>
+                <div className="font-semibold">❌ Verification failed</div>
+                <div>{verifyResult.error}</div>
+                {verifyResult.code && <div className="text-red-400/70">Meta error code: {verifyResult.code}{verifyResult.subcode ? ` / ${verifyResult.subcode}` : ''}</div>}
+                {verifyResult.mockMode && <div className="text-amber-300">No credentials saved — still running in mock mode</div>}
+              </>
+            )}
+          </div>
+        )}
+
+        <Field label="Phone Number ID" hint="From Meta Business → WhatsApp → Phone Numbers">
           <input
             value={waPhoneId}
             onChange={(e) => setWaPhoneId(e.target.value)}
-            placeholder="e.g. 102345987612345"
+            placeholder="e.g. 1092237367309586"
             className="input-dark w-full rounded-lg px-3 py-2 text-sm tabular-nums"
           />
         </Field>
 
-        <Field label="Access Token" hint="Paste new token to update — leave blank to keep existing">
+        <Field label="Access Token" hint={tokenSaved ? 'Token saved — paste to replace' : 'Paste to update — leave blank to keep existing'}>
           <div className="relative">
             <input
               type={revealToken ? 'text' : 'password'}
               value={waAccessToken}
               onChange={(e) => setWaAccessToken(e.target.value)}
-              placeholder="EAAGm0PX… (paste to update)"
+              placeholder={tokenSaved ? '●●●●●●●● (saved — paste to replace)' : 'EAAGm0PX… (paste to update)'}
               className="input-dark w-full rounded-lg px-3 py-2 pr-20 text-sm tabular-nums"
             />
             <button
@@ -360,7 +427,7 @@ function WhatsAppTab({ showToast }) {
           </div>
         </Field>
 
-        <Field label="App Secret" hint="Leave blank to keep existing">
+        <Field label="App Secret" hint="From Meta Developer Console → App Settings → Basic. Leave blank to keep existing.">
           <input
             type="password"
             value={waAppSecret}
@@ -370,7 +437,7 @@ function WhatsAppTab({ showToast }) {
           />
         </Field>
 
-        <Field label="Webhook Verify Token" hint="You create this — must match Meta console">
+        <Field label="Webhook Verify Token" hint="You create this — must match Meta Developer Console exactly">
           <input
             value={waVerifyToken}
             onChange={(e) => setWaVerifyToken(e.target.value)}
@@ -379,25 +446,23 @@ function WhatsAppTab({ showToast }) {
           />
         </Field>
 
-        {webhookUrl && (
-          <Field label="Webhook URL" hint="Paste this into Meta Developer Console">
-            <div className="relative">
-              <input readOnly value={webhookUrl} className="input-dark w-full rounded-lg px-3 py-2 pr-16 text-sm text-slate-300" />
-              <button
-                type="button"
-                onClick={() => copy(webhookUrl)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-medium text-accent transition-colors hover:bg-accent/10"
-              >
-                Copy
-              </button>
-            </div>
-          </Field>
-        )}
+        <Field label="Webhook URL" hint="Paste this into Meta Developer Console → WhatsApp → Configuration">
+          <div className="relative">
+            <input readOnly value={webhookUrl} className="input-dark w-full rounded-lg px-3 py-2 pr-16 text-sm text-slate-300 tabular-nums" />
+            <button
+              type="button"
+              onClick={() => copy(webhookUrl)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-medium text-accent transition-colors hover:bg-accent/10"
+            >
+              Copy
+            </button>
+          </div>
+        </Field>
       </Section>
 
-      <Section title="Send Test Message" description="Sends a one-line test from your business number to verify the connection is live.">
+      <Section title="Send Test Message" description="Sends a real WhatsApp message to verify the end-to-end connection. Requires live credentials (not mock mode).">
         <form onSubmit={sendTest} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <Field label="Recipient phone (E.164 format, e.g. +923001234567)">
+          <Field label="Recipient phone (international format, e.g. +923001234567)">
             <input
               required
               value={testPhone}
@@ -406,7 +471,7 @@ function WhatsAppTab({ showToast }) {
               className="input-dark w-full rounded-lg px-3 py-2 text-sm tabular-nums"
             />
           </Field>
-          <PrimaryButton type="submit">{sending ? 'Sending…' : 'Send Test'}</PrimaryButton>
+          <PrimaryButton type="submit" disabled={sending}>{sending ? 'Sending…' : 'Send Test'}</PrimaryButton>
         </form>
         {testResult && (
           <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${testResult.ok
@@ -415,8 +480,13 @@ function WhatsAppTab({ showToast }) {
             {testResult.msg}
           </div>
         )}
+        {isMock && !testResult && (
+          <p className="text-[11px] text-amber-400/70">
+            ⚠ Running in mock mode — test will log but won't send a real WhatsApp message. Save live credentials first.
+          </p>
+        )}
         <p className="text-[11px] text-slate-500">
-          Need help connecting? <a href="mailto:support@getaisales.com" className="text-accent hover:underline">Contact support →</a>
+          Need help? <a href="mailto:support@getaisales.com" className="text-accent hover:underline">Contact support →</a>
         </p>
       </Section>
     </>

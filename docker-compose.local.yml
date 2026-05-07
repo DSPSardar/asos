@@ -1,0 +1,136 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ASOS — Local Development Compose (no Nginx, no Certbot, no SSL)
+# Usage:
+#   1. Fill in ANTHROPIC_API_KEY in .env.local
+#   2. docker compose -f docker-compose.local.yml --env-file .env.local up -d
+#   3. docker compose -f docker-compose.local.yml exec migrate true   (already ran)
+#   4. cd vite-app && npm run dev   (Vite on :3001)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: asos_postgres_local
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-asos_db}
+      POSTGRES_USER:     ${POSTGRES_USER:-asos_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_local_data:/var/lib/postgresql/data
+      - ./infrastructure/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - asos_local
+    ports:
+      - "5432:5432"       # Exposed directly so you can connect via psql/Prisma Studio
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-asos_user} -d ${POSTGRES_DB:-asos_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: asos_redis_local
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - redis_local_data:/data
+    networks:
+      - asos_local
+    ports:
+      - "6379:6379"       # Exposed so you can redis-cli locally
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── DB Migration (runs once then exits) ─────────────────────────────────────
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: asos_migrate_local
+    command: ["npx", "prisma", "migrate", "deploy"]
+    env_file: .env.local
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-asos_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-asos_db}?schema=public
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - asos_local
+    restart: "no"
+
+  # ── API Server ──────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: asos_api_local
+    restart: unless-stopped
+    env_file: .env.local
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-asos_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-asos_db}?schema=public
+      REDIS_URL:    redis://:${REDIS_PASSWORD}@redis:6379
+      NODE_ENV:     development
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    volumes:
+      - uploads_local_data:/app/uploads
+    networks:
+      - asos_local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3000:3000"       # API exposed on localhost:3000 (Vite proxy target)
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ── Conversation Worker ─────────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+      target: production
+    container_name: asos_worker_local
+    restart: unless-stopped
+    env_file: .env.local
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-asos_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-asos_db}?schema=public
+      REDIS_URL:    redis://:${REDIS_PASSWORD}@redis:6379
+      NODE_ENV:     development
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - asos_local
+
+# ── Networks ────────────────────────────────────────────────────────────────
+networks:
+  asos_local:
+    driver: bridge
+
+# ── Volumes ─────────────────────────────────────────────────────────────────
+volumes:
+  postgres_local_data:
+  redis_local_data:
+  uploads_local_data:

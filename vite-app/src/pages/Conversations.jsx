@@ -1,15 +1,21 @@
-// src/pages/Conversations.jsx — WhatsApp-style two-pane conversations view
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+// src/pages/Conversations.jsx — WhatsApp-style two-pane conversations view (live API)
+import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { conversationsAPI } from '@lib/api';
 
 // ─────────────────────────────────────────────────────────────
-// Style maps
+// Style maps (covers both real DB stages and legacy labels)
 // ─────────────────────────────────────────────────────────────
 const STAGE_STYLES = {
-  NEW:       { label:'New',       cls:'bg-slate-500/15 text-slate-300 border-slate-500/30' },
-  QUALIFIED: { label:'Qualified', cls:'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' },
-  PROPOSAL:  { label:'Proposal',  cls:'bg-violet-500/15 text-violet-300 border-violet-500/30' },
-  WON:       { label:'Won',       cls:'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
-  LOST:      { label:'Lost',      cls:'bg-slate-700/30 text-slate-500 border-slate-600/30' },
+  NEW:         { label:'New',        cls:'bg-slate-500/15 text-slate-300 border-slate-500/30' },
+  QUALIFYING:  { label:'Qualifying', cls:'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' },
+  QUALIFIED:   { label:'Qualified',  cls:'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' },
+  DIAGNOSED:   { label:'Diagnosed',  cls:'bg-blue-500/15 text-blue-300 border-blue-500/30' },
+  PROPOSED:    { label:'Proposal',   cls:'bg-violet-500/15 text-violet-300 border-violet-500/30' },
+  PROPOSAL:    { label:'Proposal',   cls:'bg-violet-500/15 text-violet-300 border-violet-500/30' },
+  CLOSED_WON:  { label:'Won',        cls:'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+  WON:         { label:'Won',        cls:'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+  CLOSED_LOST: { label:'Lost',       cls:'bg-slate-700/30 text-slate-500 border-slate-600/30' },
+  LOST:        { label:'Lost',       cls:'bg-slate-700/30 text-slate-500 border-slate-600/30' },
 };
 
 const SCORE_STYLES = {
@@ -19,160 +25,140 @@ const SCORE_STYLES = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// MOCK DATA — 8 threads matching the requested spec exactly:
-//   2 unread (1 msg / 3 msgs) · 1 Needs human · 2 Human takeover · 5 AI
-//   Stages: 2 New · 2 Qualifying · 2 Proposal · 1 Won · 1 Lost
-//   Scores: 3 Hot · 3 Warm · 2 Cold
+// Data mappers
 // ─────────────────────────────────────────────────────────────
-const THREADS = [
-  // 1 — Fractional unit inquiry, freshly arrived (the "1 message unread")
-  { id:'c1', name:'Ahmed Khan',    phone:'+92 333 4421872', preview:'Assalam o alaikum, Boulevard Tower REIT mein 1 unit means kya? 100 sft? Itna chota?',
-    when:'2m',  unread:1, handler:'AI',    stage:'NEW',       score:'WARM', needsHuman:false },
+function formatWhen(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr  = Math.floor(diffMs / 3600000);
+  const diffDay = Math.floor(diffMs / 86400000);
+  if (diffMin < 1)   return 'now';
+  if (diffMin < 60)  return `${diffMin}m`;
+  if (diffHr  < 24)  return `${diffHr}h`;
+  if (diffDay < 7)   return `${diffDay}d`;
+  return d.toLocaleDateString('en-PK', { day:'numeric', month:'short' });
+}
 
-  // 2 — Comparing buying options, went silent
-  { id:'c2', name:'Bilal Ahmed',   phone:'+92 312 8866442', preview:'Studio vs 1-bed vs fractional — return same hai ya different?',
-    when:'2h',  unread:0, handler:'AI',    stage:'NEW',       score:'COLD', needsHuman:false },
+function formatTime(dateStr) {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleTimeString('en-PK', { hour:'2-digit', minute:'2-digit', hour12:false });
+}
 
-  // 3 — Consultation call booked, AI handled smoothly (PSX listing horizon)
-  { id:'c3', name:'Ayesha Malik',  phone:'+92 321 9870034', preview:'Kal 3 PM consultation confirm. PSX listing aur 18,000 sft starter discuss karenge.',
-    when:'18m', unread:0, handler:'AI',    stage:'QUALIFIED', score:'HOT',  needsHuman:false },
+function mapThread(conv) {
+  const lastMsg = Array.isArray(conv.messages) ? conv.messages[0] : null;
+  const isHumanTakeover = conv.status === 'HUMAN_TAKEOVER' || !conv.aiEnabled;
+  const needsHuman = conv.lead?.humanFollowupRequired || false;
+  // unread: last message is inbound and status isn't READ
+  const unread = lastMsg && lastMsg.direction === 'INBOUND' && lastMsg.status !== 'READ' ? 1 : 0;
+  return {
+    id:          conv.id,
+    name:        conv.contact?.name || conv.contact?.phone || 'Unknown',
+    phone:       formatPhone(conv.contact?.phone),
+    preview:     lastMsg?.content || '…',
+    when:        formatWhen(lastMsg?.sentAt || conv.updatedAt || conv.createdAt),
+    unread,
+    handler:     isHumanTakeover ? 'Human' : 'AI',
+    stage:       conv.lead?.stage || 'NEW',
+    score:       conv.lead?.scoreLabel || 'COLD',
+    needsHuman,
+    aiEnabled:   conv.aiEnabled,
+    status:      conv.status,
+    leadId:      conv.leadId,
+  };
+}
 
-  // 4 — Approvals / paperwork question, human took over
-  { id:'c4', name:'Fatima Sheikh', phone:'+92 345 9001775', preview:'OK sir RDA aur CDC approval ke documents ka wait karti hoon.',
-    when:'1h',  unread:0, handler:'Human', stage:'QUALIFIED', score:'WARM', needsHuman:false },
+function mapMessage(msg) {
+  const from = msg.direction === 'INBOUND'
+    ? 'contact'
+    : msg.sender === 'AI' ? 'ai' : 'human';
+  return {
+    id:   msg.id,
+    from,
+    text: msg.content || '',
+    ts:   formatTime(msg.sentAt),
+    raw:  msg,
+  };
+}
 
-  // 5 — HNW shop unit + sharing basis, human handling
-  { id:'c5', name:'Hassan Raza',   phone:'+92 300 7654129', preview:'Sir 4 cr ke shop units + sharing basis ke terms confirm karwa dein.',
-    when:'47m', unread:0, handler:'Human', stage:'PROPOSAL',  score:'HOT',  needsHuman:false },
-
-  // 6 — Payment dispute — Needs Human (the "3 messages unread")
-  { id:'c6', name:'Usman Ali',     phone:'+92 333 7711209', preview:'Hello? Sir urgent hai, downpayment debit ho gayi but allotment letter nahi mila!',
-    when:'6h',  unread:3, handler:'AI',    stage:'PROPOSAL',  score:'WARM', needsHuman:true  },
-
-  // 7 — Closed investor thanking after booking confirmation
-  { id:'c7', name:'Zara Iqbal',    phone:'+92 304 5512983', preview:'Booking confirm ho gayi alhamdulillah. Allotment letter mil gaya. Shukria team!',
-    when:'5h',  unread:0, handler:'AI',    stage:'WON',       score:'HOT',  needsHuman:false },
-
-  // 8 — Cold lead, wanted ready-to-move property, not pre-listing REIT
-  { id:'c8', name:'Sana Tariq',    phone:'+92 322 4490012', preview:'PSX listing 3 saal door hai. Mujhe ready property chahiye, REIT mein interest nahi filhal.',
-    when:'3d',  unread:0, handler:'AI',    stage:'LOST',      score:'COLD', needsHuman:false },
-];
-
-// Detailed message history for every thread. Demo data; replace with real
-// API calls in a later pass. Every thread has 1–10 messages so the right
-// column never has to fall back to placeholder content.
-const MESSAGES = {
-  // c1 — Ahmed Khan: fractional unit size question, AI hasn't replied yet (the unread)
-  c1: [
-    { id:'c1m1', from:'contact', text:'Assalam o alaikum, Boulevard Tower REIT mein 1 unit means kya? 100 sft? Itna chota?', ts:'14:22' },
-  ],
-
-  // c2 — Bilal Ahmed: comparing buying options (studio / 1-bed / fractional)
-  c2: [
-    { id:'c2m1', from:'contact', text:'Hello, Boulevard Tower REIT mein interest hai. Studio vs 1-bed vs fractional — return same hai ya different?',          ts:'12:10' },
-    { id:'c2m2', from:'ai',      text:'Walaikum assalam Bilal sir! Projected IRR 31% aur capital appreciation 30-50% — yeh entire project ke liye hai. Studio, 1-bed, 2-bed, shop ya fractional units (100 sft) — sab unhi numbers pe ride karte hain. Difference sirf ticket size aur exit flexibility ka hota hai.', ts:'12:11' },
-    { id:'c2m3', from:'contact', text:'Theek hai. Mera budget 60-80 lakh ke beech hai. Best option kya hogi?',                                                  ts:'12:18' },
-    { id:'c2m4', from:'ai',      text:'Aap ke range mein studio apartment ya 1-bedroom dono fit hote hain — entire unit aap ke naam pe. 20% downpayment + 42 monthly installments structure hai. Sharing basis bhi option hai agar flexibility chahiye.',          ts:'12:19' },
-    { id:'c2m5', from:'contact', text:'PDF brochure email kar dein please, partner ke saath review karna hai.',                                                ts:'12:25' },
-    { id:'c2m6', from:'ai',      text:'Done — brochure aur payment plan PDF bhej diya hai. Sardar Group (Centaurus banane wale) ka project hai, Arif Habib REIT manage kar rahe hain — partner ko credibility convince karne mein madad milegi.',           ts:'12:26' },
-    { id:'c2m7', from:'contact', text:'OK partner se discuss karke next week reply karta hoon.',                                                                ts:'12:35' },
-  ],
-
-  // c3 — Ayesha Malik: PSX listing horizon question, consultation call booked
-  c3: [
-    { id:'c3m1', from:'contact', text:'Assalam o alaikum',                                                                                                ts:'10:14' },
-    { id:'c3m2', from:'ai',      text:'Walaikum assalam Ayesha! Welcome to Boulevard Tower REIT. Aap I-14 Islamabad ke iss project ke baare mein info chahti hain ya consultation book karni hai?', ts:'10:14' },
-    { id:'c3m3', from:'contact', text:'PSX listing 3 saal mein? Pehle exit ka option hai?',                                                              ts:'10:16' },
-    { id:'c3m4', from:'ai',      text:'Bilkul fair question madam. Pre-listing phase mein hum hain — PSX registration 3 saal ke andar plan hai. Tab tak share trading available nahi hai, investors units directly hold karte hain. Iss period mein 31% projected IRR aur 30-50% capital appreciation milega.', ts:'10:16' },
-    { id:'c3m5', from:'contact', text:'Starting investment kya hai?',                                                                                     ts:'10:18' },
-    { id:'c3m6', from:'ai',      text:'Starting size 18,000 sft hai (yeh 180 fractional units ke barabar — 1 unit = 100 sft). Payment plan: 20% down + 42 monthly installments. Aap ka budget range share kar dein to advisor consultation set kar deti hoon.', ts:'10:18' },
-    { id:'c3m7', from:'contact', text:'Budget 35-40 lakh ke around. Kal 3 PM possible hai consultation?',                                                  ts:'10:21' },
-    { id:'c3m8', from:'ai',      text:'Bilkul Ayesha! Confirmed: Kal 3:00 PM advisor call. Calendar invite + Zoom link bhej deti hoon. RDA/CDC/SECP approvals aur 18,000 sft starter plan ki full breakdown discuss karenge.',         ts:'10:21' },
-  ],
-
-  // c4 — Fatima Sheikh: AI handed off to human for approvals documentation request
-  c4: [
-    { id:'c4m1', from:'contact', text:'Hello, Boulevard Tower REIT ke baare mein info chahiye.',                                                                ts:'11:02' },
-    { id:'c4m2', from:'ai',      text:'Walaikum assalam Fatima madam! Bilkul. Brochure aur consultation set kar deti hoon. Kis cheez se shuru karein?',                      ts:'11:02' },
-    { id:'c4m3', from:'contact', text:'I-14 location confirm hai? Aur RDA, CDC approvals ki copies chahiye — formal review karna hai.',                                  ts:'11:08' },
-    { id:'c4m4', from:'ai',      text:'Jee madam, project I-14 ke saath adjacent hai aur RDA, CDC, SECP teeno se approved hai, all NOCs in place. Original approval letters share karne ke liye main hamare documentation lead ko forward kar deti hoon. Saad bhai please respond.', ts:'11:09' },
-    { id:'c4m5', from:'human',   text:'Hi Fatima madam — Saad from Boulevard Tower REIT documentation desk. RDA, CDC aur SECP approval letters PDF mein bhej raha hoon. Sardar Group ke previous projects (Centaurus included) ki list bhi attach kar deta hoon.', ts:'11:18' },
-    { id:'c4m6', from:'contact', text:'OK sir RDA aur CDC approval ke documents ka wait karti hoon.',                                                              ts:'11:24' },
-    { id:'c4m7', from:'human',   text:'Sent. Documents receive ho jayen to confirmation karein. Aap ke liye consultation slot Tuesday 3 PM block kar diya hai.', ts:'11:25' },
-  ],
-
-  // c5 — Hassan Raza: HNW shop unit + sharing basis structure, Saad took over
-  c5: [
-    { id:'c5m1', from:'contact', text:'Sir aap ka follow-up message mila tha. Boulevard Tower REIT mein significant allocation karna chahta hoon.',                       ts:'09:31' },
-    { id:'c5m2', from:'ai',      text:'Walaikum assalam Hassan bhai! Bohot acha. Aap ka ticket range aur preferred option kya hai? Shop units, entire 2-bed apartments ya sharing basis pe multiple buyers — sab options possible hain.', ts:'09:31' },
-    { id:'c5m3', from:'contact', text:'Around 4 crore. Shop units mein interest hai, sharing basis bhi consider kar sakta hoon partners ke saath.',                                                  ts:'09:38' },
-    { id:'c5m4', from:'ai',      text:'4 crore ticket size large allocation band mein aata hai. Main aap ki request hamare senior advisor ko forward kar deti hoon. Saad bhai, please personally handle karein — shop units + sharing basis structure walk-through.', ts:'09:39' },
-    { id:'c5m5', from:'human',   text:'Hi Hassan bhai, Saad here from Boulevard Tower REIT. 4 crore ticket pe multiple shop units possible hain — aap pure khareed sakte hain ya sharing basis pe partners ke saath split. 20% down + 42 monthly installments standard structure hai. Projected IRR 31% aur capital appreciation 30-50% — yeh same applies.', ts:'09:48' },
-    { id:'c5m6', from:'contact', text:'Theek hai. Sharing basis pe kitne partners hote hain ek unit mein? Aur allotment letter kab milta hai?',                                ts:'09:55' },
-    { id:'c5m7', from:'human',   text:'Sharing basis usually 2-4 partners hote hain ek unit mein, mutual agreement ke saath. Allotment letter 20% downpayment receive hone ke baad jari hota hai. Term sheet email kar deta hoon — partners ke names aur split percentage finalize karein.', ts:'09:57' },
-    { id:'c5m8', from:'contact', text:'Sir 4 cr ke shop units + sharing basis ke terms confirm karwa dein.',                                                   ts:'10:04' },
-  ],
-
-  // c6 — Usman Ali: downpayment debited but allotment letter not received, AI escalated
-  c6: [
-    { id:'c6m1',  from:'contact', text:'Sir maine kal 18 lakh transfer kiye Boulevard Tower REIT account mein 20% downpayment ke liye',                     ts:'09:42' },
-    { id:'c6m2',  from:'ai',      text:'Walaikum assalam Usman bhai. Booking ke liye shukria. Aap ki transfer receipt ya bank slip share karein — main accounts team se confirmation karwati hoon.', ts:'09:43' },
-    { id:'c6m3',  from:'contact', text:'Receipt kal raat hi WhatsApp pe bheji thi.',                                                                       ts:'09:55' },
-    { id:'c6m4',  from:'ai',      text:'Jee bilkul, mil gayi. Main ne accounts ko forward kar di hai — bank reconciliation mein 10-15 minute lagte hain. Hold karein please.', ts:'09:56' },
-    { id:'c6m5',  from:'ai',      text:'Update: Accounts team ka kehna hai abhi tak fund project account mein reflect nahi hua. Aap apna IBFT reference share kar sakte hain?', ts:'10:14' },
-    { id:'c6m6',  from:'contact', text:'IBFT reference: HBL-9988772211. Mere account se 18 lakh debit ho chuke hain. Bank statement screenshot bhi bhej deta hoon.', ts:'10:18' },
-    { id:'c6m7',  from:'ai',      text:'Screenshot received. Reference verify ho raha hai. Is matter ko main hamare senior advisor Saad ko escalate kar rahi hoon — woh aap ko personally call karenge next 30 minutes mein. Allotment letter issue karwane mein madad karenge.', ts:'10:22' },
-    { id:'c6m8',  from:'contact', text:'Refund chahiye! Account se 18 lakh debit ho gaye but allotment letter nahi mila! Ye kya scene hai?',                     ts:'15:01' },
-    { id:'c6m9',  from:'contact', text:'Sir please jaldi response do, mujhe written confirmation chahiye downpayment receive hone ki.',                                          ts:'15:14' },
-    { id:'c6m10', from:'contact', text:'Hello? Sir urgent hai, downpayment debit ho gayi but allotment letter nahi mila!',                                            ts:'15:33' },
-  ],
-
-  // c7 — Zara Iqbal: closed investor, downpayment confirmed, allotment letter received
-  c7: [
-    { id:'c7m1', from:'contact', text:'Hi, kal 20% downpayment transfer ho gayi Boulevard Tower REIT account mein.',                                                        ts:'13:05' },
-    { id:'c7m2', from:'ai',      text:'Walaikum assalam Zara madam! Jee bilkul, downpayment received and confirmed. Allotment letter email aur WhatsApp dono pe bhej di hai. Mubarak ho!', ts:'13:05' },
-    { id:'c7m3', from:'contact', text:'Pehli monthly installment kab start hogi?',                                                                                    ts:'13:11' },
-    { id:'c7m4', from:'ai',      text:'First monthly installment 1 May 2026 se start hogi, total 42 installments hain. Auto-debit setup karwana ho ya manual transfer prefer karti hain — aap decide kar sakti hain. Reminder schedule bhi share kar deti hoon.', ts:'13:11' },
-    { id:'c7m5', from:'contact', text:'Allahamdulillah. Bohot smooth process tha aap ki team ke saath.',                                                ts:'13:18' },
-    { id:'c7m6', from:'ai',      text:'Aap ka shukria Zara madam! Sardar Group + Arif Habib team ki taraf se shukria. Welcome to the Boulevard Tower REIT investor family!',   ts:'13:19' },
-    { id:'c7m7', from:'contact', text:'Booking confirm ho gayi alhamdulillah. Allotment letter mil gaya. Shukria team!',                              ts:'13:22' },
-  ],
-
-  // c8 — Sana Tariq: lost lead, wanted ready-to-move property, not pre-listing REIT
-  c8: [
-    { id:'c8m1', from:'contact', text:'Salam, real estate investment options dekh rahi thi.',                                                              ts:'10:30' },
-    { id:'c8m2', from:'ai',      text:'Walaikum assalam Sana madam! Boulevard Tower REIT — I-14 Islamabad ka project, Sardar Group (Centaurus banane wale) ka, Arif Habib manage kar rahe hain. RDA/CDC/SECP approved. 100 sft (1 unit) se start kar sakti hain. Interest hai?', ts:'10:30' },
-    { id:'c8m3', from:'contact', text:'PSX listing kab hogi?',                                                                                              ts:'10:38' },
-    { id:'c8m4', from:'ai',      text:'PSX registration 3 saal ke andar plan hai. Tab tak pre-listing phase hai — units directly hold karte hain, share trading available nahi. Projected IRR 31% aur capital appreciation 30-50% iss period mein.', ts:'10:39' },
-    { id:'c8m5', from:'contact', text:'Hmm 3 saal lamba hai. Mujhe ready property chahiye jo kal se rent pe lag jaye.',                                  ts:'10:45' },
-    { id:'c8m6', from:'ai',      text:'Bilkul samajh sakti hoon madam. Boulevard Tower REIT under-construction phase mein hai, ready-to-move nahi. Future mein agar pre-listing project consider karein to main updates bhej dungi.', ts:'10:46' },
-    { id:'c8m7', from:'contact', text:'PSX listing 3 saal door hai. Mujhe ready property chahiye, REIT mein interest nahi filhal.',                                                  ts:'10:48' },
-  ],
-};
-
-// Defensive fallback — should never trigger now that every thread has explicit
-// messages, but kept so a future thread without a key still renders something.
-const FALLBACK_MESSAGES = (t) => [
-  { id:'f1', from:'contact', text:t.preview, ts:t.when },
-  { id:'f2', from:'ai',      text:'(No detailed thread for this contact yet.)', ts:t.when },
-];
+function formatPhone(phone = '') {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('92') && digits.length === 12)
+    return `+92 ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8)}`;
+  return `+${digits}`;
+}
 
 // ─────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────
 export default function Conversations() {
-  // Default to the Needs-Human thread so the AI→human handoff is the first thing visible
-  const [activeId, setActiveId] = useState('c6');
-  const [filter,   setFilter]   = useState('all');
-  const [search,   setSearch]   = useState('');
-  // Mobile-only master/detail toggle. md+ layouts ignore this and render both panes.
+  const [threads,    setThreads]    = useState([]);
+  const [activeId,   setActiveId]   = useState(null);
+  const [messages,   setMessages]   = useState([]);
+  const [activeConv, setActiveConv] = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [msgLoading, setMsgLoading] = useState(false);
+  const [filter,     setFilter]     = useState('all');
+  const [search,     setSearch]     = useState('');
   const [mobileView, setMobileView] = useState('list');
 
+  // ── Load conversation list ──────────────────────────────────
+  const loadThreads = useCallback(async () => {
+    try {
+      const res = await conversationsAPI.list({ limit: 50 });
+      const convs = Array.isArray(res.data) ? res.data : (res?.data || []);
+      const mapped = convs.map(mapThread);
+      setThreads(mapped);
+      // Auto-select first on initial load
+      setActiveId((prev) => prev || (mapped[0]?.id ?? null));
+    } catch (e) {
+      console.error('[Conversations] list error', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadThreads();
+    const interval = setInterval(loadThreads, 8000); // poll every 8s
+    return () => clearInterval(interval);
+  }, [loadThreads]);
+
+  // ── Load messages for active conversation ──────────────────
+  const loadMessages = useCallback(async (id) => {
+    if (!id) return;
+    setMsgLoading(true);
+    try {
+      const res = await conversationsAPI.get(id);
+      const conv = res.data && typeof res.data === 'object' && !Array.isArray(res.data) ? res.data : res;
+      if (conv) {
+        setActiveConv(conv);
+        setMessages((conv.messages || []).map(mapMessage));
+      }
+    } catch (e) {
+      console.error('[Conversations] get error', e);
+    } finally {
+      setMsgLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeId) return;
+    loadMessages(activeId);
+    const interval = setInterval(() => loadMessages(activeId), 5000); // poll every 5s
+    return () => clearInterval(interval);
+  }, [activeId, loadMessages]);
+
+  const activeThread = threads.find((t) => t.id === activeId) || threads[0] || null;
+
   const visible = useMemo(() => {
-    return THREADS.filter((t) => {
-      if (filter === 'unread'   && t.unread === 0)        return false;
-      if (filter === 'ai'       && t.handler !== 'AI')    return false;
-      if (filter === 'needs'    && !t.needsHuman)         return false;
+    return threads.filter((t) => {
+      if (filter === 'unread' && t.unread === 0)       return false;
+      if (filter === 'ai'     && t.handler !== 'AI')   return false;
+      if (filter === 'needs'  && !t.needsHuman)        return false;
       if (search) {
         const q = search.toLowerCase();
         if (!t.name.toLowerCase().includes(q) &&
@@ -181,36 +167,93 @@ export default function Conversations() {
       }
       return true;
     });
-  }, [filter, search]);
+  }, [threads, filter, search]);
 
-  const active   = THREADS.find((t) => t.id === activeId) || THREADS[0];
-  const messages = MESSAGES[active.id] || FALLBACK_MESSAGES(active);
+  const totalUnread = threads.reduce((s, t) => s + (t.unread || 0), 0);
 
   const handleSelect = (id) => {
     setActiveId(id);
     setMobileView('detail');
   };
 
+  const handleToggleAI = async (id, enabled) => {
+    try {
+      await conversationsAPI.toggleAI(id, enabled);
+      // optimistic update
+      setThreads((prev) => prev.map((t) => t.id === id ? { ...t, handler: enabled ? 'AI' : 'Human', aiEnabled: enabled } : t));
+    } catch (e) {
+      console.error('[Conversations] toggleAI error', e);
+    }
+  };
+
+  const handleTakeover = async (id) => {
+    try {
+      await conversationsAPI.takeover(id);
+      setThreads((prev) => prev.map((t) => t.id === id ? { ...t, handler: 'Human', aiEnabled: false } : t));
+    } catch (e) {
+      console.error('[Conversations] takeover error', e);
+    }
+  };
+
+  const handleHandback = async (id) => {
+    try {
+      await conversationsAPI.handback(id);
+      setThreads((prev) => prev.map((t) => t.id === id ? { ...t, handler: 'AI', aiEnabled: true } : t));
+    } catch (e) {
+      console.error('[Conversations] handback error', e);
+    }
+  };
+
+  const handleSend = async (id, content) => {
+    if (!content?.trim()) return;
+    try {
+      await conversationsAPI.sendMessage(id, content);
+      await loadMessages(id);
+    } catch (e) {
+      console.error('[Conversations] sendMessage error', e);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full">
       <ThreadList
         threads={visible}
+        allCount={threads.length}
         activeId={activeId}
         onSelect={handleSelect}
         filter={filter}
         onFilter={setFilter}
         search={search}
         onSearch={setSearch}
-        totalUnread={THREADS.reduce((s, t) => s + (t.unread || 0), 0)}
+        totalUnread={totalUnread}
         mobileView={mobileView}
       />
-      <ConvErrorBoundary resetKey={active.id} mobileView={mobileView}>
-        <ConversationView
-          thread={active}
-          messages={messages}
-          mobileView={mobileView}
-          onBack={() => setMobileView('list')}
-        />
+      <ConvErrorBoundary resetKey={activeId} mobileView={mobileView}>
+        {activeThread ? (
+          <ConversationView
+            thread={activeThread}
+            messages={messages}
+            msgLoading={msgLoading}
+            mobileView={mobileView}
+            onBack={() => setMobileView('list')}
+            onToggleAI={(enabled) => handleToggleAI(activeThread.id, enabled)}
+            onTakeover={() => handleTakeover(activeThread.id)}
+            onHandback={() => handleHandback(activeThread.id)}
+            onSend={(content) => handleSend(activeThread.id, content)}
+          />
+        ) : (
+          <section className="hidden min-w-0 flex-1 flex-col items-center justify-center bg-bg md:flex">
+            <p className="text-sm text-slate-500">No conversations yet.</p>
+          </section>
+        )}
       </ConvErrorBoundary>
     </div>
   );
@@ -219,7 +262,7 @@ export default function Conversations() {
 // ─────────────────────────────────────────────────────────────
 // LEFT — Thread list
 // ─────────────────────────────────────────────────────────────
-function ThreadList({ threads, activeId, onSelect, filter, onFilter, search, onSearch, totalUnread, mobileView }) {
+function ThreadList({ threads, allCount, activeId, onSelect, filter, onFilter, search, onSearch, totalUnread, mobileView }) {
   const FILTERS = [
     { id:'all',    label:'All' },
     { id:'unread', label:'Unread', badge: totalUnread || null },
@@ -233,7 +276,7 @@ function ThreadList({ threads, activeId, onSelect, filter, onFilter, search, onS
       <div className="border-b border-slate-800/60 px-4 py-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold tracking-tight">Conversations</h2>
-          <span className="text-[11px] text-slate-500">{threads.length} of {THREADS.length}</span>
+          <span className="text-[11px] text-slate-500">{threads.length} of {allCount}</span>
         </div>
         {/* Search */}
         <div className="relative">
@@ -366,14 +409,14 @@ function ScorePill({ score }) {
   );
 }
 
-// Tiny error boundary so the right column never goes fully blank if a render
-// throws — shows a readable fallback with the contact name + message count.
+// ─────────────────────────────────────────────────────────────
+// Error boundary
+// ─────────────────────────────────────────────────────────────
 class ConvErrorBoundary extends React.Component {
   constructor(p){ super(p); this.state = { err: null }; }
   static getDerivedStateFromError(err){ return { err }; }
   componentDidCatch(err, info){ console.error('[Conversations] right-column render crash:', err, info); }
   componentDidUpdate(prevProps){
-    // Reset on thread change so a different thread can recover
     if (prevProps.resetKey !== this.props.resetKey && this.state.err) this.setState({ err: null });
   }
   render(){
@@ -396,24 +439,47 @@ class ConvErrorBoundary extends React.Component {
 // ─────────────────────────────────────────────────────────────
 // RIGHT — Conversation view
 // ─────────────────────────────────────────────────────────────
-function ConversationView({ thread, messages, mobileView, onBack }) {
-  const [aiOn, setAiOn]   = useState(thread.handler === 'AI');
+function ConversationView({ thread, messages, msgLoading, mobileView, onBack, onToggleAI, onTakeover, onHandback, onSend }) {
+  const [aiOn,  setAiOn]  = useState(thread.aiEnabled !== false);
   const [draft, setDraft] = useState('');
   const scrollRef = useRef(null);
 
-  // Reset toggle + draft + scroll when switching threads
-  useEffect(() => { setAiOn(thread.handler === 'AI'); setDraft(''); }, [thread.id, thread.handler]);
+  // Sync AI toggle when thread changes
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [thread.id]);
+    setAiOn(thread.aiEnabled !== false);
+    setDraft('');
+  }, [thread.id, thread.aiEnabled]);
 
-  const onSend = () => {
+  // Scroll to bottom when messages load/update
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length, thread.id]);
+
+  const handleToggle = (val) => {
+    setAiOn(val);
+    onToggleAI(val);
+  };
+
+  const handleTakeoverClick = () => {
+    setAiOn(false);
+    onTakeover();
+  };
+
+  const handleHandbackClick = () => {
+    setAiOn(true);
+    onHandback();
+  };
+
+  const handleSend = () => {
     if (!draft.trim()) return;
-    alert(`Demo: would send "${draft.trim()}" to ${thread.name}`);
+    onSend(draft.trim());
     setDraft('');
   };
+
   const onKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
   return (
@@ -444,14 +510,22 @@ function ConversationView({ thread, messages, mobileView, onBack }) {
           </div>
           <div className="mt-0.5 text-xs text-slate-500">{thread.phone}</div>
         </div>
-        <AiToggle on={aiOn} onChange={setAiOn} />
+        <AiToggle on={aiOn} onChange={handleToggle} />
       </header>
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-5 md:px-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-3">
           <DateDivider label="Today" />
-          {messages.map((m) => <MessageBubble key={m.id} m={m} />)}
+          {msgLoading && messages.length === 0 ? (
+            <div className="flex justify-center py-8">
+              <div className="w-6 h-6 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
+            </div>
+          ) : messages.length === 0 ? (
+            <p className="text-center text-xs text-slate-600 py-8">No messages yet.</p>
+          ) : (
+            messages.map((m) => <MessageBubble key={m.id} m={m} />)
+          )}
         </div>
       </div>
 
@@ -467,7 +541,10 @@ function ConversationView({ thread, messages, mobileView, onBack }) {
             ? 'AI is handling this conversation. Replies are auto-sent.'
             : 'You have taken over. AI is paused for this thread.'}
         </div>
-        <button onClick={() => setAiOn((v) => !v)} className="text-xs font-medium underline-offset-2 hover:underline">
+        <button
+          onClick={aiOn ? handleTakeoverClick : handleHandbackClick}
+          className="text-xs font-medium underline-offset-2 hover:underline"
+        >
           {aiOn ? 'Take over →' : 'Hand back to AI →'}
         </button>
       </div>
@@ -494,7 +571,7 @@ function ConversationView({ thread, messages, mobileView, onBack }) {
           />
           <button
             type="button"
-            onClick={onSend}
+            onClick={handleSend}
             disabled={!draft.trim()}
             className="flex shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-accent to-accent2 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-accent/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
           >
@@ -529,7 +606,6 @@ function AiToggle({ on, onChange }) {
 function MessageBubble({ m }) {
   const incoming = m.from === 'contact';
   const ai       = m.from === 'ai';
-  const human    = m.from === 'human';
 
   return (
     <div className={`flex w-full ${incoming ? 'justify-start' : 'justify-end'}`}>
@@ -546,8 +622,8 @@ function MessageBubble({ m }) {
           {m.text}
         </div>
         <div className="mt-1 flex items-center gap-1.5 px-1 text-[10px] text-slate-500">
-          {ai    && <span className="rounded bg-accent/15 px-1 py-px font-semibold text-accent">AI</span>}
-          {human && <span className="rounded bg-violet-300/15 px-1 py-px font-semibold text-violet-300">You</span>}
+          {ai             && <span className="rounded bg-accent/15 px-1 py-px font-semibold text-accent">AI</span>}
+          {!incoming && !ai && <span className="rounded bg-violet-300/15 px-1 py-px font-semibold text-violet-300">You</span>}
           <span className="tabular-nums">{m.ts}</span>
         </div>
       </div>

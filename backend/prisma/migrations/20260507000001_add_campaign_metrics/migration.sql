@@ -1,0 +1,7 @@
+-- AlterTable: add performance metric columns to campaigns
+
+ALTER TABLE "campaigns"
+  ADD COLUMN IF NOT EXISTS "ctr"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "cpm"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "cpl"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "conversions" INTEGER          NOT NULL DEFAULT 0;

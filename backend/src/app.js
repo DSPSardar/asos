@@ -25,6 +25,8 @@ const adminRoutes        = require('./modules/admin/admin.routes');
 const contentStudioRoutes = require('./modules/content-studio/content-studio.routes');
 const reportsRoutes = require('./modules/reports/reports.routes');
 const webhookRoutes      = require('./webhooks/webhook.routes');
+// Dev-only routes (mounted only when WHATSAPP_MOCK=true)
+const devRoutes = env.WHATSAPP_MOCK === 'true' ? require('./modules/dev/dev.routes') : null;
 
 const createApp = () => {
   const app = express();
@@ -103,6 +105,10 @@ const createApp = () => {
   app.use(`${v1}/admin`,          adminRoutes);
   app.use(`${v1}/content-studio`, contentStudioRoutes);
   app.use(`${v1}/reports`,        reportsRoutes);
+  if (devRoutes) {
+    app.use(`${v1}/dev`,          devRoutes);
+    logger.warn('[MOCK MODE] Dev routes mounted at /api/v1/dev — WHATSAPP_MOCK=true');
+  }
   app.use('/webhooks',            webhookRoutes);
 
   // ── 404 + Error handlers (must be last)

@@ -11,6 +11,7 @@ router.use(authenticate, requireActiveTenant, authorize('TENANT_ADMIN', 'SUPERAD
 router.get('/',                  ctrl.get);
 router.put('/',                  ctrl.update);
 router.put('/whatsapp',          ctrl.updateWA);
+router.post('/whatsapp/verify',  ctrl.verifyWA);
 router.post('/whatsapp/test',    ctrl.testWA);
 router.put('/meta',              ctrl.updateMeta);
 

@@ -174,6 +174,7 @@ export const settingsAPI = {
   get:          () => api.get('/settings'),
   update:       (data) => api.put('/settings', data),
   updateWA:     (data) => api.put('/settings/whatsapp', data),
+  verifyWA:     () => api.post('/settings/whatsapp/verify'),
   testWA:       (testPhone) => api.post('/settings/whatsapp/test', { testPhone }),
   updateMeta:   (data) => api.put('/settings/meta', data),
 };
@@ -184,4 +185,10 @@ export const usersAPI = {
   update: (id, role) => api.patch(`/users/${id}/role`, { role }),
   remove: (id) => api.delete(`/users/${id}`),
   me:     () => api.get('/users/me'),
+};
+
+// Dev-only (available when WHATSAPP_MOCK=true)
+export const devAPI = {
+  tenants:       () => api.get('/dev/tenants'),
+  injectMessage: (data) => api.post('/dev/inject-message', data),
 };

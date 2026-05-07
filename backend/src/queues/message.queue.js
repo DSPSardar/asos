@@ -42,7 +42,7 @@ const schedulerQueue = new Queue(SCHEDULER_QUEUE, {
 
 const publishInboundMessage = async (jobData) => {
   const job = await messageQueue.add('inbound-message', jobData, {
-    jobId: `msg:${jobData.waMessageId}`, // Dedup by WA message ID
+    jobId: `msg_${jobData.waMessageId}`, // Dedup by WA message ID
   });
   logger.debug({ jobId: job.id, waMessageId: jobData.waMessageId }, 'Message job queued');
   return job;
@@ -50,7 +50,7 @@ const publishInboundMessage = async (jobData) => {
 
 const publishStatusUpdate = async (jobData) => {
   return messageQueue.add('status-update', jobData, {
-    jobId: `status:${jobData.waMessageId}:${jobData.status}`,
+    jobId: `status_${jobData.waMessageId}_${jobData.status}`,
   });
 };
 

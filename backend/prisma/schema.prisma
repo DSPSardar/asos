@@ -204,6 +204,7 @@ model Contact {
   email         String?
   waProfilePic  String?   @map("wa_profile_pic")
   city          String?
+  ageGroup      String?   @map("age_group")   // e.g. "18-24", "25-30", "31-35", "36+"
   tags          String[]  @default([])
   customFields  Json      @default("{}") @map("custom_fields")
   optIn         Boolean   @default(false) @map("opt_in")
@@ -253,6 +254,10 @@ model Lead {
   metaAdsetId         String?    @map("meta_adset_id")
   metaCampaignId      String?    @map("meta_campaign_id")
   sourceUtm           Json       @default("{}") @map("source_utm")
+
+  // ── DSP EdTech fields ──
+  dspPhase            String?    @map("dsp_phase")      // LEARN | BUILD | EARN
+  enrollmentFee       Decimal?   @db.Decimal(12,2) @map("enrollment_fee")
 
   closedAt            DateTime?  @map("closed_at")
   createdAt           DateTime   @default(now()) @map("created_at")

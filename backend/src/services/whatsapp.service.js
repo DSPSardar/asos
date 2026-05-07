@@ -20,9 +20,26 @@ const getClient = (tenant) => {
   });
 };
 
+// ── Determine if a tenant should use mock mode ────────────────────────
+// Mock when: global env flag OR tenant has no real credentials saved
+
+const isMockMode = (tenant) => {
+  if (env.WHATSAPP_MOCK === 'true') return true;
+  if (!tenant.waAccessToken || !tenant.waPhoneId) return true;
+  return false;
+};
+
 // ── Send text message ─────────────────────────────────────────────────
 
 const sendText = async (tenant, to, text) => {
+  // ── Mock mode: skip Meta API, log to console ──────────────────────
+  if (isMockMode(tenant)) {
+    const mockId = `mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const reason = env.WHATSAPP_MOCK === 'true' ? 'global mock env' : 'no credentials saved';
+    logger.info({ to, tenantId: tenant.id, mockId, reason, preview: text?.slice(0, 80) }, '[MOCK] WA message suppressed — would have been sent');
+    return mockId;
+  }
+
   try {
     const client = getClient(tenant);
     const res = await client.post('/messages', {
@@ -206,6 +223,48 @@ const verifySignature = (rawBody, signature, appSecret) => {
   );
 };
 
+// ── Verify credentials against Meta Graph API ─────────────────────────
+// Returns { ok, phoneNumber, verifiedName, qualityRating, error }
+
+const verifyCredentials = async (tenant) => {
+  const phoneId = tenant.waPhoneId;
+  const rawToken = tenant.waAccessToken;
+
+  if (!phoneId || !rawToken) {
+    return { ok: false, error: 'Phone Number ID or Access Token not configured' };
+  }
+
+  const token = (() => { try { return decrypt(rawToken) || rawToken; } catch { return rawToken; } })();
+
+  try {
+    const res = await axios.get(
+      `https://graph.facebook.com/v19.0/${phoneId}`,
+      {
+        params: { access_token: token },
+        timeout: 10000,
+      }
+    );
+    const d = res.data;
+    return {
+      ok:            true,
+      phoneNumber:   d.display_phone_number,
+      verifiedName:  d.verified_name,
+      qualityRating: d.quality_rating,
+      status:        d.code_verification_status,
+      throughput:    d.throughput?.level,
+    };
+  } catch (err) {
+    const metaErr = err.response?.data?.error;
+    return {
+      ok:      false,
+      error:   metaErr?.message || err.message,
+      code:    metaErr?.code,
+      subcode: metaErr?.error_subcode,
+      type:    metaErr?.type,
+    };
+  }
+};
+
 // ── Normalize phone to E.164 ──────────────────────────────────────────
 
 const normalizePhone = (phone) => {
@@ -220,5 +279,7 @@ module.exports = {
   getMediaUrl,
   parseInboundMessage,
   verifySignature,
+  verifyCredentials,
+  isMockMode,
   normalizePhone,
 };

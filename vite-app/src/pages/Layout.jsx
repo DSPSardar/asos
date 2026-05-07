@@ -12,6 +12,12 @@ const NAV = [
   { to: '/analytics',     label: 'Analytics',     icon: IconBars      },
 ];
 
+const DSP_NAV = [
+  { to: '/students',      label: 'Students',      icon: IconGradCap   },
+  { to: '/dsp-reports',   label: 'DSP Reports',   icon: IconReport    },
+  { to: '/automations',   label: 'Automations',   icon: IconBolt      },
+];
+
 const SETTINGS_NAV = [
   { to: '/settings',   label: 'Settings', icon: IconSettings },
   { to: '/billing',    label: 'Billing',  icon: IconCard     },
@@ -84,6 +90,7 @@ export default function Layout() {
         {/* Primary nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <NavSection label="Workspace" items={NAV} />
+          <NavSection label="DSP — EdTech" items={DSP_NAV} className="mt-6" />
           <NavSection label="Account" items={SETTINGS_NAV} className="mt-6" />
         </nav>
 
@@ -204,3 +211,6 @@ function IconChevron(p){ return <svg {...svgProps(p)}><path d="m6 9 6 6 6-6"/></
 function IconLogout(p){ return <svg {...svgProps(p)}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>; }
 function IconMenu(p){ return <svg {...svgProps(p)}><path d="M3 6h18M3 12h18M3 18h18"/></svg>; }
 function IconClose(p){ return <svg {...svgProps(p)}><path d="M18 6 6 18M6 6l12 12"/></svg>; }
+function IconGradCap(p){ return <svg {...svgProps(p)}><path d="M22 10v6M2 10l10-5 10 5-10 5-10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>; }
+function IconReport(p){ return <svg {...svgProps(p)}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>; }
+function IconBolt(p){ return <svg {...svgProps(p)}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>; }

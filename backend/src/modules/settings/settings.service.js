@@ -6,17 +6,29 @@ const whatsappService = require('../../services/whatsapp.service');
 const logger = require('../../utils/logger');
 
 const getSettings = async (tenantId) => {
-  return prisma.tenant.findUnique({
+  const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: {
       id: true, slug: true, name: true, plan: true, status: true,
       waPhoneId: true,
+      waAccessToken: true,   // needed for mock detection (masked below)
       metaPixelId: true,
       settings: true,
       createdAt: true,
-      // Never return raw tokens — mask them
     },
   });
+
+  if (!tenant) return null;
+
+  // Indicate mock mode without exposing the token
+  const mock = whatsappService.isMockMode(tenant);
+
+  return {
+    ...tenant,
+    waAccessToken: undefined,        // never send raw token to frontend
+    waTokenSaved:  !!tenant.waAccessToken,
+    mockMode:      mock,
+  };
 };
 
 const updateSettings = async (tenantId, data) => {
@@ -45,6 +57,26 @@ const updateWhatsApp = async (tenantId, { waPhoneId, waAccessToken, waAppSecret,
   });
 };
 
+const verifyWhatsApp = async (tenant) => {
+  // Load full tenant with encrypted token from DB
+  const fullTenant = await prisma.tenant.findUnique({
+    where: { id: tenant.id },
+    select: { id: true, waPhoneId: true, waAccessToken: true },
+  });
+
+  if (!fullTenant?.waPhoneId || !fullTenant?.waAccessToken) {
+    return {
+      ok: false,
+      mockMode: true,
+      error: 'No WhatsApp credentials saved — running in mock mode',
+    };
+  }
+
+  const result = await whatsappService.verifyCredentials(fullTenant);
+  logger.info({ tenantId: tenant.id, ok: result.ok }, 'WA credentials verified');
+  return result;
+};
+
 const testWhatsApp = async (tenant, testPhone) => {
   try {
     const msgId = await whatsappService.sendText(
@@ -71,4 +103,4 @@ const updateMeta = async (tenantId, { metaPixelId, metaAccessToken }) => {
   });
 };
 
-module.exports = { getSettings, updateSettings, updateWhatsApp, testWhatsApp, updateMeta };
+module.exports = { getSettings, updateSettings, updateWhatsApp, verifyWhatsApp, testWhatsApp, updateMeta };

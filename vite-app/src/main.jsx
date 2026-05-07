@@ -35,6 +35,9 @@ const AnalyticsPage  = React.lazy(() => import('@pages/Analytics'));
 const SettingsPage   = React.lazy(() => import('@pages/Settings'));
 const BillingPage    = React.lazy(() => import('@pages/Billing'));
 const OnboardingPage = React.lazy(() => import('@pages/Onboarding'));
+const StudentsPage   = React.lazy(() => import('@pages/Students'));
+const DSPReportsPage = React.lazy(() => import('@pages/DSPReports'));
+const AutomationsPage= React.lazy(() => import('@pages/Automations'));
 
 // ── Auth guard ────────────────────────────────────────────────
 const PrivateRoute = ({ children }) => {
@@ -86,6 +89,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="settings"      element={<SettingsPage />}     />
             <Route path="billing"       element={<BillingPage />}      />
             <Route path="onboarding"    element={<OnboardingPage />}   />
+            <Route path="students"      element={<StudentsPage />}     />
+            <Route path="dsp-reports"   element={<DSPReportsPage />}   />
+            <Route path="automations"   element={<AutomationsPage />}  />
           </Route>
 
           {/* Catch all */}
