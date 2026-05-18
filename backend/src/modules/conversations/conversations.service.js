@@ -4,6 +4,12 @@ const prisma = require('../../config/database');
 const whatsappService = require('../../services/whatsapp.service');
 const claudeService = require('../../services/claude.service');
 const logger = require('../../utils/logger');
+const redis = require('../../config/redis');
+const { publishInboundMessage } = require('../../queues/message.queue');
+
+// Redis key: marks conversations where a human deliberately handed control back to AI.
+// Persists until the next manual takeover. Prevents Claude from auto-handing off HOT leads.
+const aiControlKey = (conversationId) => `asos:ai_control:${conversationId}`;
 
 const listConversations = async ({ tenantId, status, page = 1, limit = 20 }) => {
   const where = { tenantId, ...(status && { status }) };
@@ -112,6 +118,9 @@ const takeover = async (tenantId, conversationId, userId) => {
     data: { status: 'HUMAN_TAKEOVER', aiEnabled: false, handoffReason: 'Manual agent takeover' },
   });
 
+  // Clear the AI control flag — next handback will re-set it
+  await redis.del(aiControlKey(conversationId)).catch(() => {});
+
   await prisma.activity.create({
     data: {
       tenantId,
@@ -138,6 +147,10 @@ const handback = async (tenantId, conversationId, userId) => {
     data: { status: 'AI_HANDLING', aiEnabled: true, handoffReason: null },
   });
 
+  // Persist AI control flag in Redis — worker reads this to suppress auto-handoff
+  // even for HOT leads. Cleared only when human takes over again.
+  await redis.set(aiControlKey(conversationId), '1').catch(() => {});
+
   await prisma.activity.create({
     data: {
       tenantId,
@@ -148,6 +161,42 @@ const handback = async (tenantId, conversationId, userId) => {
       metadata: { action: 'handback' },
     },
   });
+
+  // ── Re-queue last unanswered message from contact ─────────────────
+  // If the last message in the conversation is from the contact and has
+  // no AI reply after it, trigger Claude to respond immediately.
+  try {
+    const lastMessages = await prisma.message.findMany({
+      where: { conversationId, tenantId },
+      orderBy: { sentAt: 'desc' },
+      take: 2,
+      select: { direction: true, sender: true, content: true, waMessageId: true, sentAt: true },
+    });
+
+    const lastMsg = lastMessages[0];
+    const secondMsg = lastMessages[1];
+
+    // Re-queue if last message is inbound (from contact) and not already replied to
+    if (lastMsg?.direction === 'INBOUND' && lastMsg?.sender === 'CONTACT') {
+      // Make sure there's no outbound reply already after it
+      const hasReply = secondMsg?.direction === 'OUTBOUND';
+      if (!hasReply) {
+        const contact = await prisma.contact.findFirst({ where: { tenantId, conversations: { some: { id: conversationId } } } });
+        await publishInboundMessage({
+          tenantId,
+          phone: contact?.phone || conv.lead?.contact?.phone || '',
+          contactName: contact?.name || null,
+          content: lastMsg.content || '',
+          waMessageId: `requeue_${lastMsg.waMessageId || Date.now()}`,
+          messageType: 'text',
+          timestamp: Math.floor(new Date(lastMsg.sentAt).getTime() / 1000).toString(),
+        });
+        logger.info({ conversationId, tenantId }, '♻️ Re-queued last unanswered message after handback to AI');
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, conversationId }, 'Failed to re-queue last message after handback — non-fatal');
+  }
 
   return updated;
 };

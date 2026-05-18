@@ -168,20 +168,16 @@ const processInboundMessage = async (job) => {
     return;
   }
 
-  // ── 7b. Detect if conversation was deliberately handed back to AI ──
-  // If yes, suppress auto-handoff so Claude doesn't immediately re-handoff
-  // just because the lead was previously scored HOT.
-  const lastActivity = await prisma.activity.findFirst({
-    where: { leadId: lead.id, type: 'AI_ACTION' },
-    orderBy: { createdAt: 'desc' },
-  });
-  const handedBackToAI = lastActivity?.content === 'Conversation handed back to AI';
+  // ── 7b. Detect if conversation is under persistent AI control ────────
+  // Redis flag set by handback(), cleared by takeover(). Suppresses Claude's
+  // auto-handoff for HOT leads when a human has deliberately returned control to AI.
+  const aiControlFlag = await redis.get(`asos:ai_control:${conversation.id}`).catch(() => null);
+  const handedBackToAI = aiControlFlag === '1';
 
   // ── 8. Load message history for context ──────────────────────────
   const messageHistory = await prisma.message.findMany({
     where: { conversationId: conversation.id, tenantId },
     orderBy: { sentAt: 'asc' },
-    take: 30,
     select: { sender: true, content: true, sentAt: true },
   });
 
