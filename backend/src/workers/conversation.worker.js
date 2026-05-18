@@ -168,6 +168,15 @@ const processInboundMessage = async (job) => {
     return;
   }
 
+  // ── 7b. Detect if conversation was deliberately handed back to AI ──
+  // If yes, suppress auto-handoff so Claude doesn't immediately re-handoff
+  // just because the lead was previously scored HOT.
+  const lastActivity = await prisma.activity.findFirst({
+    where: { leadId: lead.id, type: 'AI_ACTION' },
+    orderBy: { createdAt: 'desc' },
+  });
+  const handedBackToAI = lastActivity?.content === 'Conversation handed back to AI';
+
   // ── 8. Load message history for context ──────────────────────────
   const messageHistory = await prisma.message.findMany({
     where: { conversationId: conversation.id, tenantId },
@@ -186,6 +195,7 @@ const processInboundMessage = async (job) => {
       conversation,
       newMessage: content || '[non-text message]',
       messageHistory: messageHistory.slice(0, -1), // exclude current message
+      handedBackToAI,
     });
   } catch (aiErr) {
     logger.error({ aiErr, leadId: lead.id }, 'Claude processing failed — handing off to agent');

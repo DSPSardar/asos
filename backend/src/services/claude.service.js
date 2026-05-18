@@ -268,7 +268,7 @@ const deriveStage = (currentStage, qualifierOutput) => {
 // Returns the same shape as v1 processMessage() so the worker doesn't break.
 // Adds: qualifierOutput, closerOutput, humanFollowupRequired
 
-const processMessage = async ({ tenantId, lead, contact, conversation, newMessage, messageHistory }) => {
+const processMessage = async ({ tenantId, lead, contact, conversation, newMessage, messageHistory, handedBackToAI = false }) => {
   const aiConfig = await prisma.aiConfig.findUnique({ where: { tenantId } });
   if (!aiConfig) throw new Error(`No AI config found for tenant ${tenantId}`);
 
@@ -302,7 +302,10 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
 
   // ── 2. Routing decisions from Qualifier alone ──────────────
   const humanFollowupRequired = qualifierOutput.score >= 8 || qualifierOutput.lead_status === 'HOT';
-  const forceHandoff = qualifierOutput.next_action === 'handoff_human';
+  // If a human agent deliberately handed this conversation back to AI, suppress
+  // auto-handoff so Claude gets a chance to continue. The agent can still
+  // manually take over again at any time.
+  const forceHandoff = !handedBackToAI && qualifierOutput.next_action === 'handoff_human';
 
   // ── 3. CLOSER ───────────────────────────────────────────────
   let closerOutput = null;
