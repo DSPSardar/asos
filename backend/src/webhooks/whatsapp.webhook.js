@@ -8,6 +8,7 @@ const whatsappService = require('../services/whatsapp.service');
 const { publishInboundMessage, publishStatusUpdate } = require('../queues/message.queue');
 const prisma = require('../config/database');
 const redis = require('../config/redis');
+const { decrypt } = require('../utils/crypto');
 
 const router = Router();
 
@@ -53,7 +54,8 @@ router.post('/', async (req, res) => {
 
     // ── 2. Verify HMAC signature ──────────────────────────────────
     const signature = req.headers['x-hub-signature-256'];
-    const appSecret = tenant.waAppSecret || env.WHATSAPP_APP_SECRET;
+    const rawSecret = tenant.waAppSecret || env.WHATSAPP_APP_SECRET;
+    const appSecret = rawSecret ? (() => { try { return decrypt(rawSecret) || rawSecret; } catch { return rawSecret; } })() : null;
 
     if (appSecret && signature) {
       const valid = whatsappService.verifySignature(rawBody, signature, appSecret);

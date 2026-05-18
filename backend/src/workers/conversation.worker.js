@@ -159,8 +159,11 @@ const processInboundMessage = async (job) => {
   });
 
   // ── 7. Check if AI is enabled for this conversation ───────────────
+  // aiEnabled is the single source of truth — do NOT check status here.
+  // toggleAI and handback both reset status to AI_HANDLING when re-enabling,
+  // so checking status would block AI even after a valid handback/toggle.
   const freshConv = await prisma.conversation.findUnique({ where: { id: conversation.id } });
-  if (!freshConv?.aiEnabled || freshConv.status === 'HUMAN_TAKEOVER') {
+  if (!freshConv?.aiEnabled) {
     logger.info({ conversationId: conversation.id }, 'AI disabled — message delivered to agent inbox only');
     return;
   }
