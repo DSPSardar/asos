@@ -159,6 +159,7 @@ model Tenant {
   contentSessions ContentSession[]
   contentDrafts   ContentDraft[]
   clientReports   ClientReport[]
+  knowledgeGaps   KnowledgeGap[]
 
   @@map("tenants")
 }
@@ -552,6 +553,29 @@ model AiAgentLog {
   @@index([tenantId, createdAt])
   @@index([conversationId])
   @@map("ai_agent_logs")
+}
+
+// ─────────────────────────────────────────────
+// KNOWLEDGE GAPS — Questions AI couldn't answer
+// Admin answers them → auto-injected into system prompt
+// ─────────────────────────────────────────────
+
+model KnowledgeGap {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  question    String    @db.Text          // The exact question the lead asked
+  answer      String?   @db.Text          // Admin's answer (null = unanswered)
+  timesAsked  Int       @default(1) @map("times_asked")
+  resolved    Boolean   @default(false)   // true once admin has answered
+  exampleLead String?   @map("example_lead") // contactId who asked (for context)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, resolved])
+  @@index([tenantId, createdAt])
+  @@map("knowledge_gaps")
 }
 
 // ─────────────────────────────────────────────

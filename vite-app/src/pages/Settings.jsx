@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@pages/Layout';
-import { settingsAPI, aiConfigAPI } from '@lib/api';
+import { settingsAPI, aiConfigAPI, knowledgeGapsAPI } from '@lib/api';
 
 const TABS = [
   { id:'whatsapp',      label:'WhatsApp',         icon:IconWhatsApp,    desc:'Connect your WhatsApp Business number and test the connection.' },
@@ -643,7 +643,182 @@ function AITab({ showToast }) {
           label="Always handoff for HOT leads in PROPOSAL stage"
           description="Recommended OFF — AI typically closes well at PROPOSAL. Toggle ON for high-touch enterprise deals." />
       </Section>
+
+      <KnowledgeGapsSection />
     </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// KNOWLEDGE GAPS — self-improving AI knowledge base
+// ─────────────────────────────────────────────────────────────
+function KnowledgeGapsSection() {
+  const [gaps,    setGaps]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [answers, setAnswers] = useState({});   // gapId → draft answer text
+  const [saving,  setSaving]  = useState({});   // gapId → bool
+  const [filter,  setFilter]  = useState('all'); // 'all' | 'unanswered' | 'resolved'
+
+  const load = () => {
+    setLoading(true);
+    const params = filter === 'unanswered' ? { resolved: false }
+                 : filter === 'resolved'   ? { resolved: true  }
+                 : {};
+    knowledgeGapsAPI.list(params)
+      .then((res) => {
+        const list = res?.data?.gaps ?? res?.gaps ?? [];
+        setGaps(list);
+        // Pre-fill answer fields with existing answers
+        const pre = {};
+        list.forEach((g) => { if (g.answer) pre[g.id] = g.answer; });
+        setAnswers((prev) => ({ ...pre, ...prev }));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [filter]); // eslint-disable-line
+
+  const handleSave = async (gapId) => {
+    const ans = (answers[gapId] || '').trim();
+    if (!ans) return;
+    setSaving((s) => ({ ...s, [gapId]: true }));
+    try {
+      await knowledgeGapsAPI.answer(gapId, ans);
+      setGaps((prev) => prev.map((g) => g.id === gapId ? { ...g, answer: ans, resolved: true } : g));
+    } catch (_) {}
+    setSaving((s) => ({ ...s, [gapId]: false }));
+  };
+
+  const handleDelete = async (gapId) => {
+    if (!window.confirm('Delete this question?')) return;
+    try {
+      await knowledgeGapsAPI.delete(gapId);
+      setGaps((prev) => prev.filter((g) => g.id !== gapId));
+    } catch (_) {}
+  };
+
+  const unansweredCount = gaps.filter((g) => !g.resolved).length;
+
+  return (
+    <Section
+      title={
+        <span className="flex items-center gap-2">
+          Knowledge Gaps
+          {unansweredCount > 0 && (
+            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+              {unansweredCount} unanswered
+            </span>
+          )}
+        </span>
+      }
+      description="When leads ask questions the AI can't answer from your system prompt, they appear here. Answer them — the AI will use your answers in all future conversations automatically."
+    >
+      {/* Filter bar */}
+      <div className="flex gap-1.5">
+        {[['all', 'All'], ['unanswered', 'Unanswered'], ['resolved', 'Answered']].map(([v, l]) => (
+          <button
+            key={v}
+            onClick={() => setFilter(v)}
+            className={`rounded-md px-3 py-1 text-[11px] font-medium transition-colors ${
+              filter === v
+                ? 'bg-accent/20 text-accent'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="py-8 text-center text-xs text-slate-500">Loading…</div>
+      ) : gaps.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-700/60 py-10 text-center">
+          <div className="text-2xl">🎉</div>
+          <div className="mt-2 text-xs text-slate-500">
+            {filter === 'unanswered' ? 'No unanswered questions — great!' : 'No knowledge gaps yet.'}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-600">
+            When leads ask something the AI doesn't know, it will appear here.
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {gaps.map((gap) => (
+            <div
+              key={gap.id}
+              className={`rounded-lg border p-4 transition-colors ${
+                gap.resolved
+                  ? 'border-emerald-800/30 bg-emerald-950/10'
+                  : 'border-amber-800/30 bg-amber-950/10'
+              }`}
+            >
+              {/* Question header */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      gap.resolved
+                        ? 'bg-emerald-500/15 text-emerald-400'
+                        : 'bg-amber-500/15 text-amber-400'
+                    }`}>
+                      {gap.resolved ? '✓ Answered' : '⚠ Unanswered'}
+                    </span>
+                    {gap.timesAsked > 1 && (
+                      <span className="rounded-full bg-slate-700/50 px-2 py-0.5 text-[10px] text-slate-400">
+                        Asked {gap.timesAsked}× by leads
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm font-medium text-slate-100 leading-relaxed">
+                    "{gap.question}"
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleDelete(gap.id)}
+                  className="shrink-0 text-[11px] text-slate-600 hover:text-red-400 transition-colors"
+                  title="Delete"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Answer field */}
+              <div className="mt-3">
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  Your Answer (AI will use this exactly)
+                </label>
+                <textarea
+                  value={answers[gap.id] || ''}
+                  onChange={(e) => setAnswers((prev) => ({ ...prev, [gap.id]: e.target.value }))}
+                  placeholder="Type your answer here — be specific. The AI will quote this directly."
+                  rows={3}
+                  className="input-dark w-full resize-y rounded-lg px-3 py-2 text-xs leading-relaxed text-slate-200 placeholder:text-slate-600"
+                />
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-600">
+                    {gap.resolved ? `Last updated ${new Date(gap.updatedAt).toLocaleDateString()}` : 'Not yet answered'}
+                  </span>
+                  <button
+                    onClick={() => handleSave(gap.id)}
+                    disabled={saving[gap.id] || !(answers[gap.id] || '').trim()}
+                    className="rounded-lg bg-accent/80 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-accent disabled:opacity-40 transition-colors"
+                  >
+                    {saving[gap.id] ? 'Saving…' : gap.resolved ? 'Update Answer' : 'Save & Activate'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-[11px] text-slate-600 leading-relaxed">
+        ✨ Answered questions are injected into every conversation automatically — no need to edit the system prompt.
+        The more you answer, the smarter the AI gets.
+      </p>
+    </Section>
   );
 }
 

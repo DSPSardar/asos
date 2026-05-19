@@ -170,6 +170,12 @@ export const aiConfigAPI = {
   usage:  () => api.get('/ai/usage'),
 };
 
+export const knowledgeGapsAPI = {
+  list:   (params) => api.get('/ai/knowledge-gaps', { params }),
+  answer: (id, answer) => api.patch(`/ai/knowledge-gaps/${id}`, { answer }),
+  delete: (id) => api.delete(`/ai/knowledge-gaps/${id}`),
+};
+
 export const settingsAPI = {
   get:          () => api.get('/settings'),
   update:       (data) => api.put('/settings', data),

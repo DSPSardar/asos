@@ -12,6 +12,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const env = require('../config/env');
 const logger = require('../utils/logger');
 const prisma = require('../config/database');
+const kgSvc = require('../modules/knowledge-gaps/knowledge-gaps.service');
 
 const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
@@ -151,7 +152,8 @@ Respond with ONLY a valid JSON object using this EXACT schema. No prose, no mark
 {
   "reply_message": "<WhatsApp reply — 1 to 3 short lines, ends with a question or CTA, max 320 chars>",
   "closing_type": "soft" | "hard" | "urgent",
-  "urgency_trigger": "<specific scarcity/urgency fact from product context, or empty string if none>"
+  "urgency_trigger": "<specific scarcity/urgency fact from product context, or empty string if none>",
+  "knowledge_gap": "<ONLY if the lead asked a specific factual question you could NOT answer from PRODUCT CONTEXT above — paste their exact question here. Leave empty string '' if you could answer it or if no factual question was asked>"
 }
 
 CLOSING TYPE GUIDE:
@@ -160,7 +162,7 @@ CLOSING TYPE GUIDE:
   • urgent  — Phase 3: HOT lead, late conversation. Direct price + enrollment ask. Close NOW.
 `;
 
-const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount) => `
+const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs = []) => `
 You are an elite AI Sales Closer specializing in converting WhatsApp leads into paid course enrollments.
 
 Your ONLY job: generate ONE perfectly-calibrated reply that moves this specific lead one step closer to enrolling.
@@ -169,7 +171,11 @@ Output structured JSON. No explanations outside the JSON.
 ═══════════════════════════════════════════════════════
 PRODUCT & BUSINESS CONTEXT (your source of truth)
 ═══════════════════════════════════════════════════════
-${aiConfig.systemPrompt}
+${aiConfig.systemPrompt}${resolvedQAs.length > 0 ? `
+
+── ADDITIONAL KNOWLEDGE BASE (admin-verified answers) ──
+The following Q&As have been answered by the business owner. Use them exactly as written when relevant.
+${resolvedQAs.map((qa, i) => `Q${i + 1}: ${qa.question}\nA${i + 1}: ${qa.answer}`).join('\n\n')}` : ''}
 
 ${aiConfig.closingScript ? `ADDITIONAL CLOSING GUIDANCE:\n${aiConfig.closingScript}` : ''}
 
@@ -245,10 +251,10 @@ OUTPUT FORMAT
 ${CLOSER_SCHEMA}
 `;
 
-const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput }) => {
+const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [] }) => {
   const t0 = Date.now();
   const messageCount = (messageHistory || []).length;
-  const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount);
+  const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs);
 
   const history = (messageHistory || []).slice(-20).map(m => ({
     role: m.sender === 'CONTACT' ? 'user' : 'assistant',
@@ -286,12 +292,13 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
     reply_message:   String(parsed.reply_message || '').slice(0, 1000),
     closing_type:    ['soft','hard','urgent'].includes(parsed.closing_type) ? parsed.closing_type : 'soft',
     urgency_trigger: String(parsed.urgency_trigger || '').slice(0, 200),
+    knowledge_gap:   String(parsed.knowledge_gap || '').trim().slice(0, 500),
     _tokens:         tokens,
     _model:          CLOSER_MODEL,
     _ms:             Date.now() - t0,
   };
 
-  logger.info({ leadId: lead.id, closing_type: result.closing_type }, '💬 Closer output');
+  logger.info({ leadId: lead.id, closing_type: result.closing_type, knowledge_gap: result.knowledge_gap || null }, '💬 Closer output');
   return result;
 };
 
@@ -374,6 +381,14 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     qualifierOutput.next_action = 'nurture';
   }
 
+  // Price / affordability objections MUST be handled by the Closer (objection playbook),
+  // NEVER trigger a handoff. The Closer has dedicated scripts for these.
+  const isPriceObjection = /\b(mahanga|expensive|afford|price|cost|paisa|paise|budget|costly|cheap|zyada|10k|10,000|10000|fee|fees)\b/i.test(msgLower);
+  if (isPriceObjection && qualifierOutput.next_action === 'handoff_human') {
+    logger.info({ leadId: lead.id }, '🛡 Safety guard: price objection blocked from handoff → Closer handles it');
+    qualifierOutput.next_action = 'continue_qualifying';
+  }
+
   // ── 3. Routing decisions from Qualifier alone ──────────────
   const humanFollowupRequired = qualifierOutput.score >= 8 || qualifierOutput.lead_status === 'HOT';
   // If a human agent deliberately handed this conversation back to AI, suppress
@@ -382,15 +397,29 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   const forceHandoff = !handedBackToAI && qualifierOutput.next_action === 'handoff_human';
 
   // ── 4. CLOSER ───────────────────────────────────────────────
+  // Fetch admin-verified Q&As to inject into Closer's knowledge base
+  let resolvedQAs = [];
+  try {
+    resolvedQAs = await kgSvc.getResolvedQAs(tenantId);
+  } catch (_) { /* non-blocking */ }
+
   let closerOutput = null;
   let closerError = null;
   if (!forceHandoff) {
     try {
-      closerOutput = await runCloser({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput });
+      closerOutput = await runCloser({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs });
     } catch (err) {
       logger.error({ err, leadId: lead.id }, 'Closer failed — falling back to handoff');
       closerError = err.message;
     }
+  }
+
+  // ── 4b. Log knowledge gap if Closer flagged one ─────────────
+  if (closerOutput?.knowledge_gap) {
+    kgSvc.logGap(tenantId, {
+      question: closerOutput.knowledge_gap,
+      exampleLead: contact.id || null,
+    }).catch(err => logger.warn({ err }, 'KnowledgeGap log failed (non-blocking)'));
   }
 
   // ── 5. Determine final action ───────────────────────────────

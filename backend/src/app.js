@@ -20,6 +20,7 @@ const analyticsRoutes    = require('./modules/analytics/analytics.routes');
 const usersRoutes        = require('./modules/users/users.routes');
 const settingsRoutes     = require('./modules/settings/settings.routes');
 const aiConfigRoutes     = require('./modules/ai-config/aiConfig.routes');
+const knowledgeGapsRoutes = require('./modules/knowledge-gaps/knowledge-gaps.routes');
 const billingRoutes      = require('./modules/billing/billing.routes');
 const adminRoutes        = require('./modules/admin/admin.routes');
 const contentStudioRoutes = require('./modules/content-studio/content-studio.routes');
@@ -101,6 +102,7 @@ const createApp = () => {
   app.use(`${v1}/users`,          usersRoutes);
   app.use(`${v1}/settings`,       settingsRoutes);
   app.use(`${v1}/ai`,             aiConfigRoutes);
+  app.use(`${v1}/ai/knowledge-gaps`, knowledgeGapsRoutes);
   app.use(`${v1}/billing`,        billingRoutes);
   app.use(`${v1}/admin`,          adminRoutes);
   app.use(`${v1}/content-studio`, contentStudioRoutes);
