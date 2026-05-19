@@ -40,6 +40,7 @@ export default function Auth() {
   const [loginEmail, setLoginEmail]       = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPw, setShowLoginPw]     = useState(false);
+  const [loginFieldErrors, setLoginFieldErrors] = useState({});
 
   // register fields
   const [regName, setRegName]         = useState('');
@@ -49,6 +50,8 @@ export default function Auth() {
   const [showRegPw, setShowRegPw]     = useState(false);
   const [strength, setStrength]       = useState({ score: 0, color: '#1e293b', label: '' });
   const [termsOk, setTermsOk]         = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});    // per-field errors for register form
+  const [emailExistsHint, setEmailExistsHint] = useState(false); // "sign in instead?" nudge
 
   // Post-OAuth phone capture modal
   const [showPhoneModal, setShowPhoneModal] = useState(false);
@@ -59,11 +62,68 @@ export default function Auth() {
   // forgot password
   const [forgotEmail, setForgotEmail] = useState('');
 
-  const clearMessages = () => { setError(''); setSuccess(''); };
+  const clearMessages = () => {
+    setError('');
+    setSuccess('');
+    setFieldErrors({});
+    setLoginFieldErrors({});
+    setEmailExistsHint(false);
+  };
 
   const switchTab = (t) => {
     clearMessages();
     setTab(t);
+  };
+
+  // ── Client-side validation ───────────────────────────────────────────
+  const validateLogin = () => {
+    const errs = {};
+    if (!loginEmail.trim())                           errs.email    = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail)) errs.email = 'Enter a valid email address';
+    if (!loginPassword)                               errs.password = 'Password is required';
+    return errs;
+  };
+
+  const validateRegister = () => {
+    const errs = {};
+    if (!regName.trim() || regName.trim().length < 2)
+      errs.name = 'Please enter your full name (min. 2 characters)';
+    if (!regEmail.trim())
+      errs.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail))
+      errs.email = 'Enter a valid email address';
+    if (!regPassword)
+      errs.password = 'Password is required';
+    else if (regPassword.length < 8)
+      errs.password = 'Password must be at least 8 characters';
+    if (regPhone.trim() && !/^\+[1-9]\d{7,14}$/.test(regPhone.trim()))
+      errs.phone = 'Use E.164 format: +923001234567 (country code + number, no spaces)';
+    if (!termsOk)
+      errs.terms = 'Please accept the Terms of Service to continue';
+    return errs;
+  };
+
+  // ── Friendly error parser ────────────────────────────────────────────
+  const parseRegisterError = (msg = '') => {
+    if (/email.*already|already.*registered|email.*taken|account.*exist/i.test(msg)) {
+      setEmailExistsHint(true);
+      return { email: 'This email is already registered.' };
+    }
+    if (/slug.*taken|tenant.*taken|already.*taken/i.test(msg)) {
+      // Slug collision is retried silently — if we still reach here something else is wrong
+      return null; // will fall to global error
+    }
+    if (/password.*short|password.*weak|password.*8/i.test(msg)) {
+      return { password: msg };
+    }
+    if (/phone.*format|E\.164/i.test(msg)) {
+      return { phone: 'Use E.164 format: +923001234567' };
+    }
+    if (/record.*already.*exists|unique.*constraint/i.test(msg)) {
+      setEmailExistsHint(true);
+      return { email: 'This email is already registered.' };
+    }
+    return null;
   };
 
   // ── Login ────────────────────────────────────────────────────────────
@@ -71,6 +131,10 @@ export default function Auth() {
     e.preventDefault();
     if (submitting) return;
     clearMessages();
+
+    const errs = validateLogin();
+    if (Object.keys(errs).length) { setLoginFieldErrors(errs); return; }
+
     setSubmit(true);
     try {
       const res = await authAPI.login({ email: loginEmail, password: loginPassword });
@@ -84,7 +148,11 @@ export default function Auth() {
     } catch (err) {
       const msg = err?.message || 'Login failed. Please try again.';
       if (/network|failed to fetch|ECONN|timeout/i.test(msg)) {
-        setError("Couldn't reach the server. Is the API running?");
+        setError("Can't reach the server. Please check your connection and try again.");
+      } else if (/invalid credentials|invalid.*password|wrong.*password/i.test(msg)) {
+        setError('Incorrect email or password. Please try again.');
+      } else if (/suspended/i.test(msg)) {
+        setError('This account has been suspended. Please contact support.');
       } else {
         setError(msg);
       }
@@ -163,19 +231,38 @@ export default function Auth() {
     e.preventDefault();
     if (submitting) return;
     clearMessages();
-    if (!termsOk) { setError('Please accept the Terms of Service to continue.'); return; }
+
+    // Client-side validation first — no API call until inputs are valid
+    const errs = validateRegister();
+    if (Object.keys(errs).length) { setFieldErrors(errs); return; }
+
     setSubmit(true);
     try {
-      const slug = slugFromEmail(regEmail);
+      const baseSlug = slugFromEmail(regEmail);
       const phoneVal = regPhone.trim();
-      const res = await authAPI.register({
-        tenantName: regName,
+
+      const doRegister = (slug) => authAPI.register({
+        tenantName: regName.trim(),
         tenantSlug: slug,
-        email:      regEmail,
+        email:      regEmail.trim().toLowerCase(),
         password:   regPassword,
-        fullName:   regName,
+        fullName:   regName.trim(),
         ...(phoneVal ? { phone: phoneVal } : {}),
       });
+
+      let res;
+      try {
+        res = await doRegister(baseSlug);
+      } catch (firstErr) {
+        // Slug taken → silently retry with a random suffix (user never sees this)
+        if (/slug.*taken|already.*taken/i.test(firstErr?.message || '')) {
+          const suffix = Math.random().toString(36).slice(2, 6);
+          res = await doRegister(`${baseSlug}-${suffix}`);
+        } else {
+          throw firstErr;
+        }
+      }
+
       const payload = res?.data ?? res;
       const { accessToken, refreshToken, user, tenant } = payload || {};
       if (!accessToken) throw new Error('Registration failed — no token returned.');
@@ -184,7 +271,18 @@ export default function Auth() {
       setSuccess('Account created! Setting up your workspace…');
       setTimeout(() => navigate('/dashboard', { replace: true }), 1200);
     } catch (err) {
-      setError(err?.message || 'Registration failed. Please try again.');
+      const msg = err?.message || '';
+      if (/network|failed to fetch|ECONN|timeout/i.test(msg)) {
+        setError("Can't reach the server. Please check your connection and try again.");
+        return;
+      }
+      // Try to map to a field-level error
+      const mapped = parseRegisterError(msg);
+      if (mapped) {
+        setFieldErrors(mapped);
+      } else {
+        setError(msg || 'Registration failed. Please try again.');
+      }
     } finally {
       setSubmit(false);
     }
@@ -367,12 +465,12 @@ export default function Auth() {
               <form onSubmit={handleLogin} className="space-y-4" noValidate>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Email</label>
-                  <input type="email" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
-                         placeholder="you@company.com" disabled={submitting}
-                         className="w-full rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-600 outline-none transition-all"
-                         style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(99,102,241,0.2)' }}
-                         onFocus={(e) => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
-                         onBlur={(e) => e.target.style.borderColor = 'rgba(99,102,241,0.2)'} />
+                  <AuthInput
+                    type="email" value={loginEmail} placeholder="you@company.com"
+                    disabled={submitting} error={!!loginFieldErrors.email}
+                    onChange={(e) => { setLoginEmail(e.target.value); setLoginFieldErrors((p) => ({ ...p, email: '' })); }}
+                  />
+                  <FieldError msg={loginFieldErrors.email} />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
@@ -383,21 +481,21 @@ export default function Auth() {
                     </button>
                   </div>
                   <div className="relative">
-                    <input type={showLoginPw ? 'text' : 'password'} required value={loginPassword}
-                           onChange={(e) => setLoginPassword(e.target.value)}
-                           placeholder="••••••••" disabled={submitting}
-                           className="w-full rounded-xl px-4 py-3 pr-12 text-sm text-slate-100 placeholder-slate-600 outline-none transition-all"
-                           style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(99,102,241,0.2)' }}
-                           onFocus={(e) => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
-                           onBlur={(e) => e.target.style.borderColor = 'rgba(99,102,241,0.2)'} />
+                    <AuthInput
+                      type={showLoginPw ? 'text' : 'password'} value={loginPassword}
+                      placeholder="••••••••" disabled={submitting} error={!!loginFieldErrors.password}
+                      className="pr-12"
+                      onChange={(e) => { setLoginPassword(e.target.value); setLoginFieldErrors((p) => ({ ...p, password: '' })); }}
+                    />
                     <button type="button" tabIndex={-1}
                             onClick={() => setShowLoginPw((v) => !v)}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors text-base">
                       {showLoginPw ? '🙈' : '👁'}
                     </button>
                   </div>
+                  <FieldError msg={loginFieldErrors.password} />
                 </div>
-                <button type="submit" disabled={submitting || !loginEmail || !loginPassword}
+                <button type="submit" disabled={submitting}
                         className="w-full rounded-xl py-3 text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] active:scale-[0.99]"
                         style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 24px rgba(99,102,241,0.3)' }}>
                   {submitting ? (
@@ -415,70 +513,102 @@ export default function Auth() {
               <form onSubmit={handleRegister} className="space-y-4" noValidate>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Your Name</label>
-                  <AuthInput value={regName} onChange={(e) => setRegName(e.target.value)}
-                             placeholder="John Smith" required disabled={submitting} />
+                  <AuthInput
+                    value={regName} placeholder="John Smith" disabled={submitting}
+                    error={!!fieldErrors.name}
+                    onChange={(e) => { setRegName(e.target.value); setFieldErrors((p) => ({ ...p, name: '' })); }}
+                  />
+                  <FieldError msg={fieldErrors.name} />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Email</label>
-                  <AuthInput type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)}
-                             placeholder="you@company.com" required disabled={submitting} />
+                  <AuthInput
+                    type="email" value={regEmail} placeholder="you@company.com" disabled={submitting}
+                    error={!!fieldErrors.email}
+                    onChange={(e) => { setRegEmail(e.target.value); setFieldErrors((p) => ({ ...p, email: '' })); setEmailExistsHint(false); }}
+                  />
+                  {/* Smart hint when email already exists */}
+                  {emailExistsHint ? (
+                    <p className="mt-1.5 flex items-center gap-1 text-[11px] text-red-400">
+                      <span>⚠</span> This email is already registered.{' '}
+                      <button type="button"
+                        onClick={() => { switchTab('login'); setLoginEmail(regEmail); }}
+                        className="underline text-indigo-400 hover:text-indigo-300 font-semibold">
+                        Sign in instead →
+                      </button>
+                    </p>
+                  ) : (
+                    <FieldError msg={fieldErrors.email} />
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Password</label>
                   <div className="relative">
-                    <input type={showRegPw ? 'text' : 'password'} required disabled={submitting}
-                           value={regPassword}
-                           onChange={(e) => { setRegPassword(e.target.value); setStrength(getStrength(e.target.value)); }}
-                           placeholder="Min. 8 characters"
-                           className="w-full rounded-xl px-4 py-3 pr-12 text-sm text-slate-100 placeholder-slate-600 outline-none transition-all"
-                           style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(99,102,241,0.2)' }}
-                           onFocus={(e) => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
-                           onBlur={(e) => e.target.style.borderColor = 'rgba(99,102,241,0.2)'} />
+                    <AuthInput
+                      type={showRegPw ? 'text' : 'password'} disabled={submitting}
+                      value={regPassword} placeholder="Min. 8 characters"
+                      error={!!fieldErrors.password} className="pr-12"
+                      onChange={(e) => {
+                        setRegPassword(e.target.value);
+                        setStrength(getStrength(e.target.value));
+                        setFieldErrors((p) => ({ ...p, password: '' }));
+                      }}
+                    />
                     <button type="button" tabIndex={-1} onClick={() => setShowRegPw((v) => !v)}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors text-base">
                       {showRegPw ? '🙈' : '👁'}
                     </button>
                   </div>
-                  {/* Strength bars */}
-                  <div className="flex gap-1 mt-2">
-                    {strengthBars.map((bar, i) => (
-                      <div key={i} className="flex-1 h-[3px] rounded-full transition-all duration-300"
-                           style={{ background: bar.active ? strength.color : '#1e293b' }} />
-                    ))}
-                  </div>
-                  {strength.label && (
-                    <div className="text-[10px] mt-1" style={{ color: strength.color }}>{strength.label}</div>
+                  {/* Strength bars — only show when typing */}
+                  {regPassword.length > 0 && (
+                    <div className="flex gap-1 mt-2">
+                      {strengthBars.map((bar, i) => (
+                        <div key={i} className="flex-1 h-[3px] rounded-full transition-all duration-300"
+                             style={{ background: bar.active ? strength.color : '#1e293b' }} />
+                      ))}
+                    </div>
                   )}
+                  {fieldErrors.password ? (
+                    <FieldError msg={fieldErrors.password} />
+                  ) : strength.label && regPassword.length > 0 ? (
+                    <div className="text-[10px] mt-1" style={{ color: strength.color }}>{strength.label}</div>
+                  ) : null}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                    WhatsApp Number <span className="normal-case font-normal text-slate-600">(optional — for lead tracking)</span>
+                    WhatsApp Number <span className="normal-case font-normal text-slate-600">(optional)</span>
                   </label>
                   <AuthInput
-                    type="tel"
-                    value={regPhone}
-                    onChange={(e) => setRegPhone(e.target.value)}
-                    placeholder="+923001234567"
-                    disabled={submitting}
+                    type="tel" value={regPhone} placeholder="+923001234567" disabled={submitting}
+                    error={!!fieldErrors.phone}
+                    onChange={(e) => { setRegPhone(e.target.value); setFieldErrors((p) => ({ ...p, phone: '' })); }}
                   />
-                  <p className="mt-1 text-[10px] text-slate-600">E.164 format — country code + number, no spaces</p>
+                  {fieldErrors.phone ? (
+                    <FieldError msg={fieldErrors.phone} />
+                  ) : (
+                    <p className="mt-1 text-[10px] text-slate-600">E.164 format — country code + number, no spaces</p>
+                  )}
                 </div>
 
-                <div className="flex items-start gap-3 py-1">
-                  <input type="checkbox" id="terms" checked={termsOk} onChange={(e) => setTermsOk(e.target.checked)}
-                         className="mt-0.5 rounded flex-shrink-0 cursor-pointer" style={{ accentColor: '#6366f1' }} />
-                  <label htmlFor="terms" className="text-xs text-slate-400 cursor-pointer leading-relaxed">
-                    I agree to the{' '}
-                    <a href="#" className="text-indigo-400 hover:text-indigo-300">Terms of Service</a>
-                    {' '}and{' '}
-                    <a href="#" className="text-indigo-400 hover:text-indigo-300">Privacy Policy</a>
-                  </label>
+                <div>
+                  <div className="flex items-start gap-3 py-1">
+                    <input type="checkbox" id="terms" checked={termsOk}
+                           onChange={(e) => { setTermsOk(e.target.checked); setFieldErrors((p) => ({ ...p, terms: '' })); }}
+                           className="mt-0.5 rounded flex-shrink-0 cursor-pointer" style={{ accentColor: '#6366f1' }} />
+                    <label htmlFor="terms" className="text-xs text-slate-400 cursor-pointer leading-relaxed">
+                      I agree to the{' '}
+                      <a href="#" className="text-indigo-400 hover:text-indigo-300">Terms of Service</a>
+                      {' '}and{' '}
+                      <a href="#" className="text-indigo-400 hover:text-indigo-300">Privacy Policy</a>
+                    </label>
+                  </div>
+                  <FieldError msg={fieldErrors.terms} />
                 </div>
 
-                <button type="submit" disabled={submitting || !regName || !regEmail || !regPassword || !termsOk}
+                <button type="submit" disabled={submitting}
                         className="w-full rounded-xl py-3 text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] active:scale-[0.99]"
                         style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 24px rgba(99,102,241,0.3)' }}>
                   {submitting ? (
@@ -664,14 +794,27 @@ function GoogleIcon() {
 }
 
 // ── Reusable styled input ─────────────────────────────────────────────
-function AuthInput({ className = '', ...props }) {
+function AuthInput({ className = '', error: hasError = false, ...props }) {
+  const borderDefault = hasError ? 'rgba(239,68,68,0.5)'  : 'rgba(99,102,241,0.2)';
+  const borderFocus   = hasError ? 'rgba(239,68,68,0.8)'  : 'rgba(99,102,241,0.6)';
+  const bg            = hasError ? 'rgba(239,68,68,0.04)' : 'rgba(15,23,42,0.8)';
   return (
     <input
       className={`w-full rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-600 outline-none transition-all ${className}`}
-      style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(99,102,241,0.2)' }}
-      onFocus={(e) => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
-      onBlur={(e) => e.target.style.borderColor = 'rgba(99,102,241,0.2)'}
+      style={{ background: bg, border: `1px solid ${borderDefault}` }}
+      onFocus={(e) => e.target.style.borderColor = borderFocus}
+      onBlur={(e)  => e.target.style.borderColor = borderDefault}
       {...props}
     />
+  );
+}
+
+// ── Field error message ───────────────────────────────────────────────
+function FieldError({ msg }) {
+  if (!msg) return null;
+  return (
+    <p className="mt-1.5 flex items-center gap-1 text-[11px] text-red-400">
+      <span>⚠</span> {msg}
+    </p>
   );
 }
