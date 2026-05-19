@@ -111,7 +111,7 @@ export default function Settings() {
           {tab === 'whatsapp'      && <WhatsAppTab      showToast={showToast} />}
           {tab === 'ai'            && <AITab            showToast={showToast} />}
           {tab === 'team'          && <TeamTab          onSave={() => showToast('Team updated ✓')} />}
-          {tab === 'notifications' && <NotificationsTab onSave={() => showToast('Notification preferences saved ✓')} />}
+          {tab === 'notifications' && <NotificationsTab />}
           {tab === 'integrations'  && <IntegrationsTab  onSave={(name) => showToast(`${name} connection demo ✓`)} />}
           {tab === 'billing'       && <BillingTab />}
         </div>
@@ -803,80 +803,187 @@ function InviteModal({ onClose, onInvite }) {
 // ─────────────────────────────────────────────────────────────
 // TAB 4 — Notifications
 // ─────────────────────────────────────────────────────────────
-function NotificationsTab({ onSave }) {
+function NotificationsTab() {
+  const [adminPhone, setAdminPhone] = useState('');
+  const [browserPerm, setBrowserPerm] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+  );
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved]   = useState(false);
   const [prefs, setPrefs] = useState({
-    newLead:    { email:true,  whatsapp:false },
-    hotLead:    { email:true,  whatsapp:true  },
-    needsHuman: { email:true,  whatsapp:true  },
-    daily:      { email:true,  whatsapp:false },
-    weekly:     { email:true,  whatsapp:false },
+    newLead:    { whatsapp: false, browser: false },
+    hotLead:    { whatsapp: true,  browser: true  },
+    needsHuman: { whatsapp: true,  browser: true  },
+    daily:      { whatsapp: false, browser: false },
+    weekly:     { whatsapp: false, browser: false },
   });
 
+  // Load saved prefs from backend on mount
+  useEffect(() => {
+    settingsAPI.get().then((res) => {
+      const s = res.data?.data?.settings || res.data?.settings || {};
+      if (s.adminPhone) setAdminPhone(s.adminPhone);
+      if (s.notifPrefs) {
+        setPrefs((prev) => {
+          const merged = { ...prev };
+          Object.keys(s.notifPrefs).forEach((k) => {
+            if (merged[k]) merged[k] = { ...merged[k], ...s.notifPrefs[k] };
+          });
+          return merged;
+        });
+      }
+    }).catch(() => {});
+  }, []);
+
   const items = [
-    { key:'newLead',    label:'New lead',         desc:'Fires when any new contact starts a conversation.' },
-    { key:'hotLead',    label:'Hot lead',         desc:'Fires when AI scores a lead as HOT.' },
-    { key:'needsHuman', label:'Needs human',      desc:'Fires when AI escalates per your handoff rules.' },
-    { key:'daily',      label:'Daily digest',     desc:'9 AM PKT summary: new leads, conversion rate, AI cost.' },
-    { key:'weekly',     label:'Weekly report',    desc:'Monday 9 AM: pipeline change, won/lost, AI performance.' },
+    { key:'newLead',    label:'New lead',      desc:'Fires when a new contact starts a conversation.' },
+    { key:'hotLead',    label:'Hot lead',      desc:'Fires when AI scores a lead as HOT (score ≥ 8).' },
+    { key:'needsHuman', label:'Needs human',   desc:'Fires when AI escalates to a human agent.' },
+    { key:'daily',      label:'Daily digest',  desc:'9 AM PKT summary: new leads, conversion rate, AI cost.' },
+    { key:'weekly',     label:'Weekly report', desc:'Monday 9 AM: pipeline change, won/lost, AI performance.' },
   ];
 
-  const flip = (key, channel) => setPrefs({ ...prefs, [key]: { ...prefs[key], [channel]: !prefs[key][channel] } });
+  const flip = (key, channel) =>
+    setPrefs((p) => ({ ...p, [key]: { ...p[key], [channel]: !p[key][channel] } }));
+
+  const requestBrowserPerm = async () => {
+    if (typeof Notification === 'undefined') return;
+    const result = await Notification.requestPermission();
+    setBrowserPerm(result);
+    if (result === 'granted') {
+      new Notification('ASOS Notifications enabled', {
+        body: 'You will now receive browser alerts for hot leads and handoffs.',
+        icon: '/favicon.ico',
+      });
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await settingsAPI.update({ settings: { adminPhone, notifPrefs: prefs } });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      console.error('Failed to save notification prefs', err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <Section
-      title="Alerts"
-      description="Choose which events notify you, and on which channel."
-      footer={<PrimaryButton onClick={onSave}>Save Preferences</PrimaryButton>}
-    >
-      {/* Mobile: card stack */}
-      <ul className="space-y-2 md:hidden">
-        {items.map((it) => (
-          <li key={it.key} className="rounded-lg border border-slate-800/60 bg-surface/30 p-3">
-            <div className="text-sm font-medium text-slate-100">{it.label}</div>
-            <div className="mt-0.5 text-xs text-slate-500">{it.desc}</div>
-            <div className="mt-3 flex items-center gap-5 border-t border-slate-800/40 pt-3">
-              <div className="flex items-center gap-2">
-                <Checkbox on={prefs[it.key].email}    onChange={() => flip(it.key, 'email')} />
-                <span className="text-xs text-slate-300">Email</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox on={prefs[it.key].whatsapp} onChange={() => flip(it.key, 'whatsapp')} />
-                <span className="text-xs text-slate-300">WhatsApp</span>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
+    <div className="space-y-5">
+      {/* Admin WhatsApp number */}
+      <Section
+        title="Admin WhatsApp Number"
+        description="Receive live WhatsApp alerts on this number when key lead events fire."
+      >
+        <div className="flex max-w-sm flex-col gap-1.5">
+          <label className="text-xs font-medium text-slate-400">Phone number (with country code)</label>
+          <input
+            type="tel"
+            value={adminPhone}
+            onChange={(e) => setAdminPhone(e.target.value)}
+            placeholder="e.g. 923001234567"
+            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+          />
+          <p className="text-[11px] text-slate-600">No + or spaces — digits only. Must be on WhatsApp.</p>
+        </div>
+      </Section>
 
-      {/* Desktop: table */}
-      <div className="hidden overflow-hidden rounded-lg border border-slate-800/60 md:block">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-surface/40 text-left text-[10px] uppercase tracking-wider text-slate-500">
-              <th className="px-4 py-2 font-semibold">Event</th>
-              <th className="w-28 px-4 py-2 text-center font-semibold">Email</th>
-              <th className="w-28 px-4 py-2 text-center font-semibold">WhatsApp</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it) => (
-              <tr key={it.key} className="border-t border-slate-800/40">
-                <td className="px-4 py-3">
-                  <div className="text-sm font-medium text-slate-100">{it.label}</div>
-                  <div className="mt-0.5 text-xs text-slate-500">{it.desc}</div>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <Checkbox on={prefs[it.key].email}    onChange={() => flip(it.key, 'email')} />
-                </td>
-                <td className="px-4 py-3 text-center">
+      {/* Browser notifications */}
+      <Section
+        title="Browser Notifications"
+        description="Get desktop pop-ups for hot leads and handoffs, even when the tab is in the background."
+      >
+        <div className="flex items-center gap-4">
+          {browserPerm === 'unsupported' && (
+            <span className="text-sm text-slate-500">Browser notifications not supported in this environment.</span>
+          )}
+          {browserPerm === 'granted' && (
+            <span className="flex items-center gap-2 rounded-full border border-emerald-700/40 bg-emerald-900/20 px-3 py-1 text-xs font-medium text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Notifications enabled
+            </span>
+          )}
+          {browserPerm === 'denied' && (
+            <span className="text-xs text-rose-400">Notifications blocked. Allow them in your browser site settings, then reload.</span>
+          )}
+          {browserPerm === 'default' && (
+            <button
+              onClick={requestBrowserPerm}
+              className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/20"
+            >
+              Enable browser notifications
+            </button>
+          )}
+        </div>
+      </Section>
+
+      {/* Alert preferences table */}
+      <Section
+        title="Alert Preferences"
+        description="Choose which events notify you, and on which channel."
+        footer={
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Preferences'}
+          </button>
+        }
+      >
+        {/* Mobile: card stack */}
+        <ul className="space-y-2 md:hidden">
+          {items.map((it) => (
+            <li key={it.key} className="rounded-lg border border-slate-800/60 bg-surface/30 p-3">
+              <div className="text-sm font-medium text-slate-100">{it.label}</div>
+              <div className="mt-0.5 text-xs text-slate-500">{it.desc}</div>
+              <div className="mt-3 flex items-center gap-5 border-t border-slate-800/40 pt-3">
+                <div className="flex items-center gap-2">
                   <Checkbox on={prefs[it.key].whatsapp} onChange={() => flip(it.key, 'whatsapp')} />
-                </td>
+                  <span className="text-xs text-slate-300">WhatsApp</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox on={prefs[it.key].browser} onChange={() => flip(it.key, 'browser')} />
+                  <span className="text-xs text-slate-300">Browser</span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        {/* Desktop: table */}
+        <div className="hidden overflow-hidden rounded-lg border border-slate-800/60 md:block">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-surface/40 text-left text-[10px] uppercase tracking-wider text-slate-500">
+                <th className="px-4 py-2 font-semibold">Event</th>
+                <th className="w-28 px-4 py-2 text-center font-semibold">WhatsApp</th>
+                <th className="w-28 px-4 py-2 text-center font-semibold">Browser</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Section>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <tr key={it.key} className="border-t border-slate-800/40">
+                  <td className="px-4 py-3">
+                    <div className="text-sm font-medium text-slate-100">{it.label}</div>
+                    <div className="mt-0.5 text-xs text-slate-500">{it.desc}</div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <Checkbox on={prefs[it.key].whatsapp} onChange={() => flip(it.key, 'whatsapp')} />
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <Checkbox on={prefs[it.key].browser} onChange={() => flip(it.key, 'browser')} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+    </div>
   );
 }
 

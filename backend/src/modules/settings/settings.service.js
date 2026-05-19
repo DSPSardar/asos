@@ -32,9 +32,17 @@ const getSettings = async (tenantId) => {
 };
 
 const updateSettings = async (tenantId, data) => {
-  const allowed = ['name', 'settings'];
   const update = {};
-  allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
+  if (data.name !== undefined) update.name = data.name;
+
+  // Merge incoming settings keys with existing — never blow away unrelated keys
+  if (data.settings !== undefined) {
+    const current = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    update.settings = { ...(current?.settings || {}), ...data.settings };
+  }
 
   return prisma.tenant.update({
     where: { id: tenantId },

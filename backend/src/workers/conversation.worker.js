@@ -9,6 +9,7 @@ const prisma = require('../config/database');
 const claudeService = require('../services/claude.service');
 const whatsappService = require('../services/whatsapp.service');
 const metaService = require('../services/meta.service');
+const notificationService = require('../services/notification.service');
 const logger = require('../utils/logger');
 const { publishStatusUpdate } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
@@ -111,6 +112,9 @@ const processInboundMessage = async (job) => {
     // Fire Meta "Lead" event for new leads
     metaService.trackLead(tenant, normalizedPhone, lead.id).catch(() => {});
     metaService.trackContactInitiated(tenant, normalizedPhone, lead.id).catch(() => {});
+
+    // Notify admin of new lead
+    notificationService.notifyAdmin(tenant, 'newLead', { contactName: contact.name, phone: normalizedPhone });
 
     logger.info({ leadId: lead.id, contactId: contact.id }, 'New lead created');
   }
@@ -279,19 +283,39 @@ const processInboundMessage = async (job) => {
         },
       },
     });
+
+    // Notify admin of HOT lead
+    notificationService.notifyAdmin(tenant, 'hotLead', {
+      contactName: contact.name,
+      phone: normalizedPhone,
+      score: aiResult.score,
+    });
   }
 
   // ── 11. Route based on AI action ─────────────────────────────────
 
   if (aiResult.action === 'handoff') {
-    // A) Human handoff
-    await handleHandoff(tenant, conversation, lead, aiResult.handoffReason);
-
-    // Send the AI reply first, then the handoff message
+    // A) Human handoff — send closer reply first (if any), then farewell, then handoff
     if (aiResult.reply) {
       await sendAndSaveReply({ tenant, conversation, tenantId, phone: normalizedPhone,
         content: aiResult.reply, tokensUsed: aiResult.tokensUsed, rawResponse: aiResult });
     }
+
+    // Farewell message — customizable via aiConfig.handoffMessage
+    const farewellMsg = tenant.aiConfig?.handoffMessage ||
+      '🙏 Shukriya apna waqt dene ka! Hamari team bohat jald aap se rabta karegi. Please available rahein. ✨';
+    await sendAndSaveReply({ tenant, conversation, tenantId, phone: normalizedPhone,
+      content: farewellMsg, tokensUsed: 0, rawResponse: null });
+
+    await handleHandoff(tenant, conversation, lead, aiResult.handoffReason);
+
+    // Notify admin on WhatsApp
+    notificationService.notifyAdmin(tenant, 'needsHuman', {
+      contactName: contact.name,
+      phone: normalizedPhone,
+      reason: aiResult.handoffReason,
+    });
+
     return;
   }
 

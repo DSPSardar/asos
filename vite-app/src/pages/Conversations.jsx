@@ -1,6 +1,6 @@
 // src/pages/Conversations.jsx — WhatsApp-style two-pane conversations view (live API)
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { conversationsAPI } from '@lib/api';
+import { conversationsAPI, settingsAPI } from '@lib/api';
 
 // ─────────────────────────────────────────────────────────────
 // Style maps (covers both real DB stages and legacy labels)
@@ -94,6 +94,15 @@ function formatPhone(phone = '') {
 // ─────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────
+// Fire a browser notification if the user has granted permission and the
+// relevant notifPrefs channel is enabled in tenant settings.
+function fireBrowserNotif(title, body) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  try {
+    new Notification(title, { body, icon: '/favicon.ico' });
+  } catch (_) {}
+}
+
 export default function Conversations() {
   const [threads,    setThreads]    = useState([]);
   const [activeId,   setActiveId]   = useState(null);
@@ -105,12 +114,49 @@ export default function Conversations() {
   const [search,     setSearch]     = useState('');
   const [mobileView, setMobileView] = useState('list');
 
+  // Track known thread states to detect changes between polls
+  const knownThreadsRef = useRef(null);
+  // Cache notifPrefs so we don't fetch settings on every poll
+  const notifPrefsRef   = useRef(null);
+
+  // Load notifPrefs once from backend (non-blocking)
+  useEffect(() => {
+    settingsAPI.get().then((res) => {
+      const s = res.data?.data?.settings || res.data?.settings || {};
+      notifPrefsRef.current = s.notifPrefs || {};
+    }).catch(() => {});
+  }, []);
+
   // ── Load conversation list ──────────────────────────────────
   const loadThreads = useCallback(async () => {
     try {
       const res = await conversationsAPI.list({ limit: 50 });
       const convs = Array.isArray(res.data) ? res.data : (res?.data || []);
       const mapped = convs.map(mapThread);
+
+      // ── Browser notification diffing (runs after initial load) ──
+      if (knownThreadsRef.current !== null) {
+        const prefs = notifPrefsRef.current || {};
+        const prevMap = new Map(knownThreadsRef.current.map((t) => [t.id, t]));
+
+        mapped.forEach((t) => {
+          const prev = prevMap.get(t.id);
+          // New HOT lead appeared
+          if (!prev && t.scoreLabel === 'HOT' && prefs.hotLead?.browser) {
+            fireBrowserNotif('🔥 HOT Lead', `${t.name} (${t.phone}) is ready to close.`);
+          }
+          // Conversation newly needs human
+          if (prev && !prev.needsHuman && t.needsHuman && prefs.needsHuman?.browser) {
+            fireBrowserNotif('🙋 Human Needed', `${t.name} — AI has escalated this conversation.`);
+          }
+          // Brand-new lead (any)
+          if (!prev && prefs.newLead?.browser) {
+            fireBrowserNotif('🆕 New Lead', `${t.name} started a conversation.`);
+          }
+        });
+      }
+
+      knownThreadsRef.current = mapped;
       setThreads(mapped);
       // Auto-select first on initial load
       setActiveId((prev) => prev || (mapped[0]?.id ?? null));
