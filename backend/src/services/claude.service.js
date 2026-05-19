@@ -60,13 +60,15 @@ is_enrollment_confirmed RULES — THIS IS THE MOST IMPORTANT FIELD:
     "main aa raha/rahi hun", "payment kaise karein" (after already agreeing), "done, register karo".
   Examples that are NOT confirmations (false — use false for ALL of these):
     asking the fee ("fee kya hai?", "kitna hai?")
-    asking about the course ("course ke baare mein batao", "kya sikhate ho?")
+    asking about the course ("course ke baare mein batao", "kya sikhate ho?", "ap course karwate hain?")
+    saying they saw an ad ("maine aap ka ad dekha", "ad dekha tha", "I saw your ad", "aap ka course dekha")
     answering a qualifying question ("beginner", "career shift", "income chahiye", "no experience")
-    expressing interest without committing ("sounds good", "interesting", "theek hai")
+    expressing interest without committing ("sounds good", "interesting", "theek hai", "achha hai")
     asking about schedule, duration, certificate, or anything at all
     saying they're a beginner, student, freelancer, or any profile info
-    ANY message that ends with "?" or asks for information
-  When in doubt → set false. It is always safer to keep the AI selling than to hand off too early.
+    ANY information-seeking message even without a question mark
+    greeting or filler words ("alhamdulillah", "ok", "theek hai", "shukriya")
+  When in doubt → set false. It is ALWAYS safer to keep the AI selling than to hand off too early.
 `;
 
 // Build effective handoff triggers dynamically from the tenant's handoffRules toggles.
@@ -228,7 +230,7 @@ Respond with ONLY a valid JSON object using this EXACT schema. No prose, no mark
   "reply_message": "<WhatsApp reply — 1 to 3 short lines, ends with a question or CTA, max 320 chars>",
   "closing_type": "soft" | "hard" | "urgent" | "lost",
   "urgency_trigger": "<specific scarcity/urgency fact from product context, or empty string if none>",
-  "knowledge_gap": "<ONLY if the lead asked a specific factual question you could NOT answer from PRODUCT CONTEXT above — paste their exact question here. Leave empty string '' if you could answer it or if no factual question was asked>"
+  "knowledge_gap": "<ONLY if the lead asked a course-specific factual question (batch dates, payment options, specific modules, refund policy) that is NOT in PRODUCT CONTEXT and you could not answer it. General AI/tech questions you can answer from your own knowledge do NOT count. Leave '' if answered or not applicable>"
 }
 
 CLOSING TYPE GUIDE:
@@ -340,11 +342,17 @@ ABSOLUTE RULES  (never break these)
    • Lead writes in Urdu only → reply in Urdu/Roman Urdu.
    • Lead mixes Urdu + English → match the same mix.
    Detect from the CURRENT message, not earlier ones. If they switch language, you switch too.
-6. If lead asks a general question (fee, duration, certificate, etc.) → answer it DIRECTLY first (1 line), then pivot to enrollment.
-7. NEVER fabricate facts, prices, dates, or guarantees not present in PRODUCT CONTEXT above.
-8. Urgency is ONLY valid when grounded in real facts from PRODUCT CONTEXT.
-9. FEE QUESTIONS are NORMAL — answer them ("Rs. 10,000 — 14 din ka program"), then close.
-   NEVER treat a fee question as a reason to say "team will contact you".
+6. KNOWLEDGE RULES — two tiers:
+   a) COURSE FACTS (price, batch dates, seat count, certificate type, payment method):
+      → ONLY use what's in PRODUCT CONTEXT. Never invent these.
+   b) GENERAL AI/TECH KNOWLEDGE (how agents work, what LLMs are, Python, automation, tools,
+      freelancing tips, industry trends, "agents kaise bante hain", "ChatGPT kya hai", etc.):
+      → Use your full training knowledge. Answer confidently and well. Then pivot to course.
+      Do NOT flag general AI questions as knowledge_gap — you know this already.
+7. FEE QUESTIONS are NORMAL — answer directly ("Rs. 10,000 — 14 din, certificate included"), then close.
+8. If lead mentions seeing an ad → validate it ("Haan, bilkul!"), briefly pitch, ask one qualifying question.
+9. Urgency is ONLY valid when grounded in real facts from PRODUCT CONTEXT.
+10. NEVER invent course-specific facts not in PRODUCT CONTEXT (dates, guarantees, partner names, etc.).
 
 ═══════════════════════════════════════════════════════
 OUTPUT FORMAT
@@ -487,12 +495,14 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     qualifierOutput.next_action = 'continue_qualifying';
   }
 
-  // Guard D: any message that is a question — questions are info-seeking, never enrollment confirmation.
-  // Catches fee questions, duration questions, "kya hai?", "kaise?", etc. in any language.
+  // Guard D: info-seeking messages — questions or ad/course references are never confirmations.
+  // Covers: explicit ? marks, question words, ad-saw phrases, course inquiry patterns.
   const containsQuestion = msgLower.includes('?')
-    || /\b(kya|kiaa|how|what|when|kyun|kitna|kitni|kaise|konsa|which|where|fee|price|cost|detail|tell me|bata|batao|information)\b/.test(msgLower);
+    || /\b(kya|kiaa|how|what|when|kyun|kitna|kitni|kaise|konsa|which|where|fee|price|cost|detail|tell me|bata|batao|information|karwate|karwaty|sikhate|sikhaty|offer|available)\b/.test(msgLower)
+    || /\b(ad|add|course|program|class|batch|schedule|certificate|enroll|join|register)\b/.test(msgLower)
+    || /dekha|suna|mila|batao|bataen|janana|jaanna/.test(msgLower);
   if (containsQuestion && qualifierOutput.next_action === 'handoff_human') {
-    logger.info({ leadId: lead.id }, '🛡 Guard D: question detected → Closer answers, no handoff');
+    logger.info({ leadId: lead.id }, '🛡 Guard D: info-seeking/ad-ref detected → Closer answers, no handoff');
     qualifierOutput.next_action = 'continue_qualifying';
   }
 
