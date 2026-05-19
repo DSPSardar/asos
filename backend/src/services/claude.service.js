@@ -147,7 +147,7 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
   try {
     const resp = await client.messages.create({
       model: QUALIFIER_MODEL,
-      max_tokens: 256,
+      max_tokens: 512,
       temperature: 0,                   // deterministic — this is analysis
       system,
       messages: history,
@@ -343,7 +343,7 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
   try {
     const resp = await client.messages.create({
       model: CLOSER_MODEL,
-      max_tokens: aiConfig.maxTokens || 512,
+      max_tokens: aiConfig.maxTokens || 1024,
       temperature: aiConfig.temperature ?? 0.4,
       system,
       messages: history,
@@ -465,8 +465,21 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     try {
       closerOutput = await runCloser({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs });
     } catch (err) {
-      logger.error({ err, leadId: lead.id }, 'Closer failed — falling back to handoff');
+      logger.error({ err, leadId: lead.id }, 'Closer failed — using safe fallback reply');
       closerError = err.message;
+      // Build a safe context-aware fallback rather than handing off.
+      // A technical error must never interrupt a live sales conversation.
+      const fallbackReply = qualifierOutput.is_price_objection
+        ? 'Bilkul samajh sakta hun — Rs. 10,000 ek investment hai jo aapko dollar earning tak le jaye. Kya main thodi aur detail share karun? 😊'
+        : 'Shukriya message ke liye! Aap ka koi sawal ho to zaroor poochein — main yahan hun. 😊';
+      closerOutput = {
+        reply_message:   fallbackReply,
+        closing_type:    'soft',
+        urgency_trigger: '',
+        knowledge_gap:   '',
+        _tokens: 0, _model: CLOSER_MODEL, _ms: 0,
+      };
+      closerError = null; // treat as non-fatal
     }
   }
 
