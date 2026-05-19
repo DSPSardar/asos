@@ -33,16 +33,49 @@ Respond with ONLY a valid JSON object using this EXACT schema. No prose, no mark
   "score": <integer 1-10>,
   "intent": "high" | "medium" | "low",
   "problem_summary": "<1 sentence describing the lead's core problem or interest>",
-  "next_action": "<what should happen next: 'continue_qualifying' | 'send_proposal' | 'close_deal' | 'handoff_human' | 'nurture'>"
+  "next_action": "<what should happen next: 'continue_qualifying' | 'send_proposal' | 'close_deal' | 'handoff_human' | 'nurture'>",
+  "is_price_objection": <true | false>
 }
 
 SCORING RULES:
   • 8-10  HOT   — strong buying intent, clear need, urgency, decision authority
   • 5-7   WARM  — interested, asking questions, missing 1+ BANT element
   • 1-4   COLD  — casual browsing, unclear, off-topic, or unqualified
+
+is_price_objection RULES:
+  Set to true if the message expresses ANY concern about cost or affordability — in ANY language,
+  spelling variant, abbreviation, or mix. Examples (not exhaustive):
+  "expensive", "exp", "mehnga", "mahanga", "afford nai", "nai afford", "afford nahi kar sakta/sakti",
+  "10k zyada", "thoda kam", "discount", "zyada hai", "itna nahi dey sakta", "budget nahi",
+  "can't pay", "too much", "price kam karo", "installment", "easy payment", "concession".
+  Set to false for everything else.
 `;
 
-const buildQualifierPrompt = (aiConfig, lead, contact) => `
+// Build effective handoff triggers dynamically from the tenant's handoffRules toggles.
+// handoffRules = { payment: bool, legal: bool, unanswered: bool, hotProposal: bool }
+// handoffTriggers = admin-defined custom array (optional override)
+const buildEffectiveTriggers = (aiConfig) => {
+  const rules = aiConfig.handoffRules || {};
+  const triggers = new Set(['seat_confirmed']); // always active
+
+  if (rules.payment !== false) {
+    // payment ON by default — these are genuine human-only situations
+    ['payment_dispute', 'refund_request', 'charge_dispute', 'billing_error'].forEach(t => triggers.add(t));
+  }
+  if (rules.legal !== false) {
+    ['legal_threat', 'lawsuit', 'consumer_complaint', 'FBR', 'fraud_allegation'].forEach(t => triggers.add(t));
+  }
+
+  // Custom tenant-defined triggers (from AI Config page) always included
+  (aiConfig.handoffTriggers || []).forEach(t => triggers.add(t));
+
+  return [...triggers];
+};
+
+const buildQualifierPrompt = (aiConfig, lead, contact) => {
+  const effectiveTriggers = buildEffectiveTriggers(aiConfig);
+
+  return `
 You are the QUALIFIER AGENT for a sales AI system.
 
 Your ONLY job: analyze the latest contact message + history, then output structured JSON.
@@ -55,7 +88,8 @@ ${aiConfig.systemPrompt}
 ${(aiConfig.qualificationCriteria || []).map(c => '- ' + c).join('\n')}
 
 ## HANDOFF TRIGGERS (ONLY these force next_action="handoff_human")
-${JSON.stringify(aiConfig.handoffTriggers || ['payment_dispute','refund','legal','complaint','seat_confirmed'])}
+${JSON.stringify(effectiveTriggers)}
+These are SPECIFIC situations — NOT generic complaints or price concerns.
 
 ## LEAD CONTEXT
 - Contact name: ${contact.name || 'Unknown'}
@@ -67,19 +101,23 @@ ${JSON.stringify(aiConfig.handoffTriggers || ['payment_dispute','refund','legal'
 
 ### ANTI-HANDOFF RULES (strictly enforced)
 1. GREETINGS ("Hi", "Hello", "Salam", "AOA", "Assalam o alaikum", "Hey", any first opening message)
-   MUST return: score=2, intent="low", next_action="continue_qualifying"
-   NEVER return next_action="handoff_human" for a greeting — your job is to engage the lead.
+   MUST return: score=2, intent="low", next_action="continue_qualifying", is_price_objection=false
+   NEVER return next_action="handoff_human" for a greeting.
 
 2. COLD leads (score 1–4): ALWAYS return "continue_qualifying" or "nurture".
    A score of 1–4 NEVER justifies handoff_human.
 
-3. next_action="handoff_human" is ONLY valid when ALL of these are true:
-   - The message explicitly matches a HANDOFF TRIGGER listed above (e.g. confirmed enrollment, payment dispute, legal issue)
-   - AND the lead has already been qualified (score >= 7)
-   - NOT for unclear, short, off-topic, or first messages
+3. next_action="handoff_human" is ONLY valid when ALL are true:
+   - Message explicitly matches a HANDOFF TRIGGER above (confirmed seat, real dispute, legal threat)
+   - AND lead score >= 7
+   - NOT for general questions, objections, unclear, or first messages
 
-4. If the message is a general question, curiosity, or test → "continue_qualifying"
-5. When in doubt → "continue_qualifying"
+4. PRICE OBJECTIONS — Set is_price_objection=true and next_action="continue_qualifying".
+   NEVER return handoff_human for ANY cost/affordability concern regardless of how it's expressed.
+   The Closer agent has specific scripts to handle these.
+
+5. If the message is a general question, curiosity, or test → "continue_qualifying"
+6. When in doubt → "continue_qualifying"
 
 ### SCORING REMINDER
 - 8–10 HOT  : strong buying signal, urgency, clear need
@@ -89,6 +127,7 @@ ${JSON.stringify(aiConfig.handoffTriggers || ['payment_dispute','refund','legal'
 ## OUTPUT FORMAT
 ${QUALIFIER_SCHEMA}
 `;
+};
 
 const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessage }) => {
   const t0 = Date.now();
@@ -128,14 +167,15 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
   }
 
   const result = {
-    lead_status:     ['HOT','WARM','COLD'].includes(parsed.lead_status) ? parsed.lead_status : 'COLD',
-    score:           Math.min(10, Math.max(1, parseInt(parsed.score) || 1)),
-    intent:          ['high','medium','low'].includes(parsed.intent) ? parsed.intent : 'low',
-    problem_summary: String(parsed.problem_summary || '').slice(0, 500),
-    next_action:     String(parsed.next_action || 'continue_qualifying').slice(0, 100),
-    _tokens:         tokens,
-    _model:          QUALIFIER_MODEL,
-    _ms:             Date.now() - t0,
+    lead_status:        ['HOT','WARM','COLD'].includes(parsed.lead_status) ? parsed.lead_status : 'COLD',
+    score:              Math.min(10, Math.max(1, parseInt(parsed.score) || 1)),
+    intent:             ['high','medium','low'].includes(parsed.intent) ? parsed.intent : 'low',
+    problem_summary:    String(parsed.problem_summary || '').slice(0, 500),
+    next_action:        String(parsed.next_action || 'continue_qualifying').slice(0, 100),
+    is_price_objection: parsed.is_price_objection === true,
+    _tokens:            tokens,
+    _model:             QUALIFIER_MODEL,
+    _ms:                Date.now() - t0,
   };
 
   logger.info({ leadId: lead.id, ...result }, '🎯 Qualifier output');
@@ -186,6 +226,7 @@ Temperature : ${qualifierOutput.lead_status}   Score: ${qualifierOutput.score}/1
 Lead's situation: ${qualifierOutput.problem_summary}
 Recommended next move: ${qualifierOutput.next_action}
 Messages exchanged so far: ${messageCount}
+${qualifierOutput.is_price_objection ? '⚠️  PRICE OBJECTION DETECTED — deploy the objection playbook immediately. Do NOT skip to close. Handle the concern, then pivot.' : ''}
 
 CONTACT
 Name: ${contact.name || 'Unknown'} | Pipeline stage: ${lead.stage}
@@ -359,44 +400,64 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     };
   }
 
-  // ── 2. Greeting / first-message safety guard ────────────────
-  // The Qualifier can misclassify ambiguous short messages as needing handoff.
-  // This hard check prevents the AI from abandoning a lead who just said Hi.
-  const msgLower = (newMessage || '').trim().toLowerCase();
-  const isGreeting  = /^(hi|hello|hey|salam|aoa|assalam|walaikum|hellow|helo|heya|yo|good\s*(morning|afternoon|evening)|namaste|السلام|السلام علیکم)\b/.test(msgLower);
-  const isFirstMsg  = (messageHistory || []).length === 0;
-  const isVeryShort = msgLower.replace(/[^a-z]/g, '').length <= 5; // ≤5 letters stripped
+  // ── 2. Safety guards — applied in priority order ──────────────
+  const msgLower   = (newMessage || '').trim().toLowerCase();
+  const isFirstMsg = (messageHistory || []).length === 0;
+  const isVeryShort = msgLower.replace(/[^a-z]/g, '').length <= 5;
+  const isGreeting  = /^(hi|hello|hey|salam|aoa|assalam|walaikum|hellow|helo|heya|yo|good\s*(morning|afternoon|evening)|namaste)\b/.test(msgLower);
 
+  // Guard A: greetings / first message / very short — never hand off
   if ((isGreeting || isFirstMsg || isVeryShort) && qualifierOutput.next_action === 'handoff_human') {
-    logger.info(
-      { leadId: lead.id, newMessage, trigger: isGreeting ? 'greeting' : isFirstMsg ? 'first_msg' : 'very_short' },
-      '🛡 Safety guard: blocked premature handoff on greeting/first message → continue_qualifying'
-    );
+    logger.info({ leadId: lead.id, trigger: isGreeting ? 'greeting' : isFirstMsg ? 'first_msg' : 'very_short' },
+      '🛡 Guard A: blocked handoff on greeting/first/short message');
     qualifierOutput.next_action = 'continue_qualifying';
   }
 
-  // Also: cold leads (score 1-4) must NEVER be handed off — they need nurturing
+  // Guard B: cold leads (score 1-4) must never be handed off
   if (qualifierOutput.score <= 4 && qualifierOutput.next_action === 'handoff_human') {
-    logger.info({ leadId: lead.id, score: qualifierOutput.score }, '🛡 Safety guard: cold lead cannot be handed off → nurture');
+    logger.info({ leadId: lead.id, score: qualifierOutput.score }, '🛡 Guard B: cold lead → nurture');
     qualifierOutput.next_action = 'nurture';
   }
 
-  // Price / affordability objections MUST be handled by the Closer (objection playbook),
-  // NEVER trigger a handoff. The Closer has dedicated scripts for these.
-  const isPriceObjection = /\b(mahanga|expensive|afford|price|cost|paisa|paise|budget|costly|cheap|zyada|10k|10,000|10000|fee|fees)\b/i.test(msgLower);
-  if (isPriceObjection && qualifierOutput.next_action === 'handoff_human') {
-    logger.info({ leadId: lead.id }, '🛡 Safety guard: price objection blocked from handoff → Closer handles it');
+  // Guard C: price / affordability objections — Qualifier AI detects semantically.
+  // is_price_objection=true catches ALL variants: "exp", "mehnga", "afford nai", "thoda kam", etc.
+  // No regex needed — the Qualifier understands the meaning, not just the spelling.
+  if (qualifierOutput.is_price_objection && qualifierOutput.next_action === 'handoff_human') {
+    logger.info({ leadId: lead.id }, '🛡 Guard C: price objection → Closer handles with objection playbook');
     qualifierOutput.next_action = 'continue_qualifying';
   }
 
-  // ── 3. Routing decisions from Qualifier alone ──────────────
-  const humanFollowupRequired = qualifierOutput.score >= 8 || qualifierOutput.lead_status === 'HOT';
-  // If a human agent deliberately handed this conversation back to AI, suppress
-  // auto-handoff so Claude gets a chance to continue. The agent can still
-  // manually take over again at any time.
-  const forceHandoff = !handedBackToAI && qualifierOutput.next_action === 'handoff_human';
+  // ── 3. Apply handoffRules toggles (dynamic, from Settings UI) ──
+  const rules = aiConfig.handoffRules || {};
+  let rulesHandoff = false;
+  let rulesHandoffReason = null;
 
-  // ── 4. CLOSER ───────────────────────────────────────────────
+  // Rule: unanswered — if last N messages are all from AI and no contact reply
+  if (rules.unanswered !== false) {
+    const history = messageHistory || [];
+    const THRESHOLD = 3;
+    const tail = history.slice(-THRESHOLD);
+    const allAI = tail.length >= THRESHOLD && tail.every(m => m.sender === 'AI' || m.sender === 'AGENT');
+    if (allAI) {
+      rulesHandoff = true;
+      rulesHandoffReason = `No reply after ${THRESHOLD} consecutive AI messages`;
+      logger.info({ leadId: lead.id }, '🛡 Rule: unanswered threshold hit → handoff');
+    }
+  }
+
+  // Rule: hotProposal — HOT leads at PROPOSED stage always go to human
+  if (rules.hotProposal && lead.stage === 'PROPOSED' && qualifierOutput.lead_status === 'HOT') {
+    rulesHandoff = true;
+    rulesHandoffReason = 'HOT lead in PROPOSAL stage — human close required';
+    logger.info({ leadId: lead.id }, '🛡 Rule: HOT + PROPOSED → handoff');
+  }
+
+  // ── 4. Final handoff decision ─────────────────────────────────
+  const humanFollowupRequired = qualifierOutput.score >= 8 || qualifierOutput.lead_status === 'HOT';
+  const qualifierWantsHandoff = qualifierOutput.next_action === 'handoff_human';
+  const forceHandoff = !handedBackToAI && (qualifierWantsHandoff || rulesHandoff);
+
+  // ── 5. CLOSER ───────────────────────────────────────────────
   // Fetch admin-verified Q&As to inject into Closer's knowledge base
   let resolvedQAs = [];
   try {
@@ -414,7 +475,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     }
   }
 
-  // ── 4b. Log knowledge gap if Closer flagged one ─────────────
+  // ── 5b. Log knowledge gap if Closer flagged one ─────────────
   if (closerOutput?.knowledge_gap) {
     kgSvc.logGap(tenantId, {
       question: closerOutput.knowledge_gap,
@@ -422,13 +483,14 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     }).catch(err => logger.warn({ err }, 'KnowledgeGap log failed (non-blocking)'));
   }
 
-  // ── 5. Determine final action ───────────────────────────────
+  // ── 6. Determine final action ───────────────────────────────
   let action = 'continue';
   let handoffReason = null;
 
   if (forceHandoff) {
     action = 'handoff';
-    handoffReason = `Qualifier flagged handoff (intent=${qualifierOutput.intent}, action=${qualifierOutput.next_action})`;
+    handoffReason = rulesHandoffReason
+      || `Qualifier flagged handoff (intent=${qualifierOutput.intent}, action=${qualifierOutput.next_action})`;
   } else if (closerError) {
     action = 'handoff';
     handoffReason = `Closer AI failed: ${closerError}`;
