@@ -33,7 +33,7 @@ Respond with ONLY a valid JSON object using this EXACT schema. No prose, no mark
   "score": <integer 1-10>,
   "intent": "high" | "medium" | "low",
   "problem_summary": "<1 sentence describing the lead's core problem or interest>",
-  "next_action": "<what should happen next: 'continue_qualifying' | 'send_proposal' | 'close_deal' | 'handoff_human' | 'nurture'>",
+  "next_action": "continue_qualifying" | "send_proposal" | "nurture" | "close_deal",
   "is_price_objection": <true | false>,
   "is_enrollment_confirmed": <true | false>
 }
@@ -43,32 +43,39 @@ SCORING RULES:
   • 5-7   WARM  — interested, asking questions, missing 1+ BANT element
   • 1-4   COLD  — casual browsing, unclear, off-topic, or unqualified
 
+next_action RULES:
+  "continue_qualifying" — default for all conversations: questions, greetings, general interest, objections
+  "send_proposal"       — lead is WARM/HOT and ready to hear the full offer
+  "nurture"             — lead has refused or gone cold, needs re-engagement
+  "close_deal"          — lead has confirmed enrollment (is_enrollment_confirmed = true)
+  NOTE: "handoff_human" does NOT exist in next_action. Handoff is triggered ONLY by is_enrollment_confirmed=true.
+
 is_price_objection RULES:
   Set to true if the message expresses ANY concern about cost or affordability — in ANY language,
   spelling variant, abbreviation, or mix. Examples (not exhaustive):
-  "expensive", "exp", "mehnga", "mahanga", "afford nai", "nai afford", "afford nahi kar sakta/sakti",
-  "10k zyada", "thoda kam", "discount", "zyada hai", "itna nahi dey sakta", "budget nahi",
-  "can't pay", "too much", "price kam karo", "installment", "easy payment", "concession".
+  "expensive", "mehnga", "afford nai", "10k zyada", "thoda kam", "discount", "budget nahi",
+  "too much", "installment", "easy payment", "concession", "kam karo", "can't pay".
   Set to false for everything else.
 
-is_enrollment_confirmed RULES — THIS IS THE MOST IMPORTANT FIELD:
-  Set to TRUE ONLY if the current message is an UNAMBIGUOUS, EXPLICIT enrollment confirmation.
-  The lead must have used words that clearly mean "YES, I want to enroll / register / join right now."
-  Examples that ARE confirmations (true):
-    "haan", "ji haan", "confirm", "register karwao", "link bhejo", "main join karta/karti hun",
+is_enrollment_confirmed — THE ONLY HANDOFF TRIGGER:
+  Set to TRUE ONLY if the lead has given an UNAMBIGUOUS, EXPLICIT confirmation to enroll.
+  They must clearly mean: "YES I want to register / pay / join RIGHT NOW."
+
+  TRUE examples (enrollment confirmed):
+    "haan register karwao", "confirm kar do", "link bhejo main join karta/karti hun",
     "book kar do meri seat", "enroll kar do", "sign me up", "yes I want to join",
-    "main aa raha/rahi hun", "payment kaise karein" (after already agreeing), "done, register karo".
-  Examples that are NOT confirmations (false — use false for ALL of these):
-    asking the fee ("fee kya hai?", "kitna hai?")
-    asking about the course ("course ke baare mein batao", "kya sikhate ho?", "ap course karwate hain?")
-    saying they saw an ad ("maine aap ka ad dekha", "ad dekha tha", "I saw your ad", "aap ka course dekha")
-    answering a qualifying question ("beginner", "career shift", "income chahiye", "no experience")
-    expressing interest without committing ("sounds good", "interesting", "theek hai", "achha hai")
-    asking about schedule, duration, certificate, or anything at all
-    saying they're a beginner, student, freelancer, or any profile info
-    ANY information-seeking message even without a question mark
-    greeting or filler words ("alhamdulillah", "ok", "theek hai", "shukriya")
-  When in doubt → set false. It is ALWAYS safer to keep the AI selling than to hand off too early.
+    "payment kaise karon" (said AFTER agreeing to join), "done, register karo", "chalo karte hain".
+
+  FALSE — ALWAYS false for these (no matter how interested they sound):
+    Any question, even fee/price ("fee kya hai", "kitna hai", "how much")
+    "I saw your ad" / "ad dekha tha" / "maine course dekha"
+    Answering a qualifying question: "beginner", "career shift", "freelancer", "income chahiye"
+    General interest: "sounds good", "interesting", "theek hai", "achha lagta hai"
+    Asking about schedule, duration, syllabus, certificate, or any course detail
+    Greetings or filler: "salam", "alhamdulillah", "ok", "shukriya", "haan" (alone without context)
+    ANY message that seeks information — even if the person sounds very keen
+
+  DEFAULT is false. When in ANY doubt → false. The Closer AI keeps selling until confirmed.
 `;
 
 // Build effective handoff triggers dynamically from the tenant's handoffRules toggles.
@@ -92,78 +99,33 @@ const buildEffectiveTriggers = (aiConfig) => {
   return [...triggers];
 };
 
-const buildQualifierPrompt = (aiConfig, lead, contact) => {
-  const effectiveTriggers = buildEffectiveTriggers(aiConfig);
-
-  return `
+const buildQualifierPrompt = (aiConfig, lead, contact) => `
 You are the QUALIFIER AGENT for a sales AI system.
 
-Your ONLY job: analyze the latest contact message + history, then output structured JSON.
-You do NOT write replies. Another agent (Closer) handles that.
+Your ONLY job: analyze the lead's latest message + conversation history and output structured JSON.
+You do NOT write replies — the Closer AI handles all responses.
 
-## TENANT BUSINESS CONTEXT
+## BUSINESS CONTEXT
 ${aiConfig.systemPrompt}
 
-## QUALIFICATION CRITERIA TO LOOK FOR
-${(aiConfig.qualificationCriteria || []).map(c => '- ' + c).join('\n')}
-
-## HANDOFF TRIGGERS (ONLY these force next_action="handoff_human")
-${JSON.stringify(effectiveTriggers)}
-These are SPECIFIC situations — NOT generic complaints or price concerns.
-
-"seat_confirmed" means the lead has used an EXPLICIT enrollment confirmation such as:
-  "haan", "confirm", "register karwao", "join karna hai", "link bhejo", "main aa raha/rahi hun",
-  "book kar do", "enroll", "sign up", "main join karta/karti hun", "yes I want to enroll",
-  "seat book karo", "payment kaise karein", "kitne ka hai aur register kaise karein + haan".
-  It does NOT fire on: asking the fee, asking what the course is, any question, any objection.
-
 ## LEAD CONTEXT
-- Contact name: ${contact.name || 'Unknown'}
-- Current stage: ${lead.stage}
+- Name: ${contact.name || 'Unknown'}
+- Pipeline stage: ${lead.stage}
 - Previous score: ${lead.aiScore}/100
-- Prior qualification data: ${JSON.stringify(lead.qualificationData || {})}
 
-## CRITICAL RULES — READ BEFORE SCORING
+## YOUR JOB — SCORE AND ANALYZE ONLY
+Assess the lead's temperature, intent, and situation.
+The Closer AI will handle ALL responses — questions, objections, general queries, everything.
+You NEVER decide to hand off. That is controlled by is_enrollment_confirmed only.
 
-### ANTI-HANDOFF RULES (strictly enforced)
-1. GREETINGS ("Hi", "Hello", "Salam", "AOA", "Assalam o alaikum", "Hey", any first opening message)
-   MUST return: score=2, intent="low", next_action="continue_qualifying", is_price_objection=false
-   NEVER return next_action="handoff_human" for a greeting.
-
-2. COLD leads (score 1–4): ALWAYS return "continue_qualifying" or "nurture".
-   A score of 1–4 NEVER justifies handoff_human.
-
-3. ANY MESSAGE THAT IS A QUESTION — if the message contains "?", or uses question words
-   (kya, kiaa, how, what, when, kyun, kitna, kitni, kaise, konsa, which, where, fee, price, cost, details)
-   → MUST return next_action="continue_qualifying". A question = info-seeking, NOT a confirmation.
-   NEVER return handoff_human for a question, even if the lead sounds very interested.
-
-4. next_action="handoff_human" is ONLY valid when ALL are true:
-   - Message is a CLEAR POSITIVE ENROLLMENT CONFIRMATION (see seat_confirmed definition above)
-   - AND lead score >= 6
-   - AND the message is NOT a question
-   - NOT for general questions, objections, curiosity, or information requests
-
-5. PRICE OBJECTIONS — Set is_price_objection=true and next_action="continue_qualifying".
-   NEVER return handoff_human for ANY cost/affordability concern regardless of how it's expressed.
-   The Closer agent has specific scripts to handle these.
-
-6. REFUSAL / NOT INTERESTED — if lead says they don't want the course:
-   → return next_action="nurture" (Closer will try to re-engage)
-   → NEVER return handoff_human — the AI must keep trying to convince.
-
-7. If the message is a general question, curiosity, or test → "continue_qualifying"
-8. When in doubt → "continue_qualifying"
-
-### SCORING REMINDER
-- 8–10 HOT  : strong buying signal, urgency, clear need
-- 5–7  WARM : interested, asking questions, missing 1+ qualifying element
-- 1–4  COLD : greeting, browsing, unclear — KEEP ENGAGING, do not handoff
+## SCORING
+- 8–10 HOT  : clear buying intent, urgency, decision-ready
+- 5–7  WARM : interested, asking questions, needs more info or nudging
+- 1–4  COLD : greeting, browsing, vague, no commitment shown
 
 ## OUTPUT FORMAT
 ${QUALIFIER_SCHEMA}
 `;
-};
 
 const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessage }) => {
   const t0 = Date.now();
@@ -468,83 +430,30 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     };
   }
 
-  // ── 2. Safety guards — applied in priority order ──────────────
-  const msgLower   = (newMessage || '').trim().toLowerCase();
-  const isFirstMsg = (messageHistory || []).length === 0;
-  const isVeryShort = msgLower.replace(/[^a-z]/g, '').length <= 5;
-  const isGreeting  = /^(hi|hello|hey|salam|aoa|assalam|walaikum|hellow|helo|heya|yo|good\s*(morning|afternoon|evening)|namaste)\b/.test(msgLower);
-
-  // Guard A: greetings / first message / very short — never hand off
-  if ((isGreeting || isFirstMsg || isVeryShort) && qualifierOutput.next_action === 'handoff_human') {
-    logger.info({ leadId: lead.id, trigger: isGreeting ? 'greeting' : isFirstMsg ? 'first_msg' : 'very_short' },
-      '🛡 Guard A: blocked handoff on greeting/first/short message');
-    qualifierOutput.next_action = 'continue_qualifying';
-  }
-
-  // Guard B: cold leads (score 1-4) must never be handed off
-  if (qualifierOutput.score <= 4 && qualifierOutput.next_action === 'handoff_human') {
-    logger.info({ leadId: lead.id, score: qualifierOutput.score }, '🛡 Guard B: cold lead → nurture');
-    qualifierOutput.next_action = 'nurture';
-  }
-
-  // Guard C: price / affordability objections — Qualifier AI detects semantically.
-  // is_price_objection=true catches ALL variants: "exp", "mehnga", "afford nai", "thoda kam", etc.
-  // No regex needed — the Qualifier understands the meaning, not just the spelling.
-  if (qualifierOutput.is_price_objection && qualifierOutput.next_action === 'handoff_human') {
-    logger.info({ leadId: lead.id }, '🛡 Guard C: price objection → Closer handles with objection playbook');
-    qualifierOutput.next_action = 'continue_qualifying';
-  }
-
-  // Guard D: info-seeking messages — questions or ad/course references are never confirmations.
-  // Covers: explicit ? marks, question words, ad-saw phrases, course inquiry patterns.
-  const containsQuestion = msgLower.includes('?')
-    || /\b(kya|kiaa|how|what|when|kyun|kitna|kitni|kaise|konsa|which|where|fee|price|cost|detail|tell me|bata|batao|information|karwate|karwaty|sikhate|sikhaty|offer|available)\b/.test(msgLower)
-    || /\b(ad|add|course|program|class|batch|schedule|certificate|enroll|join|register)\b/.test(msgLower)
-    || /dekha|suna|mila|batao|bataen|janana|jaanna/.test(msgLower);
-  if (containsQuestion && qualifierOutput.next_action === 'handoff_human') {
-    logger.info({ leadId: lead.id }, '🛡 Guard D: info-seeking/ad-ref detected → Closer answers, no handoff');
-    qualifierOutput.next_action = 'continue_qualifying';
-  }
-
-  // Guard E: HARD GATE — the most important guard.
-  // Handoff is ONLY allowed when the Qualifier explicitly marks is_enrollment_confirmed=true.
-  // This is the definitive check — it overrides everything. A short answer like "Beginner",
-  // "Career shift", "Income chahiye", or any qualifying response can NEVER be a confirmation.
-  if (qualifierOutput.next_action === 'handoff_human' && !qualifierOutput.is_enrollment_confirmed) {
-    logger.info({ leadId: lead.id, msg: msgLower.slice(0, 60) },
-      '🛡 Guard E: handoff_human blocked — is_enrollment_confirmed=false. Closer keeps selling.');
-    qualifierOutput.next_action = 'continue_qualifying';
-  }
-
-  // ── 3. Apply handoffRules toggles (dynamic, from Settings UI) ──
+  // ── 2. Single handoff gate — is_enrollment_confirmed is the ONLY trigger ──
+  // The Qualifier no longer outputs handoff_human in next_action.
+  // Handoff fires ONLY when the lead has explicitly confirmed enrollment.
+  // Plus settings-based rules for payment disputes / legal threats.
   const rules = aiConfig.handoffRules || {};
   let rulesHandoff = false;
   let rulesHandoffReason = null;
 
-  // Rule: unanswered — if last N messages are all from AI and no contact reply
-  if (rules.unanswered !== false) {
-    const history = messageHistory || [];
-    const THRESHOLD = 3;
-    const tail = history.slice(-THRESHOLD);
-    const allAI = tail.length >= THRESHOLD && tail.every(m => m.sender === 'AI' || m.sender === 'AGENT');
-    if (allAI) {
+  // Settings rule: payment disputes / refund requests → always human
+  if (rules.payment !== false) {
+    const msgLower = (newMessage || '').toLowerCase();
+    const paymentDispute = /refund|dispute|charge back|chargeback|payment.*fail|failed.*payment/.test(msgLower);
+    if (paymentDispute) {
       rulesHandoff = true;
-      rulesHandoffReason = `No reply after ${THRESHOLD} consecutive AI messages`;
-      logger.info({ leadId: lead.id }, '🛡 Rule: unanswered threshold hit → handoff');
+      rulesHandoffReason = 'Payment dispute detected — human required';
+      logger.info({ leadId: lead.id }, '🛡 Rule: payment dispute → handoff');
     }
   }
 
-  // Rule: hotProposal — HOT leads at PROPOSED stage always go to human
-  if (rules.hotProposal && lead.stage === 'PROPOSED' && qualifierOutput.lead_status === 'HOT') {
-    rulesHandoff = true;
-    rulesHandoffReason = 'HOT lead in PROPOSAL stage — human close required';
-    logger.info({ leadId: lead.id }, '🛡 Rule: HOT + PROPOSED → handoff');
-  }
+  // Primary gate: enrollment confirmed by Qualifier
+  const enrollmentConfirmed = !handedBackToAI && qualifierOutput.is_enrollment_confirmed === true;
+  const forceHandoff = enrollmentConfirmed || rulesHandoff;
 
-  // ── 4. Final handoff decision ─────────────────────────────────
   const humanFollowupRequired = qualifierOutput.score >= 8 || qualifierOutput.lead_status === 'HOT';
-  const qualifierWantsHandoff = qualifierOutput.next_action === 'handoff_human';
-  const forceHandoff = !handedBackToAI && (qualifierWantsHandoff || rulesHandoff);
 
   // ── 5. CLOSER ───────────────────────────────────────────────
   // Fetch admin-verified Q&As to inject into Closer's knowledge base
@@ -579,7 +488,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   if (forceHandoff) {
     action = 'handoff';
     handoffReason = rulesHandoffReason
-      || `Qualifier flagged handoff (intent=${qualifierOutput.intent}, action=${qualifierOutput.next_action})`;
+      || `Lead confirmed enrollment (score=${qualifierOutput.score}, intent=${qualifierOutput.intent})`;
   } else if (closerError) {
     action = 'handoff';
     handoffReason = `Closer AI failed: ${closerError}`;
