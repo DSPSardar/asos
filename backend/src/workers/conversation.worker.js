@@ -342,6 +342,27 @@ const processInboundMessage = async (job) => {
     metaService.trackPurchase(tenant, normalizedPhone, lead.id, lead.dealValue, lead.currency).catch(() => {});
   }
 
+  if (aiResult.action === 'close_lost') {
+    // B2) Lead refused after multiple re-engagement attempts → mark LOST, send farewell, stop AI
+    await prisma.lead.update({
+      where: { id: lead.id },
+      data: { stage: 'CLOSED_LOST', closedAt: new Date() },
+    });
+
+    await prisma.activity.create({
+      data: {
+        tenantId,
+        leadId: lead.id,
+        type: 'STAGE_CHANGE',
+        content: 'AI marked lead as LOST — persistent refusal after re-engagement attempts',
+        metadata: { closedBy: 'AI' },
+      },
+    });
+
+    logger.info({ leadId: lead.id }, '☠️  Lead marked CLOSED_LOST by AI after persistent refusal');
+    // Farewell reply is already in aiResult.reply — fall through to sendAndSaveReply below
+  }
+
   if (aiResult.stage === 'DIAGNOSED' && prevStage !== 'DIAGNOSED') {
     // Fire qualified event to Meta
     metaService.trackQualified(tenant, normalizedPhone, lead.id).catch(() => {});

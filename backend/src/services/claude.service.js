@@ -91,6 +91,12 @@ ${(aiConfig.qualificationCriteria || []).map(c => '- ' + c).join('\n')}
 ${JSON.stringify(effectiveTriggers)}
 These are SPECIFIC situations — NOT generic complaints or price concerns.
 
+"seat_confirmed" means the lead has used an EXPLICIT enrollment confirmation such as:
+  "haan", "confirm", "register karwao", "join karna hai", "link bhejo", "main aa raha/rahi hun",
+  "book kar do", "enroll", "sign up", "main join karta/karti hun", "yes I want to enroll",
+  "seat book karo", "payment kaise karein", "kitne ka hai aur register kaise karein + haan".
+  It does NOT fire on: asking the fee, asking what the course is, any question, any objection.
+
 ## LEAD CONTEXT
 - Contact name: ${contact.name || 'Unknown'}
 - Current stage: ${lead.stage}
@@ -107,17 +113,27 @@ These are SPECIFIC situations — NOT generic complaints or price concerns.
 2. COLD leads (score 1–4): ALWAYS return "continue_qualifying" or "nurture".
    A score of 1–4 NEVER justifies handoff_human.
 
-3. next_action="handoff_human" is ONLY valid when ALL are true:
-   - Message explicitly matches a HANDOFF TRIGGER above (confirmed seat, real dispute, legal threat)
-   - AND lead score >= 7
-   - NOT for general questions, objections, unclear, or first messages
+3. ANY MESSAGE THAT IS A QUESTION — if the message contains "?", or uses question words
+   (kya, kiaa, how, what, when, kyun, kitna, kitni, kaise, konsa, which, where, fee, price, cost, details)
+   → MUST return next_action="continue_qualifying". A question = info-seeking, NOT a confirmation.
+   NEVER return handoff_human for a question, even if the lead sounds very interested.
 
-4. PRICE OBJECTIONS — Set is_price_objection=true and next_action="continue_qualifying".
+4. next_action="handoff_human" is ONLY valid when ALL are true:
+   - Message is a CLEAR POSITIVE ENROLLMENT CONFIRMATION (see seat_confirmed definition above)
+   - AND lead score >= 6
+   - AND the message is NOT a question
+   - NOT for general questions, objections, curiosity, or information requests
+
+5. PRICE OBJECTIONS — Set is_price_objection=true and next_action="continue_qualifying".
    NEVER return handoff_human for ANY cost/affordability concern regardless of how it's expressed.
    The Closer agent has specific scripts to handle these.
 
-5. If the message is a general question, curiosity, or test → "continue_qualifying"
-6. When in doubt → "continue_qualifying"
+6. REFUSAL / NOT INTERESTED — if lead says they don't want the course:
+   → return next_action="nurture" (Closer will try to re-engage)
+   → NEVER return handoff_human — the AI must keep trying to convince.
+
+7. If the message is a general question, curiosity, or test → "continue_qualifying"
+8. When in doubt → "continue_qualifying"
 
 ### SCORING REMINDER
 - 8–10 HOT  : strong buying signal, urgency, clear need
@@ -191,7 +207,7 @@ Respond with ONLY a valid JSON object using this EXACT schema. No prose, no mark
 
 {
   "reply_message": "<WhatsApp reply — 1 to 3 short lines, ends with a question or CTA, max 320 chars>",
-  "closing_type": "soft" | "hard" | "urgent",
+  "closing_type": "soft" | "hard" | "urgent" | "lost",
   "urgency_trigger": "<specific scarcity/urgency fact from product context, or empty string if none>",
   "knowledge_gap": "<ONLY if the lead asked a specific factual question you could NOT answer from PRODUCT CONTEXT above — paste their exact question here. Leave empty string '' if you could answer it or if no factual question was asked>"
 }
@@ -200,6 +216,12 @@ CLOSING TYPE GUIDE:
   • soft    — Phase 1: COLD lead, first few messages. Warm, curious, one qualifying question.
   • hard    — Phase 2: WARM lead, mid-conversation. Present value, ask for slot confirmation.
   • urgent  — Phase 3: HOT lead, late conversation. Direct price + enrollment ask. Close NOW.
+  • lost    — Lead has clearly and repeatedly refused after your best re-engagement attempts.
+              Use ONLY when: you have already tried at least 2 objection-handling responses AND
+              the lead is still saying things like "nahi chahiye", "not interested", "chhodo",
+              "no thanks", "mujhe nahi lena", "koi interest nahi". Send a polite farewell and
+              leave the door open ("Koi baat nahi — kabhi bhi interested hon to bata dena 🙏").
+              reply_message must be a graceful goodbye, NOT another sales pitch.
 `;
 
 const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs = []) => `
@@ -274,17 +296,32 @@ OBJECTION PLAYBOOK  (deploy instantly when triggered)
 "Kya ye beginners ke liye" → "100% — zero se le ke earning tak, step by step"
 
 ═══════════════════════════════════════════════════════
+REFUSAL RE-ENGAGEMENT  (when lead says "no" or "not interested")
+═══════════════════════════════════════════════════════
+First refusal → acknowledge + pivot to their specific pain, try one more angle:
+  "Bilkul, koi pressure nahi. Ek cheez poochh sakta hun — AI seekhne ka koi aur plan hai aap ka?"
+Second refusal → final soft attempt with a door-open close:
+  "Samajh gaya. Agar kabhi AI income ka plan ho to hum yahan hain. Best of luck! 🙏"
+  → set closing_type = "lost" in the JSON.
+Third+ refusal → closing_type = "lost" immediately. Send graceful goodbye. Stop pitching.
+
+NEVER say "hamari team connect karegi" or "someone will be in touch" if the lead has NOT confirmed enrollment.
+DO NOT hand off to human just because they asked about fee, duration, or any product detail.
+
+═══════════════════════════════════════════════════════
 ABSOLUTE RULES  (never break these)
 ═══════════════════════════════════════════════════════
-1. DO NOT say "team will connect", "someone will get in touch", or any hand-off phrase.
+1. DO NOT say "team will connect", "someone will get in touch", or any hand-off phrase UNLESS the lead has said YES to enrolling.
    YOU are closing this lead. The human agent only takes over after enrollment is confirmed.
 2. DO NOT use "ji" after names (never "Mohsin ji", "Sundus ji"). Use "sir" / "madam" alone.
 3. DO NOT use "bhai" — use "sir".
-4. EVERY message MUST end with a question OR a clear CTA. Never end passively.
+4. EVERY message (except closing_type="lost" goodbye) MUST end with a question OR a clear CTA.
 5. Max 3 short lines. Human tone. Mirror the lead's language (Urdu/English/mix).
-6. If lead asks a general question → give a SHORT answer (1 line), then pivot to enrollment.
+6. If lead asks a general question (fee, duration, certificate, etc.) → answer it DIRECTLY first (1 line), then pivot to enrollment.
 7. NEVER fabricate facts, prices, dates, or guarantees not present in PRODUCT CONTEXT above.
 8. Urgency is ONLY valid when grounded in real facts from PRODUCT CONTEXT.
+9. FEE QUESTIONS are NORMAL — answer them ("Rs. 10,000 — 14 din ka program"), then close.
+   NEVER treat a fee question as a reason to say "team will contact you".
 
 ═══════════════════════════════════════════════════════
 OUTPUT FORMAT
@@ -331,7 +368,7 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
 
   const result = {
     reply_message:   String(parsed.reply_message || '').slice(0, 1000),
-    closing_type:    ['soft','hard','urgent'].includes(parsed.closing_type) ? parsed.closing_type : 'soft',
+    closing_type:    ['soft','hard','urgent','lost'].includes(parsed.closing_type) ? parsed.closing_type : 'soft',
     urgency_trigger: String(parsed.urgency_trigger || '').slice(0, 200),
     knowledge_gap:   String(parsed.knowledge_gap || '').trim().slice(0, 500),
     _tokens:         tokens,
@@ -427,6 +464,15 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     qualifierOutput.next_action = 'continue_qualifying';
   }
 
+  // Guard D: any message that is a question — questions are info-seeking, never enrollment confirmation.
+  // Catches fee questions, duration questions, "kya hai?", "kaise?", etc. in any language.
+  const containsQuestion = msgLower.includes('?')
+    || /\b(kya|kiaa|how|what|when|kyun|kitna|kitni|kaise|konsa|which|where|fee|price|cost|detail|tell me|bata|batao|information)\b/.test(msgLower);
+  if (containsQuestion && qualifierOutput.next_action === 'handoff_human') {
+    logger.info({ leadId: lead.id }, '🛡 Guard D: question detected → Closer answers, no handoff');
+    qualifierOutput.next_action = 'continue_qualifying';
+  }
+
   // ── 3. Apply handoffRules toggles (dynamic, from Settings UI) ──
   const rules = aiConfig.handoffRules || {};
   let rulesHandoff = false;
@@ -494,6 +540,10 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   } else if (closerError) {
     action = 'handoff';
     handoffReason = `Closer AI failed: ${closerError}`;
+  } else if (closerOutput?.closing_type === 'lost') {
+    // Lead has clearly refused after multiple re-engagement attempts → mark as lost
+    action = 'close_lost';
+    logger.info({ leadId: lead.id }, '☠️  Closer marked lead as LOST after repeated refusal');
   } else if (qualifierOutput.next_action === 'close_deal') {
     action = 'close';
   }
