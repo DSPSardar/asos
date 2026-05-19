@@ -34,7 +34,8 @@ Respond with ONLY a valid JSON object using this EXACT schema. No prose, no mark
   "intent": "high" | "medium" | "low",
   "problem_summary": "<1 sentence describing the lead's core problem or interest>",
   "next_action": "<what should happen next: 'continue_qualifying' | 'send_proposal' | 'close_deal' | 'handoff_human' | 'nurture'>",
-  "is_price_objection": <true | false>
+  "is_price_objection": <true | false>,
+  "is_enrollment_confirmed": <true | false>
 }
 
 SCORING RULES:
@@ -49,6 +50,23 @@ is_price_objection RULES:
   "10k zyada", "thoda kam", "discount", "zyada hai", "itna nahi dey sakta", "budget nahi",
   "can't pay", "too much", "price kam karo", "installment", "easy payment", "concession".
   Set to false for everything else.
+
+is_enrollment_confirmed RULES — THIS IS THE MOST IMPORTANT FIELD:
+  Set to TRUE ONLY if the current message is an UNAMBIGUOUS, EXPLICIT enrollment confirmation.
+  The lead must have used words that clearly mean "YES, I want to enroll / register / join right now."
+  Examples that ARE confirmations (true):
+    "haan", "ji haan", "confirm", "register karwao", "link bhejo", "main join karta/karti hun",
+    "book kar do meri seat", "enroll kar do", "sign me up", "yes I want to join",
+    "main aa raha/rahi hun", "payment kaise karein" (after already agreeing), "done, register karo".
+  Examples that are NOT confirmations (false — use false for ALL of these):
+    asking the fee ("fee kya hai?", "kitna hai?")
+    asking about the course ("course ke baare mein batao", "kya sikhate ho?")
+    answering a qualifying question ("beginner", "career shift", "income chahiye", "no experience")
+    expressing interest without committing ("sounds good", "interesting", "theek hai")
+    asking about schedule, duration, certificate, or anything at all
+    saying they're a beginner, student, freelancer, or any profile info
+    ANY message that ends with "?" or asks for information
+  When in doubt → set false. It is always safer to keep the AI selling than to hand off too early.
 `;
 
 // Build effective handoff triggers dynamically from the tenant's handoffRules toggles.
@@ -187,7 +205,8 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
     score:              Math.min(10, Math.max(1, parseInt(parsed.score) || 1)),
     intent:             ['high','medium','low'].includes(parsed.intent) ? parsed.intent : 'low',
     problem_summary:    String(parsed.problem_summary || '').slice(0, 500),
-    next_action:        String(parsed.next_action || 'continue_qualifying').slice(0, 100),
+    next_action:           String(parsed.next_action || 'continue_qualifying').slice(0, 100),
+    is_enrollment_confirmed: parsed.is_enrollment_confirmed === true,
     is_price_objection: parsed.is_price_objection === true,
     _tokens:            tokens,
     _model:             QUALIFIER_MODEL,
@@ -470,6 +489,16 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     || /\b(kya|kiaa|how|what|when|kyun|kitna|kitni|kaise|konsa|which|where|fee|price|cost|detail|tell me|bata|batao|information)\b/.test(msgLower);
   if (containsQuestion && qualifierOutput.next_action === 'handoff_human') {
     logger.info({ leadId: lead.id }, '🛡 Guard D: question detected → Closer answers, no handoff');
+    qualifierOutput.next_action = 'continue_qualifying';
+  }
+
+  // Guard E: HARD GATE — the most important guard.
+  // Handoff is ONLY allowed when the Qualifier explicitly marks is_enrollment_confirmed=true.
+  // This is the definitive check — it overrides everything. A short answer like "Beginner",
+  // "Career shift", "Income chahiye", or any qualifying response can NEVER be a confirmation.
+  if (qualifierOutput.next_action === 'handoff_human' && !qualifierOutput.is_enrollment_confirmed) {
+    logger.info({ leadId: lead.id, msg: msgLower.slice(0, 60) },
+      '🛡 Guard E: handoff_human blocked — is_enrollment_confirmed=false. Closer keeps selling.');
     qualifierOutput.next_action = 'continue_qualifying';
   }
 
