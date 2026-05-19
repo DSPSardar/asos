@@ -470,4 +470,28 @@ const sendDailyHotLeadDigest = async (tenantId) => {
   return { sentTo: agents.length, hotLeads: hot.length };
 };
 
-module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue, getHotLeads, getHandoffQueue, syncFromDsp, sendDailyHotLeadDigest };
+// ── Delete a lead and all its related data ────────────────────────────
+const deleteLead = async (tenantId, leadId) => {
+  // Verify ownership before deleting
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, tenantId }, select: { id: true } });
+  if (!lead) throw Object.assign(new Error('Lead not found'), { statusCode: 404 });
+
+  // Delete in dependency order (child rows first)
+  await prisma.$transaction([
+    prisma.message.deleteMany({
+      where: { conversation: { leadId, tenantId } },
+    }),
+    prisma.aiAgentLog.deleteMany({
+      where: { conversation: { leadId, tenantId } },
+    }),
+    prisma.activity.deleteMany({ where: { leadId, tenantId } }),
+    prisma.adsTracking.deleteMany({ where: { leadId, tenantId } }),
+    prisma.conversation.deleteMany({ where: { leadId, tenantId } }),
+    prisma.lead.delete({ where: { id: leadId } }),
+  ]);
+
+  logger.info({ leadId, tenantId }, '🗑 Lead deleted');
+  return { deleted: true };
+};
+
+module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue, getHotLeads, getHandoffQueue, syncFromDsp, sendDailyHotLeadDigest, deleteLead };

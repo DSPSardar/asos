@@ -91,6 +91,7 @@ export const leadsAPI = {
   addNote:     (id, content) => api.post(`/leads/${id}/notes`, { content }),
   updateDeal:  (id, dealValue, currency) => api.patch(`/leads/${id}/deal-value`, { dealValue, currency }),
   syncDsp:     () => api.post('/leads/sync-dsp'),
+  deleteLead:  (id) => api.delete(`/leads/${id}`),
 };
 
 export const contactsAPI = {
@@ -112,6 +113,8 @@ export const conversationsAPI = {
   handback:   (id) => api.post(`/conversations/${id}/handback`),
   close:      (id) => api.post(`/conversations/${id}/close`),
   summary:    (id) => api.get(`/conversations/${id}/summary`),
+  clearMessages:      (id) => api.delete(`/conversations/${id}/messages`),
+  deleteConversation: (id) => api.delete(`/conversations/${id}`),
 };
 
 export const campaignsAPI = {

@@ -245,7 +245,36 @@ const getSuggestedReply = async (tenantId, conversationId) => {
   return { suggestion: out.reply_message };
 };
 
+// ── Delete all messages in a conversation (clear history) ────────────
+const clearMessages = async (tenantId, conversationId) => {
+  const conv = await prisma.conversation.findFirst({
+    where: { id: conversationId, tenantId },
+    select: { id: true },
+  });
+  if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404 });
+
+  const { count } = await prisma.message.deleteMany({ where: { conversationId } });
+  return { cleared: count };
+};
+
+// ── Delete conversation + all its messages and AI logs ───────────────
+const deleteConversation = async (tenantId, conversationId) => {
+  const conv = await prisma.conversation.findFirst({
+    where: { id: conversationId, tenantId },
+    select: { id: true },
+  });
+  if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404 });
+
+  await prisma.$transaction([
+    prisma.message.deleteMany({ where: { conversationId } }),
+    prisma.aiAgentLog.deleteMany({ where: { conversationId } }),
+    prisma.conversation.delete({ where: { id: conversationId } }),
+  ]);
+  return { deleted: true };
+};
+
 module.exports = {
   listConversations, getConversation, sendMessage,
   toggleAI, takeover, handback, closeConversation, getSummary, getSuggestedReply, listByClient,
+  clearMessages, deleteConversation,
 };

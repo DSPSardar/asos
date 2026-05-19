@@ -20,5 +20,6 @@ router.patch('/:id/stage',       ctrl.updateStage);
 router.patch('/:id/assign',      ctrl.assign);
 router.patch('/:id/deal-value',  ctrl.updateDealValue);
 router.post('/:id/notes',        ctrl.addNote);
+router.delete('/:id',            authorize('TENANT_ADMIN'), ctrl.deleteLead);
 
 module.exports = router;

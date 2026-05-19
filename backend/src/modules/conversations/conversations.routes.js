@@ -18,5 +18,7 @@ router.post('/:id/handback',        ctrl.handback);
 router.post('/:id/close',           ctrl.close);
 router.get('/:id/summary',          ctrl.summary);
 router.get('/:id/suggestion',       ctrl.suggestion);
+router.delete('/:id/messages',      ctrl.clearMessages);
+router.delete('/:id',               ctrl.deleteConversation);
 
 module.exports = router;

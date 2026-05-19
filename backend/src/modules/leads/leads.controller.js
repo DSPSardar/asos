@@ -102,4 +102,11 @@ const sendDigest = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { list, pipeline, getOne, create, updateStage, assign, addNote, updateDealValue, hotLeads, handoffQueue, syncFromDsp, sendDigest };
+const deleteLead = async (req, res, next) => {
+  try {
+    const result = await leadsService.deleteLead(req.tenantId, req.params.id);
+    return success(res, result, 'Lead deleted');
+  } catch (err) { next(err); }
+};
+
+module.exports = { list, pipeline, getOne, create, updateStage, assign, addNote, updateDealValue, hotLeads, handoffQueue, syncFromDsp, sendDigest, deleteLead };

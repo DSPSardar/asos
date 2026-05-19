@@ -77,4 +77,18 @@ const byClient = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { list, getOne, sendMessage, toggleAI, takeover, handback, close, summary, suggestion, byClient };
+const clearMessages = async (req, res, next) => {
+  try {
+    const result = await svc.clearMessages(req.tenantId, req.params.id);
+    return success(res, result, 'Conversation cleared');
+  } catch (err) { next(err); }
+};
+
+const deleteConversation = async (req, res, next) => {
+  try {
+    const result = await svc.deleteConversation(req.tenantId, req.params.id);
+    return success(res, result, 'Conversation deleted');
+  } catch (err) { next(err); }
+};
+
+module.exports = { list, getOne, sendMessage, toggleAI, takeover, handback, close, summary, suggestion, byClient, clearMessages, deleteConversation };

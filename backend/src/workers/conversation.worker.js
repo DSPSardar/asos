@@ -84,6 +84,8 @@ const processInboundMessage = async (job) => {
     // Extract Meta Ads attribution from WA referral (Click-to-WA)
     const adAttribution = extractAdAttribution(referral);
 
+    // Always tag inbound WA leads; Meta ad attribution overrides if present
+    const waBaseline = { sourceUtm: { source: 'whatsapp', medium: 'whatsapp' } };
     lead = await prisma.lead.create({
       data: {
         tenantId,
@@ -91,6 +93,7 @@ const processInboundMessage = async (job) => {
         stage: 'NEW',
         scoreLabel: 'COLD',
         aiScore: 0,
+        ...waBaseline,
         ...adAttribution,
       },
     });

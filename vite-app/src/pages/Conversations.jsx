@@ -241,6 +241,32 @@ export default function Conversations() {
     }
   };
 
+  const handleClearMessages = async (id) => {
+    if (!window.confirm('Clear all messages in this conversation? This cannot be undone.')) return;
+    try {
+      await conversationsAPI.clearMessages(id);
+      await loadMessages(id);
+    } catch (e) {
+      console.error('[Conversations] clearMessages error', e);
+      alert(e.message);
+    }
+  };
+
+  const handleDeleteConversation = async (id) => {
+    if (!window.confirm('Delete this entire conversation? This cannot be undone.')) return;
+    try {
+      await conversationsAPI.deleteConversation(id);
+      setActiveId(null);
+      setMobileView('list');
+      // Reload thread list
+      const res = await conversationsAPI.list({ page: 1, limit: 50 });
+      setThreads((res.data || res.conversations || []).map(mapThread));
+    } catch (e) {
+      console.error('[Conversations] deleteConversation error', e);
+      alert(e.message);
+    }
+  };
+
   const handleHandback = async (id) => {
     try {
       await conversationsAPI.handback(id);
@@ -294,6 +320,8 @@ export default function Conversations() {
             onTakeover={() => handleTakeover(activeThread.id)}
             onHandback={() => handleHandback(activeThread.id)}
             onSend={(content) => handleSend(activeThread.id, content)}
+            onClearMessages={() => handleClearMessages(activeThread.id)}
+            onDeleteConversation={() => handleDeleteConversation(activeThread.id)}
           />
         ) : (
           <section className="hidden min-w-0 flex-1 flex-col items-center justify-center bg-bg md:flex">
@@ -485,7 +513,7 @@ class ConvErrorBoundary extends React.Component {
 // ─────────────────────────────────────────────────────────────
 // RIGHT — Conversation view
 // ─────────────────────────────────────────────────────────────
-function ConversationView({ thread, messages, msgLoading, mobileView, onBack, onToggleAI, onTakeover, onHandback, onSend }) {
+function ConversationView({ thread, messages, msgLoading, mobileView, onBack, onToggleAI, onTakeover, onHandback, onSend, onClearMessages, onDeleteConversation }) {
   const [aiOn,  setAiOn]  = useState(thread.aiEnabled !== false);
   const [draft, setDraft] = useState('');
   const scrollRef = useRef(null);
@@ -557,6 +585,7 @@ function ConversationView({ thread, messages, msgLoading, mobileView, onBack, on
           <div className="mt-0.5 text-xs text-slate-500">{thread.phone}</div>
         </div>
         <AiToggle on={aiOn} onChange={handleToggle} />
+        <ConvMenu onClearMessages={onClearMessages} onDeleteConversation={onDeleteConversation} />
       </header>
 
       {/* Messages */}
@@ -646,6 +675,56 @@ function AiToggle({ on, onChange }) {
       </span>
       {on ? 'AI handling' : 'You handling'}
     </button>
+  );
+}
+
+// ── Conversation context menu (⋮) — clear / delete ───────────────────
+function ConvMenu({ onClearMessages, onDeleteConversation }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-surface2/60 hover:text-slate-200"
+        title="More options"
+      >
+        <svg fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" className="h-4 w-4">
+          <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-lg border border-slate-700/60 bg-surface2 py-1 shadow-xl">
+          <button
+            onClick={() => { setOpen(false); onClearMessages?.(); }}
+            className="flex w-full items-center gap-2 px-3.5 py-2 text-xs text-slate-300 transition-colors hover:bg-surface/60 hover:text-slate-100"
+          >
+            <svg fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" className="h-3.5 w-3.5 text-amber-400">
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+            </svg>
+            Clear all messages
+          </button>
+          <div className="mx-3 my-1 border-t border-slate-700/40" />
+          <button
+            onClick={() => { setOpen(false); onDeleteConversation?.(); }}
+            className="flex w-full items-center gap-2 px-3.5 py-2 text-xs text-red-300 transition-colors hover:bg-red-500/10"
+          >
+            <svg fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" className="h-3.5 w-3.5">
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>
+            </svg>
+            Delete conversation
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

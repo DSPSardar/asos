@@ -21,9 +21,10 @@ const SCORE_STYLES = {
   COLD: { label:'COLD', dot:'bg-sky-400',   pill:'bg-sky-500/15 text-sky-300 border-sky-500/30' },
 };
 
-const SOURCES = ['DSP CRM', 'WhatsApp Ads', 'Facebook Ads', 'Instagram', 'Website', 'Referral', 'Organic'];
+const SOURCES = ['DSP CRM', 'WhatsApp', 'WhatsApp Ads', 'Facebook Ads', 'Instagram', 'Website', 'Referral', 'Organic'];
 const SOURCE_COLOR = {
   'DSP CRM':       'bg-violet-500/10 text-violet-300 border-violet-500/30',
+  'WhatsApp':      'bg-green-500/10 text-green-300 border-green-500/30',
   'WhatsApp Ads':  'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
   'Facebook Ads':  'bg-blue-500/10 text-blue-300 border-blue-500/30',
   'Instagram':     'bg-pink-500/10 text-pink-300 border-pink-500/30',
@@ -349,6 +350,13 @@ export default function Pipeline() {
         onMarkWon={(leadId) => updateLead(leadId, (apiId) => leadsAPI.updateStage(apiId, 'CLOSED_WON'))}
         onAddNote={(leadId, content) => updateLead(leadId, (apiId) => leadsAPI.addNote(apiId, content))}
         onUpdateValue={(leadId, value) => updateLead(leadId, (apiId) => leadsAPI.updateDeal(apiId, Number(value), 'PKR'))}
+        onDelete={async (leadId) => {
+          const target = allLeads.find((l) => l.id === leadId);
+          if (!target?.apiId) return;
+          await leadsAPI.deleteLead(target.apiId);
+          setActiveId(null);
+          await loadDbLeads();
+        }}
       />
 
       {/* New lead modal */}
@@ -582,7 +590,7 @@ function TableView({ leads, onSelect }) {
 // ─────────────────────────────────────────────────────────────
 // Slide-out detail panel
 // ─────────────────────────────────────────────────────────────
-function DetailPanel({ lead, onClose, onStageChange, onMarkWon, onAddNote, onUpdateValue }) {
+function DetailPanel({ lead, onClose, onStageChange, onMarkWon, onAddNote, onUpdateValue, onDelete }) {
   // ESC to close
   useEffect(() => {
     if (!lead) return;
@@ -611,6 +619,7 @@ function DetailPanel({ lead, onClose, onStageChange, onMarkWon, onAddNote, onUpd
             onMarkWon={onMarkWon}
             onAddNote={onAddNote}
             onUpdateValue={onUpdateValue}
+            onDelete={onDelete}
           />
         )}
       </aside>
@@ -618,7 +627,7 @@ function DetailPanel({ lead, onClose, onStageChange, onMarkWon, onAddNote, onUpd
   );
 }
 
-function DetailContent({ lead, onClose, onStageChange, onMarkWon, onAddNote, onUpdateValue }) {
+function DetailContent({ lead, onClose, onStageChange, onMarkWon, onAddNote, onUpdateValue, onDelete }) {
   const timeline = buildTimeline(lead);
   const [stageDraft, setStageDraft] = useState(lead.stage);
   const [saving, setSaving] = useState(false);
@@ -836,6 +845,21 @@ function DetailContent({ lead, onClose, onStageChange, onMarkWon, onAddNote, onU
             setSaving(false);
           }
         }} />
+        <ActionBtn
+          label="🗑 Delete Lead"
+          danger
+          onClick={async () => {
+            if (!window.confirm(`Permanently delete lead for ${lead.name}? This cannot be undone.`)) return;
+            setSaving(true);
+            try {
+              await onDelete?.(lead.id);
+            } catch (err) {
+              alert(err.message);
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />
       </footer>
     </>
   );
@@ -850,14 +874,14 @@ function Stat({ label, children }) {
   );
 }
 
-function ActionBtn({ label, onClick, primary = false }) {
+function ActionBtn({ label, onClick, primary = false, danger = false }) {
   return (
     <button
       onClick={onClick}
       className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-        primary
-          ? 'bg-gradient-to-r from-accent to-accent2 text-white shadow-md shadow-accent/20 hover:shadow-accent/30'
-          : 'border border-slate-700/60 bg-surface2/40 text-slate-200 hover:bg-surface2/80'
+        primary ? 'bg-gradient-to-r from-accent to-accent2 text-white shadow-md shadow-accent/20 hover:shadow-accent/30'
+        : danger ? 'border border-red-700/50 bg-red-500/10 text-red-300 hover:bg-red-500/20'
+        : 'border border-slate-700/60 bg-surface2/40 text-slate-200 hover:bg-surface2/80'
       }`}
     >
       {label}
@@ -1019,10 +1043,14 @@ function mapApiLeadToUi(lead) {
   const isOrganic = tags.includes('organic')
     || (lead.sourceUtm && typeof lead.sourceUtm === 'object' && lead.sourceUtm.source === 'organic_signup');
 
+  const utmSource = lead.sourceUtm && typeof lead.sourceUtm === 'object' ? lead.sourceUtm.source : null;
+  const isWhatsApp = utmSource === 'whatsapp' && !lead.metaCampaignId;  // organic WA (not Meta ad)
   const rawSource =
     cf && typeof cf === 'object' && !Array.isArray(cf) ? cf.source : undefined;
   const source = isOrganic    ? 'Organic'
+               : isWhatsApp   ? 'WhatsApp'
                : rawSource === 'DSP_CRM' ? 'DSP CRM'
+               : utmSource === 'meta_ad' ? 'WhatsApp Ads'
                : rawSource    ? String(rawSource) : 'Other';
 
   const notes = lead.problemSummary
