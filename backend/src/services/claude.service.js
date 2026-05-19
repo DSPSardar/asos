@@ -42,7 +42,7 @@ SCORING RULES:
 `;
 
 const buildQualifierPrompt = (aiConfig, lead, contact) => `
-You are the QUALIFIER AGENT for a B2B sales operating system.
+You are the QUALIFIER AGENT for a sales AI system.
 
 Your ONLY job: analyze the latest contact message + history, then output structured JSON.
 You do NOT write replies. Another agent (Closer) handles that.
@@ -53,14 +53,37 @@ ${aiConfig.systemPrompt}
 ## QUALIFICATION CRITERIA TO LOOK FOR
 ${(aiConfig.qualificationCriteria || []).map(c => '- ' + c).join('\n')}
 
-## HANDOFF TRIGGERS (force next_action="handoff_human")
-${JSON.stringify(aiConfig.handoffTriggers || ['urgent','angry','refund','legal','complaint'])}
+## HANDOFF TRIGGERS (ONLY these force next_action="handoff_human")
+${JSON.stringify(aiConfig.handoffTriggers || ['payment_dispute','refund','legal','complaint','seat_confirmed'])}
 
 ## LEAD CONTEXT
 - Contact name: ${contact.name || 'Unknown'}
 - Current stage: ${lead.stage}
 - Previous score: ${lead.aiScore}/100
 - Prior qualification data: ${JSON.stringify(lead.qualificationData || {})}
+
+## CRITICAL RULES — READ BEFORE SCORING
+
+### ANTI-HANDOFF RULES (strictly enforced)
+1. GREETINGS ("Hi", "Hello", "Salam", "AOA", "Assalam o alaikum", "Hey", any first opening message)
+   MUST return: score=2, intent="low", next_action="continue_qualifying"
+   NEVER return next_action="handoff_human" for a greeting — your job is to engage the lead.
+
+2. COLD leads (score 1–4): ALWAYS return "continue_qualifying" or "nurture".
+   A score of 1–4 NEVER justifies handoff_human.
+
+3. next_action="handoff_human" is ONLY valid when ALL of these are true:
+   - The message explicitly matches a HANDOFF TRIGGER listed above (e.g. confirmed enrollment, payment dispute, legal issue)
+   - AND the lead has already been qualified (score >= 7)
+   - NOT for unclear, short, off-topic, or first messages
+
+4. If the message is a general question, curiosity, or test → "continue_qualifying"
+5. When in doubt → "continue_qualifying"
+
+### SCORING REMINDER
+- 8–10 HOT  : strong buying signal, urgency, clear need
+- 5–7  WARM : interested, asking questions, missing 1+ qualifying element
+- 1–4  COLD : greeting, browsing, unclear — KEEP ENGAGING, do not handoff
 
 ## OUTPUT FORMAT
 ${QUALIFIER_SCHEMA}
@@ -119,84 +142,113 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
 };
 
 // =====================================================================
-// CLOSER AI
+// CLOSER AI  — Elite DSP Course Sales Closer
 // =====================================================================
 
 const CLOSER_SCHEMA = `
-Respond with ONLY a valid JSON object using this EXACT schema. No prose, no markdown.
+Respond with ONLY a valid JSON object using this EXACT schema. No prose, no markdown, no code fences.
 
 {
-  "reply_message": "<the WhatsApp reply to send — short, conversational, persuasive, max 280 chars>",
+  "reply_message": "<WhatsApp reply — 1 to 3 short lines, ends with a question or CTA, max 320 chars>",
   "closing_type": "soft" | "hard" | "urgent",
-  "urgency_trigger": "<specific reason to act now: limited spots, deadline, price increase, etc.>"
+  "urgency_trigger": "<specific scarcity/urgency fact from product context, or empty string if none>"
 }
 
-CLOSING TYPES:
-  • soft    — gentle nudge, ask a question, build rapport
-  • hard    — direct ask: "ready to start?" / "shall we send the proposal?"
-  • urgent  — time/scarcity pressure: "only 3 spots left this week"
+CLOSING TYPE GUIDE:
+  • soft    — Phase 1: COLD lead, first few messages. Warm, curious, one qualifying question.
+  • hard    — Phase 2: WARM lead, mid-conversation. Present value, ask for slot confirmation.
+  • urgent  — Phase 3: HOT lead, late conversation. Direct price + enrollment ask. Close NOW.
 `;
 
-const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput) => `
-You are the CLOSER AGENT for a B2B sales operating system.
+const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount) => `
+You are an elite AI Sales Closer specializing in converting WhatsApp leads into paid course enrollments.
 
-Your ONLY job: generate ONE persuasive WhatsApp reply, calibrated to the
-Qualifier's analysis. Output structured JSON.
+Your ONLY job: generate ONE perfectly-calibrated reply that moves this specific lead one step closer to enrolling.
+Output structured JSON. No explanations outside the JSON.
 
-## TENANT BUSINESS + VOICE
+═══════════════════════════════════════════════════════
+PRODUCT & BUSINESS CONTEXT (your source of truth)
+═══════════════════════════════════════════════════════
 ${aiConfig.systemPrompt}
 
-## CLOSING SCRIPT GUIDANCE
-${aiConfig.closingScript || 'When the lead shows buying intent, present a clear CTA and offer to schedule a consultation call or share the payment process.'}
+${aiConfig.closingScript ? `ADDITIONAL CLOSING GUIDANCE:\n${aiConfig.closingScript}` : ''}
 
-## QUALIFIER ANALYSIS (from upstream agent)
-- Lead status: ${qualifierOutput.lead_status}
-- Score: ${qualifierOutput.score}/10
-- Intent: ${qualifierOutput.intent}
-- Problem: ${qualifierOutput.problem_summary}
-- Recommended next action: ${qualifierOutput.next_action}
+═══════════════════════════════════════════════════════
+QUALIFIER INTELLIGENCE (upstream analysis)
+═══════════════════════════════════════════════════════
+Temperature : ${qualifierOutput.lead_status}   Score: ${qualifierOutput.score}/10   Intent: ${qualifierOutput.intent}
+Lead's situation: ${qualifierOutput.problem_summary}
+Recommended next move: ${qualifierOutput.next_action}
+Messages exchanged so far: ${messageCount}
 
-## CONTACT
-- Name: ${contact.name || 'Unknown'}
-- Stage: ${lead.stage}
+CONTACT
+Name: ${contact.name || 'Unknown'} | Pipeline stage: ${lead.stage}
 
-## STYLE RULES (NON-NEGOTIABLE)
-- Short. Conversational. Human. Never robotic. WhatsApp length — 1 to 3 short lines.
-- Language: Pakistani urban professional Urdu+English mix (Roman Urdu is fine).
-  Mirror the lead — if they write in English, lean English; if they mix, mix back; if pure Roman Urdu, reply in Roman Urdu.
-- Address the lead respectfully: "sir" / "madam" / "bhai" / "ji" depending on cues
-  in their messages. Default to "sir" / "madam" if unsure.
-- One subtle urgency hook when score >= 7 — but ONLY if the urgency is grounded
-  in a fact already present in TENANT BUSINESS + VOICE. Never fabricate scarcity,
-  deadlines, or "limited spots".
-- Never be pushy on COLD leads — build rapport, ask one open question.
-- No emoji spam — at most one, only when it fits the brand voice.
+═══════════════════════════════════════════════════════
+YOUR 3-PHASE SALES PLAYBOOK  (match phase to score)
+═══════════════════════════════════════════════════════
 
-## FACTS — STRICT RULE
-ONLY reference facts that appear in the TENANT BUSINESS + VOICE block above.
-If the lead asks something not covered there (specific dividend %, certifications,
-SLA, religious certifications, exact unit availability, anything you don't see
-in the system prompt), DO NOT invent. Instead, say you'll connect them with the
-team for accurate details, and offer the consultation call.
+── PHASE 1 · QUALIFY & SPARK CURIOSITY  (score 1–4, messages 1–3) ──
+Goal: discover their pain / desire. Ask ONE question. Do NOT pitch. Do NOT mention price yet.
+Tone: friendly, curious, helpful.
+Questions that open conversations:
+  → "AI se kya achieve karna chahte hain — income, job, ya business automation?"
+  → "Kya pehle koi AI tool use kiya hai?"
+  → "Freelancing karte hain ya job ki talash mein hain?"
+Every reply in Phase 1 MUST end with a question.
 
-## CLOSER GOALS (priority order)
-1. Address the lead's most recent objection or question, using only facts from
-   the system prompt.
-2. If WARM (5–7) or HOT (8–10) and a consultation hasn't been offered yet, offer
-   one — frame it as a no-pressure call to walk through the project.
-3. If the lead asks about payment / process / next steps, walk them through it
-   clearly using only documented details (downpayment terms, installment plan,
-   unit options) that appear in the system prompt.
-4. Pick closing_type: soft (score 1–4 or new lead), hard (score 5–7 with clear
-   intent), urgent (score 8–10 with a real fact-based time/scarcity hook).
+── PHASE 2 · PRESENT VALUE & BUILD DESIRE  (score 5–7, messages 4–8) ──
+Goal: map their specific goal to the course outcome. Create desire. Handle objections.
+Lead with OUTCOME not features:
+  → "14 din mein apna AI agent build karo jo aap ke liye kaam kare"
+  → "Most log AI sirf use karte hain — hum aapko AI se kaam karwana sikhate hain"
+  → "Ye sirf course nahi — ye ek earning system hai jahan aap globally kaam pa sakte ho"
+One FOMO hook (batch filling / live sessions). Then ask for soft commitment:
+  → "Slot secure karna chahte hain next batch ke liye?"
 
-## OUTPUT FORMAT
+── PHASE 3 · CLOSE — ASK FOR THE SALE  (score 8–10, messages 9+) ──
+Goal: remove final friction. State the offer once, clearly. Ask directly.
+They already know the product. Stop explaining. Start closing.
+  → "Rs. 10,000. 14 din. Certificate milega. Main registration link bhejun?"
+  → "Seat almost fill ho rahi hai — aaj confirm karo?"
+  → "Ek step baki hai — registration. Kab karna hai?"
+Do NOT re-pitch. Just close.
+
+═══════════════════════════════════════════════════════
+OBJECTION PLAYBOOK  (deploy instantly when triggered)
+═══════════════════════════════════════════════════════
+"AI nahi aata"              → "Perfect — ye course beginners ke liye hi bana hai. Zero se shuru hoga"
+"Time nahi"                 → "2 weeks. 1-2 ghante daily. Is se zyada ROI wali skill nahi milegi"
+"Mehnga hai / 10k zyada"   → "Rs. 10k ek aisi skill ke liye jo dollar income tak le jaye — ye investment hai"
+"Sochna hai"               → "Bilkul — main details share karta hun. Next batch ka schedule bhi bhejun?"
+"Baad mein karunga"        → "Next batch delay bhi ho sakta hai — pehle ek seat secure kar lete hain"
+"Kya guarantee hai"        → "14 din practical hai — aap khud build karo, results saamne honge"
+"Recorded hai?"            → "Live + recorded dono — kabhi miss nahi karenge"
+"Kya ye beginners ke liye" → "100% — zero se le ke earning tak, step by step"
+
+═══════════════════════════════════════════════════════
+ABSOLUTE RULES  (never break these)
+═══════════════════════════════════════════════════════
+1. DO NOT say "team will connect", "someone will get in touch", or any hand-off phrase.
+   YOU are closing this lead. The human agent only takes over after enrollment is confirmed.
+2. DO NOT use "ji" after names (never "Mohsin ji", "Sundus ji"). Use "sir" / "madam" alone.
+3. DO NOT use "bhai" — use "sir".
+4. EVERY message MUST end with a question OR a clear CTA. Never end passively.
+5. Max 3 short lines. Human tone. Mirror the lead's language (Urdu/English/mix).
+6. If lead asks a general question → give a SHORT answer (1 line), then pivot to enrollment.
+7. NEVER fabricate facts, prices, dates, or guarantees not present in PRODUCT CONTEXT above.
+8. Urgency is ONLY valid when grounded in real facts from PRODUCT CONTEXT.
+
+═══════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════
 ${CLOSER_SCHEMA}
 `;
 
 const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput }) => {
   const t0 = Date.now();
-  const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput);
+  const messageCount = (messageHistory || []).length;
+  const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount);
 
   const history = (messageHistory || []).slice(-20).map(m => ({
     role: m.sender === 'CONTACT' ? 'user' : 'assistant',
@@ -300,14 +352,36 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     };
   }
 
-  // ── 2. Routing decisions from Qualifier alone ──────────────
+  // ── 2. Greeting / first-message safety guard ────────────────
+  // The Qualifier can misclassify ambiguous short messages as needing handoff.
+  // This hard check prevents the AI from abandoning a lead who just said Hi.
+  const msgLower = (newMessage || '').trim().toLowerCase();
+  const isGreeting  = /^(hi|hello|hey|salam|aoa|assalam|walaikum|hellow|helo|heya|yo|good\s*(morning|afternoon|evening)|namaste|السلام|السلام علیکم)\b/.test(msgLower);
+  const isFirstMsg  = (messageHistory || []).length === 0;
+  const isVeryShort = msgLower.replace(/[^a-z]/g, '').length <= 5; // ≤5 letters stripped
+
+  if ((isGreeting || isFirstMsg || isVeryShort) && qualifierOutput.next_action === 'handoff_human') {
+    logger.info(
+      { leadId: lead.id, newMessage, trigger: isGreeting ? 'greeting' : isFirstMsg ? 'first_msg' : 'very_short' },
+      '🛡 Safety guard: blocked premature handoff on greeting/first message → continue_qualifying'
+    );
+    qualifierOutput.next_action = 'continue_qualifying';
+  }
+
+  // Also: cold leads (score 1-4) must NEVER be handed off — they need nurturing
+  if (qualifierOutput.score <= 4 && qualifierOutput.next_action === 'handoff_human') {
+    logger.info({ leadId: lead.id, score: qualifierOutput.score }, '🛡 Safety guard: cold lead cannot be handed off → nurture');
+    qualifierOutput.next_action = 'nurture';
+  }
+
+  // ── 3. Routing decisions from Qualifier alone ──────────────
   const humanFollowupRequired = qualifierOutput.score >= 8 || qualifierOutput.lead_status === 'HOT';
   // If a human agent deliberately handed this conversation back to AI, suppress
   // auto-handoff so Claude gets a chance to continue. The agent can still
   // manually take over again at any time.
   const forceHandoff = !handedBackToAI && qualifierOutput.next_action === 'handoff_human';
 
-  // ── 3. CLOSER ───────────────────────────────────────────────
+  // ── 4. CLOSER ───────────────────────────────────────────────
   let closerOutput = null;
   let closerError = null;
   if (!forceHandoff) {
@@ -319,7 +393,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     }
   }
 
-  // ── 4. Determine final action ───────────────────────────────
+  // ── 5. Determine final action ───────────────────────────────
   let action = 'continue';
   let handoffReason = null;
 
@@ -333,12 +407,12 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     action = 'close';
   }
 
-  // ── 5. Map qualifier 1-10 score → DB 0-100 + derive stage ──
+  // ── 6. Map qualifier 1-10 score → DB 0-100 + derive stage ──
   const stage    = deriveStage(lead.stage, qualifierOutput);
   const aiScore  = qualifierOutput.score * 10;
   const reply    = closerOutput?.reply_message || null;
 
-  // ── 6. Log to AiAgentLog (audit trail for Analyst AI v2) ────
+  // ── 7. Log to AiAgentLog (audit trail for Analyst AI v2) ────
   await prisma.aiAgentLog.create({
     data: {
       tenantId,
@@ -367,14 +441,14 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     },
   }).catch(err => logger.warn({ err }, 'AiAgentLog write failed (non-blocking)'));
 
-  // ── 7. Update token usage for billing ───────────────────────
+  // ── 8. Update token usage for billing ───────────────────────
   const totalTokens = (qualifierOutput._tokens || 0) + (closerOutput?._tokens || 0);
   await prisma.subscription.update({
     where: { tenantId },
     data: { aiTokensUsed: { increment: totalTokens } },
   }).catch(() => {});
 
-  // ── 8. Return v1-compatible shape (+ v1.5 extras) ───────────
+  // ── 9. Return v1-compatible shape (+ v1.5 extras) ───────────
   return {
     // v1 contract — worker reads these
     reply,
