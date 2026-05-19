@@ -472,10 +472,22 @@ function LeadCard({ lead, onClick }) {
       </div>
       <div className="mt-2 flex items-center justify-between">
         <SourceBadge source={lead.source} />
-        <span className="text-[11px] font-semibold tabular-nums text-slate-300">{formatPKR(lead.value)}</span>
+        <div className="flex items-center gap-1.5">
+          {lead.humanFollowupRequired && (
+            <span title="Human follow-up required" className="text-xs leading-none">🔥</span>
+          )}
+          {lead.aiScore > 0 && (
+            <span className="rounded border border-slate-700/50 bg-slate-800/60 px-1 py-0.5 text-[9px] tabular-nums text-slate-400">
+              AI {lead.aiScore}/10
+            </span>
+          )}
+        </div>
       </div>
-      <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-500">
-        <span>{lead.lastActivity} ago</span>
+      {lead.intent && (
+        <div className="mt-1 truncate text-[10px] text-slate-500">{intentLabel(lead.intent)}</div>
+      )}
+      <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+        <span>{lead.lastActivity} ago · {formatPKR(lead.value)}</span>
         <span className="text-slate-600 transition-colors group-hover:text-accent">View →</span>
       </div>
     </button>
@@ -683,6 +695,70 @@ function DetailContent({ lead, onClose, onStageChange, onMarkWon, onAddNote, onU
             <p className="text-xs leading-relaxed text-slate-300">{lead.notes}</p>
           </div>
         </section>
+
+        {/* AI Insights */}
+        {(lead.intent || lead.nextAction || lead.aiScore > 0 || lead.humanFollowupRequired ||
+          Object.keys(lead.qualificationData || {}).some(k => !['lastDiagnosis','lastFix','lastUrgencyTrigger','updatedAt'].includes(k) && lead.qualificationData[k])) && (
+          <section className="space-y-3 border-b border-slate-800/60 px-5 py-4">
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] uppercase tracking-wider text-slate-500">✨ AI Insights</div>
+              {lead.aiScore > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-500">Score</span>
+                  <span className="text-sm font-bold tabular-nums text-slate-100">
+                    {lead.aiScore}<span className="text-[10px] font-normal text-slate-500">/10</span>
+                  </span>
+                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${(lead.aiScore / 10) * 100}%`,
+                        background: lead.aiScore >= 8 ? '#ef4444' : lead.aiScore >= 5 ? '#f59e0b' : '#64748b',
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {lead.humanFollowupRequired && (
+              <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-300">
+                <span>🔥</span>
+                <span>HOT — human follow-up required, this lead is ready to close</span>
+              </div>
+            )}
+
+            {lead.intent && (
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 w-16 shrink-0 text-[10px] uppercase tracking-wider text-slate-500">Intent</span>
+                <span className="text-xs text-slate-200">{intentLabel(lead.intent)}</span>
+              </div>
+            )}
+
+            {lead.nextAction && (
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 w-16 shrink-0 text-[10px] uppercase tracking-wider text-slate-500">Next</span>
+                <span className="text-xs text-slate-200">{nextActionLabel(lead.nextAction)}</span>
+              </div>
+            )}
+
+            {(() => {
+              const qd = lead.qualificationData || {};
+              const displayKeys = ['budget', 'buyerOption', 'investorType', 'timeline', 'objection'];
+              const relevant = displayKeys.filter(k => qd[k]);
+              return relevant.length > 0 ? (
+                <div className="rounded-lg border border-slate-800/60 bg-surface2/30 px-3 py-2 text-xs space-y-1">
+                  {relevant.map(k => (
+                    <div key={k} className="flex items-start gap-2">
+                      <span className="w-20 shrink-0 capitalize text-slate-500">{k}:</span>
+                      <span className="text-slate-200">{String(qd[k])}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null;
+            })()}
+          </section>
+        )}
 
         {/* Last 3 messages */}
         <section className="border-b border-slate-800/60 px-5 py-4">
@@ -968,6 +1044,14 @@ function mapApiLeadToUi(lead) {
     value: Number(lead.dealValue || 0),
     owner: lead.agent?.fullName || 'Unassigned',
     notes,
+    // ── AI insight fields from dual-agent pipeline ──────────────
+    intent:                lead.intent                || null,
+    nextAction:            lead.nextAction            || null,
+    humanFollowupRequired: !!lead.humanFollowupRequired,
+    leadTemperature:       lead.leadTemperature       || lead.scoreLabel || null,
+    // aiScore stored as 0-100 in DB (score × 10); display as 1-10
+    aiScore:               lead.aiScore ? Math.round(lead.aiScore / 10) : null,
+    qualificationData:     lead.qualificationData     || {},
     lastMessages: [
       { from: 'system', text: notes, ts: createdAt.toLocaleString() },
     ],
@@ -993,6 +1077,31 @@ function formatPKR(n) {
 
 function initials(name = '') {
   return name.split(/\s+/).slice(0, 2).map((s) => s[0]).join('').toUpperCase();
+}
+
+// AI label helpers
+function intentLabel(intent) {
+  const map = {
+    high:           '🟢 High intent — ready to invest',
+    medium:         '🟡 Medium intent — evaluating options',
+    low:            '🔴 Low intent — just browsing',
+    high_intent:    '🟢 High intent',
+    medium_intent:  '🟡 Medium intent',
+    low_intent:     '🔴 Low intent',
+  };
+  return map[intent] || intent;
+}
+
+function nextActionLabel(action) {
+  const map = {
+    continue_qualifying: 'Continue qualifying — gather more info',
+    send_proposal:       'Send proposal / booking details',
+    follow_up:           'Follow up — lead went quiet',
+    close_deal:          'Close the deal — lead is ready',
+    handoff_human:       'Escalate to human agent',
+    nurture:             'Nurture — not ready yet',
+  };
+  return map[action] || action;
 }
 
 // Inline icons

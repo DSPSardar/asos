@@ -44,7 +44,7 @@ const getOverview = async (tenantId, { from, to } = {}) => {
 
   return {
     leads:          { total: totalLeads, hot: hotLeads, closedWon, closedLost },
-    revenue:        { total: totalRevenue, currency: 'BRL' },
+    revenue:        { total: totalRevenue, currency: 'PKR' },
     messages:       { total: totalMessages, aiHandled: aiMessages, aiHandlingRate: `${aiHandlingRate}%` },
     contacts:       { total: totalContacts },
     conversionRate: `${conversionRate}%`,

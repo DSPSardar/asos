@@ -119,26 +119,81 @@ const CHART_STYLE = { fontFamily: 'inherit', fontSize: 11, fill: '#94a3b8' };
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function DSPReports() {
-  const [period, setPeriod] = useState('90');
-  const [exporting, setExporting] = useState(false);
+  const [period,      setPeriod]    = useState('90');
+  const [exporting,   setExporting] = useState(false);
+  const [loading,     setLoading]   = useState(true);
+  const [kpiData,     setKpiData]   = useState(KPI_DATA);
+  const [funnelData,  setFunnelData]  = useState(FUNNEL_DATA);
+  const [revTrend,    setRevTrend]    = useState(REVENUE_TREND);
+
+  useEffect(() => {
+    const days = Number(period) || 90;
+    const from = new Date(Date.now() - days * 86400000).toISOString();
+    const to   = new Date().toISOString();
+
+    setLoading(true);
+    Promise.allSettled([
+      analyticsAPI.overview({ from, to }),
+      analyticsAPI.funnel({ from, to }),
+      analyticsAPI.revenue({ from, to }),
+    ]).then(([ovRes, fnRes, revRes]) => {
+
+      // KPIs from overview
+      if (ovRes.status === 'fulfilled') {
+        const ov = ovRes.value.data?.data || ovRes.value.data;
+        if (ov) {
+          const total   = ov.leads?.total   || 0;
+          const won     = ov.leads?.closedWon || 0;
+          const convPct = total > 0 ? ((won / total) * 100).toFixed(1) + '%' : '0%';
+          setKpiData([
+            { label: 'Total Leads',     value: total.toLocaleString(),            sub: `${ov.leads?.hot||0} hot`,           icon: '👥', color: 'indigo'  },
+            { label: 'Enrolled / Won',  value: won.toLocaleString(),              sub: `${convPct} conversion`,             icon: '🎓', color: 'violet'  },
+            { label: 'Revenue',         value: fmtPKR(ov.revenue?.total || 0),   sub: `${won} bookings`,                   icon: '💰', color: 'emerald' },
+            { label: 'Hot Leads',       value: (ov.leads?.hot||0).toLocaleString(), sub: 'ready to close',                  icon: '🔥', color: 'rose'    },
+            { label: 'AI Handle Rate',  value: ov.messages?.aiHandlingRate||'0%', sub: 'no human takeover needed',          icon: '🤖', color: 'sky'     },
+            { label: 'Messages Sent',   value: (ov.messages?.total||0).toLocaleString(), sub: `${ov.messages?.aiHandled||0} by AI`, icon: '💬', color: 'amber' },
+          ]);
+        }
+      }
+
+      // Enrollment funnel from API funnel
+      if (fnRes.status === 'fulfilled') {
+        const arr = fnRes.value.data?.data?.funnel || fnRes.value.data?.funnel || [];
+        const STAGE_LABEL = { NEW:'New Leads', QUALIFYING:'Contacted', DIAGNOSED:'Interested', PROPOSED:'Proposed', CLOSED_WON:'Enrolled' };
+        const STAGE_FILL  = { NEW: COLORS.indigo, QUALIFYING: COLORS.violet, DIAGNOSED: COLORS.sky, PROPOSED: COLORS.amber, CLOSED_WON: COLORS.emerald };
+        const mapped = arr
+          .filter(f => f.stage !== 'CLOSED_LOST')
+          .map(f => ({ name: STAGE_LABEL[f.stage]||f.stage, value: f.count, fill: STAGE_FILL[f.stage]||COLORS.slate }));
+        if (mapped.some(f => f.value > 0)) setFunnelData(mapped);
+      }
+
+      // Revenue trend
+      if (revRes.status === 'fulfilled') {
+        const timeline = revRes.value.data?.data?.timeline || revRes.value.data?.timeline || [];
+        if (timeline.length > 0) {
+          let cum = 0;
+          const trend = timeline.map(r => {
+            cum += Number(r.revenue) || 0;
+            return { date: (r.date||'').slice(5) || r.date, revenue: cum, enrollments: 0 };
+          });
+          setRevTrend(trend);
+        }
+      }
+    }).catch(console.error).finally(() => setLoading(false));
+  }, [period]);
 
   const handleExport = () => {
     setExporting(true);
     setTimeout(() => {
       const rows = [
         ['Metric','Value'],
-        ['Total Leads', 300],
-        ['Enrolled', 40],
-        ['Revenue (PKR)', 400000],
-        ['Conversion Rate', '13.3%'],
-        ['Cost per Lead (PKR)', 1858],
-        ['ROI', '242%'],
+        ...kpiData.map(k => [k.label, k.value]),
       ];
-      const csv = rows.map(r => r.join(',')).join('\n');
+      const csv  = rows.map(r => r.join(',')).join('\n');
       const blob = new Blob([csv], { type: 'text/csv' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      a.href = url; a.download = 'dsp_report.csv'; a.click();
+      a.href = url; a.download = `dsp_report_${period}d.csv`; a.click();
       URL.revokeObjectURL(url);
       setExporting(false);
     }, 600);
@@ -181,9 +236,15 @@ export default function DSPReports() {
       </div>
 
       <div className="p-6 space-y-6">
+        {loading && (
+          <div className="flex items-center gap-2 text-xs text-slate-500 animate-pulse">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent animate-ping" />
+            Loading live data…
+          </div>
+        )}
         {/* ── KPI Cards ───────────────────────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-          {KPI_DATA.map(k => (
+          {kpiData.map(k => (
             <div key={k.label} className="bg-surface/60 border border-slate-800/60 rounded-xl p-4">
               <div className="text-xl mb-2">{k.icon}</div>
               <div className="text-lg font-bold text-slate-100 leading-tight">{k.value}</div>
@@ -199,7 +260,7 @@ export default function DSPReports() {
           <div className="bg-surface/60 border border-slate-800/60 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-slate-200 mb-4">Enrollment Funnel</h3>
             <div className="space-y-2">
-              {FUNNEL_DATA.map((item, i) => (
+              {funnelData.map((item, i) => (
                 <div key={item.name}>
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-slate-400">{item.name}</span>
@@ -209,7 +270,7 @@ export default function DSPReports() {
                     <div
                       className="h-full rounded-md flex items-center pl-2 transition-all"
                       style={{
-                        width: `${(item.value / FUNNEL_DATA[0].value) * 100}%`,
+                        width: `${(item.value / Math.max(1, funnelData[0]?.value || 1)) * 100}%`,
                         background: item.fill,
                         opacity: 0.85 - i * 0.05,
                       }}
@@ -255,7 +316,7 @@ export default function DSPReports() {
         <div className="bg-surface/60 border border-slate-800/60 rounded-xl p-5">
           <h3 className="text-sm font-semibold text-slate-200 mb-4">Revenue Trend (Last {period} days)</h3>
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={REVENUE_TREND.slice(-Math.floor(Number(period)/7))}>
+            <LineChart data={revTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
               <XAxis dataKey="date" tick={CHART_STYLE} axisLine={false} tickLine={false} />
               <YAxis tick={CHART_STYLE} axisLine={false} tickLine={false} tickFormatter={v => `Rs.${fmtK(v)}`} />

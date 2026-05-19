@@ -1,6 +1,6 @@
 // src/pages/Analytics.jsx — Analytics (route: /analytics).
 // KPI tiles · funnel · source attribution · AI vs human · time-series grid · team table.
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -79,31 +79,123 @@ const RANGE_OPTIONS = [
   { id:'ytd',  label:'Year to date' },
 ];
 
+// Token formatter helper
+const fmtTokens = (n) => {
+  if (!n) return '0';
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(0)}k`;
+  return String(n);
+};
+
+// PKR formatter for analytics tiles
+const fmtPKR = (n) => {
+  if (!n) return 'PKR 0';
+  if (n >= 10000000) return `PKR ${(n / 10000000).toFixed(1)}cr`;
+  if (n >= 100000)   return `PKR ${(n / 100000).toFixed(0)}L`;
+  return `PKR ${Number(n).toLocaleString()}`;
+};
+
 // ─────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────
 export default function Analytics() {
-  const [range, setRange] = useState('30d');
-  const [toast, setToast] = useState(null);
-  const [teamRows, setTeamRows] = useState(TEAM);
-  const [flags, setFlags] = useState([]);
+  const [range,       setRange]       = useState('30d');
+  const [toast,       setToast]       = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [flags,       setFlags]       = useState([]);
+
+  // State — initialised with mock constants so charts never go blank
+  const [kpis,        setKpis]        = useState(KPIS);
+  const [funnelData,  setFunnelData]  = useState(FUNNEL);
+  const [sourcePie,   setSourcePie]   = useState(SOURCE_PIE);
+  const [aiMetrics,   setAiMetrics]   = useState(AI_VS_HUMAN);
+  const [dailyLeads,  setDailyLeads]  = useState(DAILY_LEADS);
+  const [aiMessages,  setAiMessages]  = useState(AI_COST);
+  const [teamRows,    setTeamRows]    = useState(TEAM);
+
+  const loadData = useCallback(async (r) => {
+    const days = { '7d':7, '30d':30, '90d':90, 'qtd':90, 'ytd':365 }[r] || 30;
+    const from = new Date(Date.now() - days * 86400000).toISOString();
+    const to   = new Date().toISOString();
+    setLoading(true);
+
+    const [ovRes, fnRes, aiRes, msgRes, teamRes] = await Promise.allSettled([
+      analyticsAPI.overview({ from, to }),
+      analyticsAPI.funnel({ from, to }),
+      analyticsAPI.aiPerformance({ from, to }),
+      analyticsAPI.messages({ from, to }),
+      analyticsAPI.teamPerformance({ from, to }),
+    ]);
+
+    // ── KPIs ──────────────────────────────────────────────────
+    if (ovRes.status === 'fulfilled') {
+      const ov = ovRes.value.data?.data || ovRes.value.data;
+      if (ov) {
+        setKpis([
+          { label:'Total Leads',     value:(ov.leads?.total||0).toLocaleString(),    delta:null, tone:'neutral', sub:`${ov.leads?.hot||0} hot leads this period` },
+          { label:'Conversion Rate', value:ov.conversionRate||'0%',                  delta:null, tone:'up',      sub:'lead → booking confirmed' },
+          { label:'Bookings Won',    value:(ov.leads?.closedWon||0).toLocaleString(), delta:null, tone:'up',      sub:'confirmed bookings' },
+          { label:'AI Handle Rate',  value:ov.messages?.aiHandlingRate||'0%',        delta:null, tone:'up',      sub:'no human takeover needed' },
+          { label:'AI Tokens Used',  value:fmtTokens(ov.usage?.aiTokensUsed),        delta:null, tone:'neutral', sub:`of ${fmtTokens(ov.usage?.aiTokensLimit)} limit` },
+        ]);
+      }
+    }
+
+    // ── Funnel ────────────────────────────────────────────────
+    if (fnRes.status === 'fulfilled') {
+      const arr = fnRes.value.data?.data?.funnel || fnRes.value.data?.funnel || [];
+      const COLOR = { NEW:'#6366f1', QUALIFYING:'#06b6d4', DIAGNOSED:'#a855f7', PROPOSED:'#f59e0b', CLOSED_WON:'#10b981' };
+      const LABEL = { NEW:'Lead', QUALIFYING:'Qualified', DIAGNOSED:'Diagnosed', PROPOSED:'Proposed', CLOSED_WON:'Won' };
+      const mapped = arr.filter(f => f.stage !== 'CLOSED_LOST').map(f => ({ stage: LABEL[f.stage]||f.stage, count: f.count, color: COLOR[f.stage]||'#64748b' }));
+      if (mapped.some(f => f.count > 0)) setFunnelData(mapped);
+    }
+
+    // ── AI vs Human ───────────────────────────────────────────
+    if (aiRes.status === 'fulfilled') {
+      const ai = aiRes.value.data?.data || aiRes.value.data;
+      if (ai) {
+        const hrNum = parseFloat(ai.handoffRate) || 0;
+        setAiMetrics([
+          { metric:'Threads handled',  ai: ai.aiMessages||0,           human: ai.handoffs||0,                label:'#'    },
+          { metric:'AI retain rate',   ai: Math.round(100-hrNum),      human: Math.round(hrNum),             label:'%'    },
+          { metric:'Avg lead score',   ai: ai.avgLeadScore||0,         human: 5,                             label:'/10'  },
+          { metric:'Tokens used (k)',  ai: Math.round((ai.tokensUsed||0)/1000), human: 0,                   label:'k'    },
+        ]);
+      }
+    }
+
+    // ── Message timeline → daily inbound + AI charts ──────────
+    if (msgRes.status === 'fulfilled') {
+      const timeline = msgRes.value.data?.data?.timeline || msgRes.value.data?.timeline || [];
+      const recent = timeline.slice(-14);
+      if (recent.length > 0) {
+        setDailyLeads(recent.map(d => ({ d: (d.date||'').slice(5), n: d.inbound||0 })));
+        setAiMessages(recent.map(d => ({ d: (d.date||'').slice(5), usd: d.ai||0 })));
+      }
+    }
+
+    // ── Team ──────────────────────────────────────────────────
+    if (teamRes.status === 'fulfilled') {
+      const rows = (teamRes.value.data?.data?.team || teamRes.value.data?.team || []).map(t => ({
+        id:    t.agentId,
+        name:  t.name,
+        role:  'Agent',
+        leads: t.responses,
+        won:   t.closedWon,
+        conv:  `${t.conversionRate}%`,
+        deal:  `Resp ${t.avgResponseSeconds}s`,
+        avatar:(t.name||'A').split(' ').map(s => s[0]).join('').slice(0,2),
+      }));
+      if (rows.length > 0) setTeamRows(rows);
+    }
+
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    analyticsAPI.teamPerformance().then((res) => {
-      const mapped = (res.data?.team || []).map((t) => ({
-        id: t.agentId,
-        name: t.name,
-        role: 'Agent',
-        leads: t.responses,
-        won: t.closedWon,
-        conv: `${t.conversionRate}%`,
-        deal: `Resp ${t.avgResponseSeconds}s`,
-        avatar: (t.name || 'A').split(' ').map((s) => s[0]).join('').slice(0, 2),
-      }));
-      if (mapped.length) setTeamRows(mapped);
-    }).catch(() => {});
-    campaignsAPI.underperforming().then((res) => setFlags(res.data || [])).catch(() => {});
-  }, []);
+    loadData(range);
+    campaignsAPI.underperforming().then(res => setFlags(res.data || [])).catch(() => {});
+  }, [range, loadData]);
 
   const onExport = async () => {
     await reportsAPI.generate({ periodType: range === '7d' ? 'weekly' : 'monthly', from: new Date(Date.now() - 7 * 86400000).toISOString(), to: new Date().toISOString(), language: 'en' });
@@ -118,6 +210,7 @@ export default function Analytics() {
         subtitle="Pipeline performance, source attribution, and team activity for Boulevard Tower REIT."
         action={
           <div className="flex items-center gap-2">
+            {loading && <span className="text-[10px] text-slate-500 animate-pulse">Refreshing…</span>}
             <DateRangePicker value={range} onChange={setRange} />
             <button
               onClick={onExport}
@@ -132,7 +225,7 @@ export default function Analytics() {
       <div className="space-y-6 p-8">
         {/* Section A — KPI tiles */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {KPIS.map((k) => <KpiTile key={k.label} {...k} />)}
+          {kpis.map((k) => <KpiTile key={k.label} {...k} />)}
         </section>
 
         {!!flags.length && (
@@ -143,21 +236,21 @@ export default function Analytics() {
 
         {/* Section B — Funnel */}
         <section>
-          <Funnel />
+          <Funnel data={funnelData} />
         </section>
 
         {/* Section C — Source pie + AI vs Human */}
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <SourceAttribution />
-          <AiVsHuman />
+          <SourceAttribution data={sourcePie} />
+          <AiVsHuman metrics={aiMetrics} />
         </section>
 
         {/* Section D — Time-series 2x2 grid */}
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <TimeSeriesCard title="Daily New Leads"     hint="last 7 days"  data={DAILY_LEADS}      dataKey="n"   color="#6366f1" type="bar" />
-          <TimeSeriesCard title="Daily Conversions"   hint="last 7 days"  data={DAILY_CONVERSIONS} dataKey="n"  color="#10b981" type="line" />
-          <TimeSeriesCard title="AI Cost per Day"     hint="USD · last 7d" data={AI_COST}         dataKey="usd" color="#f59e0b" type="area" prefix="$" />
-          <TimeSeriesCard title="Hot Leads by Hour"   hint="last 24h"     data={HOT_BY_HOUR}      dataKey="n"   color="#ef4444" type="bar" xKey="h" suffix=":00" />
+          <TimeSeriesCard title="Daily Inbound Messages" hint={`last ${range}`}  data={dailyLeads}         dataKey="n"   color="#6366f1" type="bar" />
+          <TimeSeriesCard title="Daily Conversions"      hint="last 7 days"      data={DAILY_CONVERSIONS}  dataKey="n"   color="#10b981" type="line" />
+          <TimeSeriesCard title="Daily AI Messages"      hint={`last ${range}`}  data={aiMessages}         dataKey="usd" color="#f59e0b" type="area" />
+          <TimeSeriesCard title="Hot Leads by Hour"      hint="last 24h"         data={HOT_BY_HOUR}        dataKey="n"   color="#ef4444" type="bar" xKey="h" suffix=":00" />
         </section>
 
         {/* Section E — Team table */}
@@ -212,21 +305,21 @@ function KpiTile({ label, value, delta, tone, sub }) {
 // ─────────────────────────────────────────────────────────────
 // Section B — Funnel
 // ─────────────────────────────────────────────────────────────
-function Funnel() {
-  const max = FUNNEL[0].count;
+function Funnel({ data = FUNNEL }) {
+  const max = data[0]?.count || 1;
   return (
     <div className="glass-card rounded-xl">
       <div className="flex items-center justify-between border-b border-slate-800/60 px-5 py-4">
         <div>
           <h2 className="text-sm font-semibold tracking-tight text-slate-100">Conversion Funnel</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Lead → Qualified → Proposal → Won (last 30 days).</p>
+          <p className="mt-0.5 text-xs text-slate-500">Lead → Qualified → Proposal → Won (selected period).</p>
         </div>
-        <span className="text-xs tabular-nums text-slate-500">{FUNNEL[0].count} → {FUNNEL[FUNNEL.length-1].count}</span>
+        <span className="text-xs tabular-nums text-slate-500">{data[0]?.count || 0} → {data[data.length-1]?.count || 0}</span>
       </div>
       <div className="space-y-3 px-5 py-5">
-        {FUNNEL.map((f, i) => {
+        {data.map((f, i) => {
           const widthPct = (f.count / max) * 100;
-          const dropFromPrev = i === 0 ? null : Math.round(((FUNNEL[i-1].count - f.count) / FUNNEL[i-1].count) * 100);
+          const dropFromPrev = i === 0 ? null : Math.round(((data[i-1].count - f.count) / Math.max(1, data[i-1].count)) * 100);
           return (
             <div key={f.stage}>
               <div className="mb-1 flex items-center justify-between text-xs">
@@ -255,7 +348,7 @@ function Funnel() {
 // ─────────────────────────────────────────────────────────────
 // Section C — Source attribution donut
 // ─────────────────────────────────────────────────────────────
-function SourceAttribution() {
+function SourceAttribution({ data = SOURCE_PIE }) {
   return (
     <div className="glass-card flex flex-col rounded-xl">
       <div className="border-b border-slate-800/60 px-5 py-4">
@@ -266,8 +359,8 @@ function SourceAttribution() {
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={SOURCE_PIE} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={2} stroke="none">
-                {SOURCE_PIE.map((s) => <Cell key={s.name} fill={s.color} />)}
+              <Pie data={data} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={2} stroke="none">
+                {data.map((s) => <Cell key={s.name} fill={s.color} />)}
               </Pie>
               <Tooltip
                 contentStyle={{ background:'rgba(15,23,42,0.95)', border:'1px solid rgba(99,102,241,0.25)', borderRadius:8, fontSize:12 }}
@@ -278,7 +371,7 @@ function SourceAttribution() {
           </ResponsiveContainer>
         </div>
         <ul className="flex flex-col justify-center gap-2">
-          {SOURCE_PIE.map((s) => (
+          {data.map((s) => (
             <li key={s.name} className="flex items-center gap-2 text-xs">
               <span className="h-2.5 w-2.5 rounded-sm" style={{ background:s.color }} />
               <span className="text-slate-300">{s.name}</span>
@@ -294,7 +387,7 @@ function SourceAttribution() {
 // ─────────────────────────────────────────────────────────────
 // Section C — AI vs Human comparison
 // ─────────────────────────────────────────────────────────────
-function AiVsHuman() {
+function AiVsHuman({ metrics = AI_VS_HUMAN }) {
   return (
     <div className="glass-card flex flex-col rounded-xl">
       <div className="border-b border-slate-800/60 px-5 py-4">
@@ -302,8 +395,8 @@ function AiVsHuman() {
         <p className="mt-0.5 text-xs text-slate-500">Qualifier + closer agents vs human takeover threads.</p>
       </div>
       <ul className="divide-y divide-slate-800/60">
-        {AI_VS_HUMAN.map((m) => {
-          const aiBetter = m.metric === 'Avg response' ? m.ai < m.human : m.ai > m.human;
+        {metrics.map((m) => {
+          const aiBetter = m.metric === 'Avg response' ? m.ai < m.human : m.ai >= m.human;
           return (
             <li key={m.metric} className="grid grid-cols-12 items-center gap-3 px-5 py-3">
               <span className="col-span-4 text-xs font-medium text-slate-300">{m.metric}</span>
