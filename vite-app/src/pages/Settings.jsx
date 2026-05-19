@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@pages/Layout';
-import { settingsAPI, aiConfigAPI, knowledgeGapsAPI } from '@lib/api';
+import { settingsAPI, aiConfigAPI, knowledgeGapsAPI, authAPI } from '@lib/api';
 
 const TABS = [
   { id:'whatsapp',      label:'WhatsApp',         icon:IconWhatsApp,    desc:'Connect your WhatsApp Business number and test the connection.' },
@@ -12,6 +12,7 @@ const TABS = [
   { id:'notifications', label:'Notifications',    icon:IconBell,        desc:'Email and WhatsApp alerts on lead activity.' },
   { id:'integrations',  label:'Integrations',     icon:IconPlug,        desc:'Connect external tools (CRM, Sheets, Slack).' },
   { id:'billing',       label:'Billing & Plan',   icon:IconCard,        desc:'Manage your subscription and view invoices.' },
+  { id:'account',       label:'Account',          icon:IconUser,        desc:'Change your password and manage account security.' },
 ];
 
 const DEFAULT_AI_PROMPT = `You are an AI sales assistant for Boulevard Tower REIT — a premium real estate investment opportunity in Islamabad, Pakistan.
@@ -114,6 +115,7 @@ export default function Settings() {
           {tab === 'notifications' && <NotificationsTab />}
           {tab === 'integrations'  && <IntegrationsTab  onSave={(name) => showToast(`${name} connection demo ✓`)} />}
           {tab === 'billing'       && <BillingTab />}
+          {tab === 'account'       && <AccountTab showToast={showToast} />}
         </div>
       </div>
 
@@ -1250,6 +1252,82 @@ function BillingTab() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// TAB 7 — Account (Change Password)
+// ─────────────────────────────────────────────────────────────
+function AccountTab({ showToast }) {
+  const [form, setForm]       = useState({ current: '', next: '', confirm: '' });
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState('');
+
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (form.next.length < 8) { setError('New password must be at least 8 characters.'); return; }
+    if (form.next !== form.confirm) { setError('New passwords do not match.'); return; }
+    setSaving(true);
+    try {
+      await authAPI.changePassword(form.current, form.next);
+      setForm({ current: '', next: '', confirm: '' });
+      showToast('Password changed ✓');
+    } catch (err) {
+      setError(err.message || 'Failed to change password.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Section
+      title="Change Password"
+      description="Update your login password. You must know your current password to proceed."
+      footer={
+        <PrimaryButton disabled={saving} onClick={handleSubmit}>
+          {saving ? 'Saving…' : 'Update Password'}
+        </PrimaryButton>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Field label="Current Password">
+          <input
+            type="password"
+            placeholder="Enter current password"
+            value={form.current}
+            onChange={set('current')}
+            autoComplete="current-password"
+            className="input-dark w-full rounded-lg px-3 py-2 text-sm"
+          />
+        </Field>
+        <Field label="New Password" hint="Min 8 characters">
+          <input
+            type="password"
+            placeholder="Enter new password"
+            value={form.next}
+            onChange={set('next')}
+            autoComplete="new-password"
+            className="input-dark w-full rounded-lg px-3 py-2 text-sm"
+          />
+        </Field>
+        <Field label="Confirm New Password">
+          <input
+            type="password"
+            placeholder="Confirm new password"
+            value={form.confirm}
+            onChange={set('confirm')}
+            autoComplete="new-password"
+            className="input-dark w-full rounded-lg px-3 py-2 text-sm"
+          />
+        </Field>
+        {error && (
+          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</p>
+        )}
+      </form>
+    </Section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Toast (bottom-right)
 // ─────────────────────────────────────────────────────────────
 function Toast({ text }) {
@@ -1276,3 +1354,4 @@ function IconTeam(p)     { return <svg {...svgProps(p)}><path d="M16 21v-2a4 4 0
 function IconBell(p)     { return <svg {...svgProps(p)}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>; }
 function IconPlug(p)     { return <svg {...svgProps(p)}><path d="M12 22v-5M9 8V2M15 8V2M5 8h14v3a7 7 0 0 1-14 0V8Z"/></svg>; }
 function IconCard(p)     { return <svg {...svgProps(p)}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>; }
+function IconUser(p)     { return <svg {...svgProps(p)}><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>; }
