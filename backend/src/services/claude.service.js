@@ -67,15 +67,19 @@ is_enrollment_confirmed — THE ONLY HANDOFF TRIGGER:
     "payment kaise karon" (said AFTER agreeing to join), "done, register karo", "chalo karte hain".
 
   FALSE — ALWAYS false for these (no matter how interested they sound):
-    Any question, even fee/price ("fee kya hai", "kitna hai", "how much")
+    Any question whatsoever, even fee/price ("fee kya hai", "kitna hai", "how much")
     "I saw your ad" / "ad dekha tha" / "maine course dekha"
     Answering a qualifying question: "beginner", "career shift", "freelancer", "income chahiye"
-    General interest: "sounds good", "interesting", "theek hai", "achha lagta hai"
-    Asking about schedule, duration, syllabus, certificate, or any course detail
+    Background/profile sharing: "mera background IT ka hai", "main student hun", "main freelancer hun"
+    Asking about additional offerings: "internship dety ho?", "job placement milti hai?", "certificate milta hai?"
+    General interest: "sounds good", "interesting", "theek hai", "achha lagta hai", "ok"
+    Asking about schedule, duration, syllabus, certificate, modules, or any course detail
     Greetings or filler: "salam", "alhamdulillah", "ok", "shukriya", "haan" (alone without context)
-    ANY message that seeks information — even if the person sounds very keen
+    ANY message that contains a question — including questions that sound close to enrollment
+    ANY message that seeks more information before committing
 
-  DEFAULT is false. When in ANY doubt → false. The Closer AI keeps selling until confirmed.
+  THE TEST: ask yourself "Has this person said YES to paying and joining?"
+  If there is any doubt → false. The Closer AI keeps selling until the answer is clearly YES.
 `;
 
 // Build effective handoff triggers dynamically from the tenant's handoffRules toggles.
@@ -407,26 +411,18 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   try {
     qualifierOutput = await runQualifier({ aiConfig, lead, contact, messageHistory, newMessage });
   } catch (err) {
-    // Hard fallback — hand off to human, no Closer call
-    logger.error({ err, leadId: lead.id }, 'Qualifier failed — handing off');
-    return {
-      reply: null,
-      action: 'handoff',
-      handoffReason: `Qualifier AI failed: ${err.message}`,
-      leadStatus: lead.scoreLabel || 'COLD',
-      score: Math.round((lead.aiScore || 0) / 10) || 1,
-      stage: lead.stage,
-      humanFollowupRequired: true,
-      qualifierOutput: null,
-      closerOutput: null,
-      tokensUsed: 0,
-      qualifierTokens: 0,
-      closerTokens: 0,
-      qualifierMs: 0,
-      closerMs: 0,
-      qualifierModel: QUALIFIER_MODEL,
-      closerModel: CLOSER_MODEL,
-      errorReason: err.message,
+    // Qualifier failed — use safe defaults and let the Closer keep selling.
+    // A Qualifier error must NEVER cause a handoff; the lead deserves a reply.
+    logger.error({ err, leadId: lead.id }, 'Qualifier failed — using safe defaults, Closer will handle');
+    qualifierOutput = {
+      lead_status:             lead.scoreLabel || 'WARM',
+      score:                   Math.round((lead.aiScore || 0) / 10) || 5,
+      intent:                  'medium',
+      problem_summary:         'Qualifier unavailable — continuing conversation',
+      next_action:             'continue_qualifying',
+      is_price_objection:      false,
+      is_enrollment_confirmed: false,
+      _tokens: 0, _model: QUALIFIER_MODEL, _ms: 0,
     };
   }
 
