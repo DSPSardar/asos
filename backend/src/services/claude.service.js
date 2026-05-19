@@ -18,7 +18,7 @@ const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
 // ── Model selection (per-agent) ───────────────────────────────────────
 // Qualifier = fast/cheap (analytic). Closer = better copy.
-const QUALIFIER_MODEL = env.QUALIFIER_MODEL || 'claude-haiku-4-5';
+const QUALIFIER_MODEL = env.QUALIFIER_MODEL || 'claude-sonnet-4-6';
 const CLOSER_MODEL    = env.CLOSER_MODEL    || env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022';
 
 // =====================================================================
@@ -449,17 +449,8 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     }
   }
 
-  // Primary gate: enrollment confirmed — Qualifier sets flag AND message must contain
-  // an explicit enrollment phrase (whitelist). Haiku is unreliable for this boolean alone,
-  // so code does a final check. Whitelist = only real confirmations pass.
-  const ENROLLMENT_WHITELIST = /\b(confirm|register\s*kar|enroll|link\s*bhej|book\s*kar|join\s*kart|sign[\s-]*up|seat\s*book|payment\s*kar|main\s*aa\s*raha|main\s*aa\s*rahi|le\s*raha\s*hun|le\s*rahi\s*hun|kardo|kar\s*do\s*register|haan.*register|register.*haan|yes.*join|join.*yes|i.*want.*to.*join|i.*want.*to.*enroll)\b/i;
-
-  if (qualifierOutput.is_enrollment_confirmed && !ENROLLMENT_WHITELIST.test(newMessage)) {
-    logger.info({ leadId: lead.id, msg: newMessage.slice(0, 80) },
-      '🛡 Whitelist gate: Qualifier said confirmed but no enrollment phrase found — keeping AI on');
-    qualifierOutput.is_enrollment_confirmed = false;
-  }
-
+  // Primary gate: Qualifier (claude-sonnet-4-6) decides when enrollment is confirmed.
+  // No hardcoded rules — the model reads the conversation and makes the call.
   const enrollmentConfirmed = !handedBackToAI && qualifierOutput.is_enrollment_confirmed === true;
   const forceHandoff = enrollmentConfirmed || rulesHandoff;
 
