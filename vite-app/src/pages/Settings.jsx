@@ -1255,24 +1255,24 @@ function BillingTab() {
 // TAB 7 — Account (Change Password)
 // ─────────────────────────────────────────────────────────────
 function AccountTab({ showToast }) {
-  const [form, setForm]       = useState({ current: '', next: '', confirm: '' });
-  const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState('');
+  const [form, setForm]     = useState({ next: '', confirm: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (form.next.length < 8) { setError('New password must be at least 8 characters.'); return; }
-    if (form.next !== form.confirm) { setError('New passwords do not match.'); return; }
+    if (form.next.length < 8) { setError('Password must be at least 8 characters.'); return; }
+    if (form.next !== form.confirm) { setError('Passwords do not match.'); return; }
     setSaving(true);
     try {
-      await authAPI.changePassword(form.current, form.next);
-      setForm({ current: '', next: '', confirm: '' });
-      showToast('Password changed ✓');
+      await authAPI.changePassword(form.next);
+      setForm({ next: '', confirm: '' });
+      showToast('Password set ✓');
     } catch (err) {
-      setError(err.message || 'Failed to change password.');
+      setError(err.message || 'Failed to set password.');
     } finally {
       setSaving(false);
     }
@@ -1280,25 +1280,15 @@ function AccountTab({ showToast }) {
 
   return (
     <Section
-      title="Change Password"
-      description="Update your login password. You must know your current password to proceed."
+      title="Set Password"
+      description="Set or update your login password. No current password required."
       footer={
         <PrimaryButton disabled={saving} onClick={handleSubmit}>
-          {saving ? 'Saving…' : 'Update Password'}
+          {saving ? 'Saving…' : 'Set Password'}
         </PrimaryButton>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Field label="Current Password">
-          <input
-            type="password"
-            placeholder="Enter current password"
-            value={form.current}
-            onChange={set('current')}
-            autoComplete="current-password"
-            className="input-dark w-full rounded-lg px-3 py-2 text-sm"
-          />
-        </Field>
         <Field label="New Password" hint="Min 8 characters">
           <input
             type="password"
@@ -1309,7 +1299,7 @@ function AccountTab({ showToast }) {
             className="input-dark w-full rounded-lg px-3 py-2 text-sm"
           />
         </Field>
-        <Field label="Confirm New Password">
+        <Field label="Confirm Password">
           <input
             type="password"
             placeholder="Confirm new password"

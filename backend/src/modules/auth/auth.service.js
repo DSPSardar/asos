@@ -370,4 +370,13 @@ const logout = async (userId) => {
   });
 };
 
-module.exports = { register, login, googleAuth, refresh, logout, saveOrganicPhone };
+const changePassword = async (userId, { newPassword }) => {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+  if (newPassword.length < 8) throw Object.assign(new Error('New password must be at least 8 characters'), { statusCode: 400 });
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  return { changed: true };
+};
+
+module.exports = { register, login, googleAuth, refresh, logout, saveOrganicPhone, changePassword };

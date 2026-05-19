@@ -75,8 +75,9 @@ export const authAPI = {
   googleAuth: (credential) => api.post('/auth/google', { credential }),
   savePhone:  (phone) => api.post('/auth/phone', { phone }),
   refresh:    (refreshToken) => api.post('/auth/refresh', { refreshToken }),
-  logout:     () => api.post('/auth/logout'),
-  me:         () => api.get('/auth/me'),
+  logout:         () => api.post('/auth/logout'),
+  me:             () => api.get('/auth/me'),
+  changePassword: (newPassword) => api.post('/auth/change-password', { newPassword }),
 };
 
 export const leadsAPI = {

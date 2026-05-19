@@ -89,4 +89,15 @@ const savePhone = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, refresh, logout, me, googleAuth, savePhone };
+const changePassword = async (req, res, next) => {
+  try {
+    const { newPassword } = req.body || {};
+    if (!newPassword) {
+      return res.status(400).json({ success: false, message: 'newPassword is required' });
+    }
+    const result = await authService.changePassword(req.user.id, { newPassword });
+    return success(res, result, 'Password changed successfully');
+  } catch (err) { next(err); }
+};
+
+module.exports = { register, login, refresh, logout, me, googleAuth, savePhone, changePassword };
