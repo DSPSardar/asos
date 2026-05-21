@@ -13,6 +13,7 @@ router.post('/refresh',  ctrl.refresh);
 router.post('/logout',   authenticate, ctrl.logout);
 router.post('/phone',           authenticate, ctrl.savePhone);
 router.post('/change-password', authenticate, ctrl.changePassword);
+router.post('/change-email',    authenticate, ctrl.changeEmail);
 router.get('/me',               authenticate, ctrl.me);
 
 module.exports = router;

@@ -375,4 +375,35 @@ const changePassword = async (userId, { newPassword }) => {
   return { changed: true };
 };
 
-module.exports = { register, login, googleAuth, refresh, logout, saveOrganicPhone, changePassword };
+const changeEmail = async (userId, { newEmail, currentPassword }) => {
+  if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+    throw Object.assign(new Error('Please enter a valid email address'), { statusCode: 400, expose: true });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, passwordHash: true },
+  });
+  if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+
+  // Require current password to confirm identity before changing email
+  if (!currentPassword || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    throw Object.assign(new Error('Current password is incorrect'), { statusCode: 401, expose: true });
+  }
+
+  const normalised = newEmail.toLowerCase().trim();
+  if (normalised === user.email.toLowerCase()) {
+    throw Object.assign(new Error('New email is the same as your current email'), { statusCode: 400, expose: true });
+  }
+
+  // Check new email not already taken
+  const taken = await prisma.user.findUnique({ where: { email: normalised } });
+  if (taken) throw Object.assign(new Error('This email address is already in use'), { statusCode: 409, expose: true });
+
+  await prisma.user.update({ where: { id: userId }, data: { email: normalised } });
+
+  logger.info({ userId, newEmail: normalised }, 'User email changed');
+  return { email: normalised };
+};
+
+module.exports = { register, login, googleAuth, refresh, logout, saveOrganicPhone, changePassword, changeEmail };

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@pages/Layout';
 import { settingsAPI, aiConfigAPI, knowledgeGapsAPI, authAPI } from '@lib/api';
+import { useAuthStore } from '@stores/auth.store';
 
 const TABS = [
   { id:'whatsapp',      label:'WhatsApp',         icon:IconWhatsApp,    desc:'Connect your WhatsApp Business number and test the connection.' },
@@ -12,7 +13,7 @@ const TABS = [
   { id:'notifications', label:'Notifications',    icon:IconBell,        desc:'Email and WhatsApp alerts on lead activity.' },
   { id:'integrations',  label:'Integrations',     icon:IconPlug,        desc:'Connect external tools (CRM, Sheets, Slack).' },
   { id:'billing',       label:'Billing & Plan',   icon:IconCard,        desc:'Manage your subscription and view invoices.' },
-  { id:'account',       label:'Account',          icon:IconUser,        desc:'Change your password and manage account security.' },
+  { id:'account',       label:'Account',          icon:IconUser,        desc:'Update your email address, password, and account security.' },
 ];
 
 const DEFAULT_AI_PROMPT = `You are an AI sales assistant for Boulevard Tower REIT — a premium real estate investment opportunity in Islamabad, Pakistan.
@@ -1252,68 +1253,145 @@ function BillingTab() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// TAB 7 — Account (Change Password)
+// TAB 7 — Account (Email + Password)
 // ─────────────────────────────────────────────────────────────
 function AccountTab({ showToast }) {
-  const [form, setForm]     = useState({ next: '', confirm: '' });
-  const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState('');
+  const { user, setAuth, token, refreshToken, tenant } = useAuthStore();
 
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  // ── Email form ──────────────────────────────────────────────
+  const [emailForm, setEmailForm]     = useState({ newEmail: '', currentPassword: '' });
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailError, setEmailError]   = useState('');
 
-  const handleSubmit = async (e) => {
+  const setE = (key) => (e) => setEmailForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const handleEmailSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    if (form.next.length < 8) { setError('Password must be at least 8 characters.'); return; }
-    if (form.next !== form.confirm) { setError('Passwords do not match.'); return; }
-    setSaving(true);
+    setEmailError('');
+    if (!emailForm.newEmail.trim()) { setEmailError('Please enter a new email address.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailForm.newEmail)) { setEmailError('Enter a valid email address.'); return; }
+    if (!emailForm.currentPassword) { setEmailError('Current password is required to change email.'); return; }
+    setEmailSaving(true);
     try {
-      await authAPI.changePassword(form.next);
-      setForm({ next: '', confirm: '' });
-      showToast('Password set ✓');
+      const res = await authAPI.changeEmail(emailForm.newEmail.trim().toLowerCase(), emailForm.currentPassword);
+      const updated = res?.data ?? res;
+      // Update Zustand so the displayed email reflects immediately
+      setAuth({ accessToken: token, refreshToken, user: { ...user, email: updated.email }, tenant });
+      setEmailForm({ newEmail: '', currentPassword: '' });
+      showToast('Email updated ✓');
     } catch (err) {
-      setError(err.message || 'Failed to set password.');
+      setEmailError(err.message || 'Failed to update email.');
     } finally {
-      setSaving(false);
+      setEmailSaving(false);
+    }
+  };
+
+  // ── Password form ───────────────────────────────────────────
+  const [pwForm, setPwForm]     = useState({ next: '', confirm: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError]   = useState('');
+
+  const setP = (key) => (e) => setPwForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const handlePwSubmit = async (e) => {
+    e.preventDefault();
+    setPwError('');
+    if (pwForm.next.length < 8) { setPwError('Password must be at least 8 characters.'); return; }
+    if (pwForm.next !== pwForm.confirm) { setPwError('Passwords do not match.'); return; }
+    setPwSaving(true);
+    try {
+      await authAPI.changePassword(pwForm.next);
+      setPwForm({ next: '', confirm: '' });
+      showToast('Password updated ✓');
+    } catch (err) {
+      setPwError(err.message || 'Failed to update password.');
+    } finally {
+      setPwSaving(false);
     }
   };
 
   return (
-    <Section
-      title="Set Password"
-      description="Set or update your login password. No current password required."
-      footer={
-        <PrimaryButton disabled={saving} onClick={handleSubmit}>
-          {saving ? 'Saving…' : 'Set Password'}
-        </PrimaryButton>
-      }
-    >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <Field label="New Password" hint="Min 8 characters">
-          <input
-            type="password"
-            placeholder="Enter new password"
-            value={form.next}
-            onChange={set('next')}
-            autoComplete="new-password"
-            className="input-dark w-full rounded-lg px-3 py-2 text-sm"
-          />
-        </Field>
-        <Field label="Confirm Password">
-          <input
-            type="password"
-            placeholder="Confirm new password"
-            value={form.confirm}
-            onChange={set('confirm')}
-            autoComplete="new-password"
-            className="input-dark w-full rounded-lg px-3 py-2 text-sm"
-          />
-        </Field>
-        {error && (
-          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</p>
-        )}
-      </form>
-    </Section>
+    <div className="space-y-6">
+      {/* Current email display */}
+      <div className="rounded-xl border border-slate-800/60 bg-surface/40 px-5 py-4">
+        <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Current Email</p>
+        <p className="text-sm font-medium text-slate-100">{user?.email || '—'}</p>
+      </div>
+
+      {/* Update Email */}
+      <Section
+        title="Update Email"
+        description="Change your login email address. Your current password is required to confirm."
+        footer={
+          <PrimaryButton disabled={emailSaving} onClick={handleEmailSubmit}>
+            {emailSaving ? 'Saving…' : 'Update Email'}
+          </PrimaryButton>
+        }
+      >
+        <form onSubmit={handleEmailSubmit} className="space-y-4">
+          <Field label="New Email Address">
+            <input
+              type="email"
+              placeholder="Enter new email"
+              value={emailForm.newEmail}
+              onChange={setE('newEmail')}
+              autoComplete="email"
+              className="input-dark w-full rounded-lg px-3 py-2 text-sm"
+            />
+          </Field>
+          <Field label="Current Password" hint="Required to confirm identity">
+            <input
+              type="password"
+              placeholder="Enter your current password"
+              value={emailForm.currentPassword}
+              onChange={setE('currentPassword')}
+              autoComplete="current-password"
+              className="input-dark w-full rounded-lg px-3 py-2 text-sm"
+            />
+          </Field>
+          {emailError && (
+            <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{emailError}</p>
+          )}
+        </form>
+      </Section>
+
+      {/* Update Password */}
+      <Section
+        title="Update Password"
+        description="Set a new login password. Minimum 8 characters."
+        footer={
+          <PrimaryButton disabled={pwSaving} onClick={handlePwSubmit}>
+            {pwSaving ? 'Saving…' : 'Update Password'}
+          </PrimaryButton>
+        }
+      >
+        <form onSubmit={handlePwSubmit} className="space-y-4">
+          <Field label="New Password" hint="Min 8 characters">
+            <input
+              type="password"
+              placeholder="Enter new password"
+              value={pwForm.next}
+              onChange={setP('next')}
+              autoComplete="new-password"
+              className="input-dark w-full rounded-lg px-3 py-2 text-sm"
+            />
+          </Field>
+          <Field label="Confirm New Password">
+            <input
+              type="password"
+              placeholder="Confirm new password"
+              value={pwForm.confirm}
+              onChange={setP('confirm')}
+              autoComplete="new-password"
+              className="input-dark w-full rounded-lg px-3 py-2 text-sm"
+            />
+          </Field>
+          {pwError && (
+            <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{pwError}</p>
+          )}
+        </form>
+      </Section>
+    </div>
   );
 }
 

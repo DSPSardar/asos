@@ -100,4 +100,12 @@ const changePassword = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { register, login, refresh, logout, me, googleAuth, savePhone, changePassword };
+const changeEmail = async (req, res, next) => {
+  try {
+    const { newEmail, currentPassword } = req.body || {};
+    const result = await authService.changeEmail(req.user.id, { newEmail, currentPassword });
+    return success(res, result, 'Email updated successfully');
+  } catch (err) { next(err); }
+};
+
+module.exports = { register, login, refresh, logout, me, googleAuth, savePhone, changePassword, changeEmail };

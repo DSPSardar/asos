@@ -78,6 +78,7 @@ export const authAPI = {
   logout:         () => api.post('/auth/logout'),
   me:             () => api.get('/auth/me'),
   changePassword: (newPassword) => api.post('/auth/change-password', { newPassword }),
+  changeEmail:    (newEmail, currentPassword) => api.post('/auth/change-email', { newEmail, currentPassword }),
 };
 
 export const leadsAPI = {
