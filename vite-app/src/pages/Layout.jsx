@@ -28,12 +28,15 @@ const ADMIN_NAV = [
   { to: '/admin', label: 'Admin Panel', icon: IconShield },
 ];
 
-/** Read role directly from the JWT — synchronous, no Zustand hydration wait. */
+/** Decode role from JWT synchronously — no Zustand hydration wait. */
 function getRoleFromToken() {
   try {
     const tok = localStorage.getItem('asos_token');
     if (!tok) return null;
-    return JSON.parse(atob(tok.split('.')[1])).role || null;
+    // JWT uses base64url — convert to standard base64 then decode
+    const b64 = tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
+    return JSON.parse(atob(padded)).role || null;
   } catch { return null; }
 }
 

@@ -5,6 +5,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import './index.css';
 
+// AdminPanel is imported eagerly (not lazy) — avoids chunk-load failures on protected route
+import AdminPanelPage from '@pages/AdminPanel';
+
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(e) { return { error: e }; }
@@ -24,29 +27,49 @@ class ErrorBoundary extends React.Component {
 }
 
 // Pages (lazy-loaded for performance)
-const AuthPage       = React.lazy(() => import('@pages/Auth'));
-const DashboardLayout= React.lazy(() => import('@pages/Layout'));
-const DashboardPage  = React.lazy(() => import('@pages/Dashboard'));
-const PipelinePage   = React.lazy(() => import('@pages/Pipeline'));
-const ConversationsPage= React.lazy(() => import('@pages/Conversations'));
-const AIInsightsPage = React.lazy(() => import('@pages/AIInsights'));
-const AdsPage        = React.lazy(() => import('@pages/AdsPerformance'));
-const AnalyticsPage  = React.lazy(() => import('@pages/Analytics'));
-const SettingsPage   = React.lazy(() => import('@pages/Settings'));
-const BillingPage    = React.lazy(() => import('@pages/Billing'));
-const OnboardingPage = React.lazy(() => import('@pages/Onboarding'));
-const StudentsPage   = React.lazy(() => import('@pages/Students'));
-const DSPReportsPage = React.lazy(() => import('@pages/DSPReports'));
-const AutomationsPage= React.lazy(() => import('@pages/Automations'));
-const AdminPanelPage = React.lazy(() => import('@pages/AdminPanel'));
+const AuthPage          = React.lazy(() => import('@pages/Auth'));
+const DashboardLayout   = React.lazy(() => import('@pages/Layout'));
+const DashboardPage     = React.lazy(() => import('@pages/Dashboard'));
+const PipelinePage      = React.lazy(() => import('@pages/Pipeline'));
+const ConversationsPage = React.lazy(() => import('@pages/Conversations'));
+const AIInsightsPage    = React.lazy(() => import('@pages/AIInsights'));
+const AdsPage           = React.lazy(() => import('@pages/AdsPerformance'));
+const AnalyticsPage     = React.lazy(() => import('@pages/Analytics'));
+const SettingsPage      = React.lazy(() => import('@pages/Settings'));
+const BillingPage       = React.lazy(() => import('@pages/Billing'));
+const OnboardingPage    = React.lazy(() => import('@pages/Onboarding'));
+const StudentsPage      = React.lazy(() => import('@pages/Students'));
+const DSPReportsPage    = React.lazy(() => import('@pages/DSPReports'));
+const AutomationsPage   = React.lazy(() => import('@pages/Automations'));
 
-// ── Auth guard ────────────────────────────────────────────────
+// ── Decode JWT role without a library ──────────────────────────
+function getTokenRole() {
+  try {
+    const tok = localStorage.getItem('asos_token');
+    if (!tok) return null;
+    // JWT base64url → standard base64 (add padding, swap chars)
+    const b64 = tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
+    return JSON.parse(atob(padded)).role || null;
+  } catch { return null; }
+}
+
+// ── Auth guard: must be logged in ─────────────────────────────
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('asos_token');
   const isValid = token && token !== 'dev-skip-token' && token.length > 20;
   if (!isValid) {
     localStorage.removeItem('asos_token');
     return <Navigate to="/auth" replace />;
+  }
+  return children;
+};
+
+// ── SuperAdmin guard: must be SUPERADMIN role ──────────────────
+const SuperAdminRoute = ({ children }) => {
+  const role = getTokenRole();
+  if (role !== 'SUPERADMIN') {
+    return <Navigate to="/dashboard" replace />;
   }
   return children;
 };
@@ -63,7 +86,6 @@ const Suspense = ({ children }) => (
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
-// Wrap with GoogleOAuthProvider only if a client ID is configured
 const AppWithAuth = ({ children }) => GOOGLE_CLIENT_ID
   ? <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>{children}</GoogleOAuthProvider>
   : <>{children}</>;
@@ -81,19 +103,23 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           {/* Protected dashboard */}
           <Route path="/" element={<PrivateRoute><DashboardLayout /></PrivateRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard"     element={<DashboardPage />}    />
-            <Route path="leads"         element={<PipelinePage />}     />
-            <Route path="conversations" element={<ConversationsPage />} />
-            <Route path="ai-insights"   element={<AIInsightsPage />}   />
-            <Route path="ads"           element={<AdsPage />}          />
-            <Route path="analytics"     element={<AnalyticsPage />}    />
-            <Route path="settings"      element={<SettingsPage />}     />
-            <Route path="billing"       element={<BillingPage />}      />
-            <Route path="onboarding"    element={<OnboardingPage />}   />
-            <Route path="students"      element={<StudentsPage />}     />
-            <Route path="dsp-reports"   element={<DSPReportsPage />}   />
-            <Route path="automations"   element={<AutomationsPage />}  />
-            <Route path="admin"         element={<AdminPanelPage />}   />
+            <Route path="dashboard"     element={<DashboardPage />}     />
+            <Route path="leads"         element={<PipelinePage />}      />
+            <Route path="conversations" element={<ConversationsPage />}  />
+            <Route path="ai-insights"   element={<AIInsightsPage />}    />
+            <Route path="ads"           element={<AdsPage />}           />
+            <Route path="analytics"     element={<AnalyticsPage />}     />
+            <Route path="settings"      element={<SettingsPage />}      />
+            <Route path="billing"       element={<BillingPage />}       />
+            <Route path="onboarding"    element={<OnboardingPage />}    />
+            <Route path="students"      element={<StudentsPage />}      />
+            <Route path="dsp-reports"   element={<DSPReportsPage />}    />
+            <Route path="automations"   element={<AutomationsPage />}   />
+
+            {/* SuperAdmin only */}
+            <Route path="admin" element={
+              <SuperAdminRoute><AdminPanelPage /></SuperAdminRoute>
+            } />
           </Route>
 
           {/* Catch all */}
