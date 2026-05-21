@@ -107,13 +107,16 @@ export default function Layout() {
           </button>
         </div>
 
-        {/* Primary nav */}
+        {/* Primary nav — SUPERADMIN sees ONLY Platform, regular users see their own sections */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <NavSection label="Workspace" items={NAV} />
-          <NavSection label="DSP — EdTech" items={DSP_NAV} className="mt-6" />
-          <NavSection label="Account" items={SETTINGS_NAV} className="mt-6" />
-          {isSuperAdmin && (
-            <NavSection label="Platform" items={ADMIN_NAV} className="mt-6" />
+          {isSuperAdmin ? (
+            <NavSection label="Platform" items={ADMIN_NAV} />
+          ) : (
+            <>
+              <NavSection label="Workspace" items={NAV} />
+              <NavSection label="DSP — EdTech" items={DSP_NAV} className="mt-6" />
+              <NavSection label="Account" items={SETTINGS_NAV} className="mt-6" />
+            </>
           )}
         </nav>
 

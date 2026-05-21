@@ -65,12 +65,24 @@ const PrivateRoute = ({ children }) => {
   return children;
 };
 
-// ── SuperAdmin guard: must be SUPERADMIN role ──────────────────
+// ── Role-aware default redirect ────────────────────────────────
+// SUPERADMIN has no tenant — must land on /admin, not /dashboard
+const DefaultRedirect = () => {
+  const role = getTokenRole();
+  return <Navigate to={role === 'SUPERADMIN' ? '/admin' : '/dashboard'} replace />;
+};
+
+// ── SuperAdmin guard: only SUPERADMIN may enter ────────────────
 const SuperAdminRoute = ({ children }) => {
   const role = getTokenRole();
-  if (role !== 'SUPERADMIN') {
-    return <Navigate to="/dashboard" replace />;
-  }
+  if (role !== 'SUPERADMIN') return <Navigate to="/dashboard" replace />;
+  return children;
+};
+
+// ── Tenant guard: block SUPERADMIN from tenant-only pages ──────
+const TenantRoute = ({ children }) => {
+  const role = getTokenRole();
+  if (role === 'SUPERADMIN') return <Navigate to="/admin" replace />;
   return children;
 };
 
@@ -100,21 +112,24 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           {/* Auth */}
           <Route path="/auth" element={<AuthPage />} />
 
-          {/* Protected dashboard */}
+          {/* Protected app shell */}
           <Route path="/" element={<PrivateRoute><DashboardLayout /></PrivateRoute>}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard"     element={<DashboardPage />}     />
-            <Route path="leads"         element={<PipelinePage />}      />
-            <Route path="conversations" element={<ConversationsPage />}  />
-            <Route path="ai-insights"   element={<AIInsightsPage />}    />
-            <Route path="ads"           element={<AdsPage />}           />
-            <Route path="analytics"     element={<AnalyticsPage />}     />
-            <Route path="settings"      element={<SettingsPage />}      />
-            <Route path="billing"       element={<BillingPage />}       />
-            <Route path="onboarding"    element={<OnboardingPage />}    />
-            <Route path="students"      element={<StudentsPage />}      />
-            <Route path="dsp-reports"   element={<DSPReportsPage />}    />
-            <Route path="automations"   element={<AutomationsPage />}   />
+            {/* Role-aware default: SUPERADMIN → /admin, everyone else → /dashboard */}
+            <Route index element={<DefaultRedirect />} />
+
+            {/* Tenant-only pages — SUPERADMIN redirected to /admin */}
+            <Route path="dashboard"     element={<TenantRoute><DashboardPage /></TenantRoute>}     />
+            <Route path="leads"         element={<TenantRoute><PipelinePage /></TenantRoute>}      />
+            <Route path="conversations" element={<TenantRoute><ConversationsPage /></TenantRoute>}  />
+            <Route path="ai-insights"   element={<TenantRoute><AIInsightsPage /></TenantRoute>}    />
+            <Route path="ads"           element={<TenantRoute><AdsPage /></TenantRoute>}           />
+            <Route path="analytics"     element={<TenantRoute><AnalyticsPage /></TenantRoute>}     />
+            <Route path="settings"      element={<TenantRoute><SettingsPage /></TenantRoute>}      />
+            <Route path="billing"       element={<TenantRoute><BillingPage /></TenantRoute>}       />
+            <Route path="onboarding"    element={<TenantRoute><OnboardingPage /></TenantRoute>}    />
+            <Route path="students"      element={<TenantRoute><StudentsPage /></TenantRoute>}      />
+            <Route path="dsp-reports"   element={<TenantRoute><DSPReportsPage /></TenantRoute>}    />
+            <Route path="automations"   element={<TenantRoute><AutomationsPage /></TenantRoute>}   />
 
             {/* SuperAdmin only */}
             <Route path="admin" element={
@@ -122,8 +137,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             } />
           </Route>
 
-          {/* Catch all */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Catch all — role-aware */}
+          <Route path="*" element={<DefaultRedirect />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

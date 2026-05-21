@@ -144,7 +144,9 @@ export default function Auth() {
       localStorage.setItem('asos_token', accessToken);
       setAuth({ accessToken, refreshToken, user, tenant });
       setSuccess('Login successful! Redirecting…');
-      setTimeout(() => navigate('/dashboard', { replace: true }), 800);
+      // SUPERADMIN has no tenant — send directly to admin panel
+      const destination = user?.role === 'SUPERADMIN' ? '/admin' : '/dashboard';
+      setTimeout(() => navigate(destination, { replace: true }), 800);
     } catch (err) {
       const msg = err?.message || 'Login failed. Please try again.';
       if (/network|failed to fetch|ECONN|timeout/i.test(msg)) {
