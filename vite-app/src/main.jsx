@@ -38,6 +38,7 @@ const OnboardingPage = React.lazy(() => import('@pages/Onboarding'));
 const StudentsPage   = React.lazy(() => import('@pages/Students'));
 const DSPReportsPage = React.lazy(() => import('@pages/DSPReports'));
 const AutomationsPage= React.lazy(() => import('@pages/Automations'));
+const AdminPanelPage = React.lazy(() => import('@pages/AdminPanel'));
 
 // ── Auth guard ────────────────────────────────────────────────
 const PrivateRoute = ({ children }) => {
@@ -92,6 +93,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="students"      element={<StudentsPage />}     />
             <Route path="dsp-reports"   element={<DSPReportsPage />}   />
             <Route path="automations"   element={<AutomationsPage />}  />
+            <Route path="admin"         element={<AdminPanelPage />}   />
           </Route>
 
           {/* Catch all */}

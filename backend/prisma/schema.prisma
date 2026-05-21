@@ -21,6 +21,7 @@ enum TenantPlan {
 }
 
 enum TenantStatus {
+  PENDING_APPROVAL
   TRIAL
   ACTIVE
   SUSPENDED

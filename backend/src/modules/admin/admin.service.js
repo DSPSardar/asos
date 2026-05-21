@@ -93,4 +93,29 @@ const getPlatformMetrics = async () => {
   };
 };
 
-module.exports = { listTenants, getTenant, updateTenant, getPlatformMetrics };
+// ── Approve a pending tenant ──────────────────────────
+const approveTenant = async (tenantId) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, status: true } });
+  if (!tenant) throw Object.assign(new Error('Tenant not found'), { statusCode: 404, expose: true });
+  if (tenant.status !== 'PENDING_APPROVAL') throw Object.assign(new Error('Tenant is not pending approval'), { statusCode: 400, expose: true });
+
+  return prisma.tenant.update({
+    where: { id: tenantId },
+    data:  { status: 'TRIAL' },
+    include: { users: { select: { email: true } } },
+  });
+};
+
+// ── Reject a pending tenant (suspends it, keeps record for audit) ─
+const rejectTenant = async (tenantId) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, status: true } });
+  if (!tenant) throw Object.assign(new Error('Tenant not found'), { statusCode: 404, expose: true });
+  if (tenant.status !== 'PENDING_APPROVAL') throw Object.assign(new Error('Tenant is not pending approval'), { statusCode: 400, expose: true });
+
+  return prisma.tenant.update({
+    where: { id: tenantId },
+    data:  { status: 'SUSPENDED' },
+  });
+};
+
+module.exports = { listTenants, getTenant, updateTenant, getPlatformMetrics, approveTenant, rejectTenant };

@@ -476,19 +476,30 @@ const deleteLead = async (tenantId, leadId) => {
   const lead = await prisma.lead.findFirst({ where: { id: leadId, tenantId }, select: { id: true } });
   if (!lead) throw Object.assign(new Error('Lead not found'), { statusCode: 404 });
 
-  // Delete in dependency order (child rows first)
-  await prisma.$transaction([
-    prisma.message.deleteMany({
-      where: { conversation: { leadId, tenantId } },
-    }),
-    prisma.aiAgentLog.deleteMany({
-      where: { conversation: { leadId, tenantId } },
-    }),
-    prisma.activity.deleteMany({ where: { leadId, tenantId } }),
-    prisma.adsTracking.deleteMany({ where: { leadId, tenantId } }),
-    prisma.conversation.deleteMany({ where: { leadId, tenantId } }),
-    prisma.lead.delete({ where: { id: leadId } }),
-  ]);
+  // Use interactive transaction so we can resolve conversationIds first.
+  // Array-form $transaction does NOT support nested relation filters in deleteMany.
+  await prisma.$transaction(async (tx) => {
+    // Step 1 — collect conversation IDs for this lead
+    const convs = await tx.conversation.findMany({
+      where: { leadId, tenantId },
+      select: { id: true },
+    });
+    const convIds = convs.map((c) => c.id);
+
+    // Step 2 — delete children of conversations
+    if (convIds.length > 0) {
+      await tx.message.deleteMany({ where: { conversationId: { in: convIds } } });
+      await tx.aiAgentLog.deleteMany({ where: { conversationId: { in: convIds } } });
+    }
+
+    // Step 3 — delete direct lead children
+    await tx.activity.deleteMany({ where: { leadId, tenantId } });
+    await tx.adsTracking.deleteMany({ where: { leadId, tenantId } });
+    await tx.conversation.deleteMany({ where: { leadId, tenantId } });
+
+    // Step 4 — delete the lead itself
+    await tx.lead.delete({ where: { id: leadId } });
+  });
 
   logger.info({ leadId, tenantId }, '🗑 Lead deleted');
   return { deleted: true };

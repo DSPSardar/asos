@@ -74,7 +74,7 @@ const register = async ({ tenantName, tenantSlug, email, password, fullName, pho
         slug: tenantSlug,
         name: tenantName,
         plan: 'FREE',
-        status: 'TRIAL',
+        status: 'PENDING_APPROVAL',   // account awaits superadmin approval before login is permitted
       },
     });
 
@@ -127,30 +127,21 @@ Responda SEMPRE em português brasileiro de forma natural e amigável.`,
     return { tenant, user };
   });
 
-  logger.info({ tenantId: result.tenant.id, email }, 'New tenant registered');
+  logger.info({ tenantId: result.tenant.id, email }, 'New tenant registered — pending approval');
 
-  const accessToken = generateAccessToken(result.user.id, result.tenant.id, result.user.role);
-  const { token: refreshToken, hash } = generateRefreshToken(result.user.id);
-
-  await prisma.user.update({
-    where: { id: result.user.id },
-    data: { refreshTokenHash: hash },
-  });
-
+  // Account is pending approval — do NOT issue tokens yet.
+  // The frontend should show a "awaiting approval" message instead of logging in.
   return {
-    accessToken,
-    refreshToken,
+    pendingApproval: true,
     user: {
       id: result.user.id,
       email: result.user.email,
       fullName: result.user.fullName,
-      role: result.user.role,
     },
     tenant: {
       id: result.tenant.id,
       slug: result.tenant.slug,
       name: result.tenant.name,
-      plan: result.tenant.plan,
     },
   };
 };
@@ -174,6 +165,10 @@ const login = async ({ email, password }) => {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
     throw Object.assign(new Error('Invalid credentials'), { statusCode: 401, expose: true });
+  }
+
+  if (user.tenant?.status === 'PENDING_APPROVAL') {
+    throw Object.assign(new Error('Your account is pending approval. You will be notified once an admin approves your registration.'), { statusCode: 403, expose: true, code: 'PENDING_APPROVAL' });
   }
 
   if (user.tenant?.status === 'SUSPENDED') {
@@ -290,6 +285,7 @@ const googleAuth = async (token) => {
       });
     }
     if (!user.isActive) throw Object.assign(new Error('Account is deactivated'), { statusCode: 403, expose: true });
+    if (user.tenant?.status === 'PENDING_APPROVAL') throw Object.assign(new Error('Your account is pending approval. You will be notified once an admin approves your registration.'), { statusCode: 403, expose: true, code: 'PENDING_APPROVAL' });
     if (user.tenant?.status === 'SUSPENDED') throw Object.assign(new Error('Account suspended. Contact support.'), { statusCode: 403, expose: true });
   } else {
     // New user — create tenant + user in one transaction
@@ -299,7 +295,7 @@ const googleAuth = async (token) => {
 
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
-        data: { slug: tenantSlug, name: fullName || email, plan: 'FREE', status: 'TRIAL' },
+        data: { slug: tenantSlug, name: fullName || email, plan: 'FREE', status: 'PENDING_APPROVAL' },
       });
       const newUser = await tx.user.create({
         data: { tenantId: tenant.id, email, googleId, fullName: fullName || email, avatarUrl, role: 'TENANT_ADMIN' },

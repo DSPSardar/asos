@@ -153,6 +153,8 @@ export default function Auth() {
         setError('Incorrect email or password. Please try again.');
       } else if (/suspended/i.test(msg)) {
         setError('This account has been suspended. Please contact support.');
+      } else if (/pending approval/i.test(msg)) {
+        setError('⏳ Your account is pending approval. You will receive access once an admin reviews your registration.');
       } else {
         setError(msg);
       }
@@ -264,7 +266,14 @@ export default function Auth() {
       }
 
       const payload = res?.data ?? res;
-      const { accessToken, refreshToken, user, tenant } = payload || {};
+      const { accessToken, refreshToken, user, tenant, pendingApproval } = payload || {};
+
+      // New registrations go into PENDING_APPROVAL — no token issued until admin approves
+      if (pendingApproval) {
+        setSuccess('✅ Account registered! Your account is now pending admin approval. You will be able to login once approved.');
+        return;
+      }
+
       if (!accessToken) throw new Error('Registration failed — no token returned.');
       localStorage.setItem('asos_token', accessToken);
       setAuth({ accessToken, refreshToken, user, tenant });

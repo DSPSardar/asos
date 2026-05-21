@@ -202,3 +202,13 @@ export const devAPI = {
   tenants:       () => api.get('/dev/tenants'),
   injectMessage: (data) => api.post('/dev/inject-message', data),
 };
+
+// Superadmin — platform management
+export const adminAPI = {
+  listTenants: (params) => api.get('/admin/tenants', { params }),
+  getTenant:   (id)     => api.get(`/admin/tenants/${id}`),
+  updateTenant:(id, data) => api.patch(`/admin/tenants/${id}`, data),
+  approve:     (id)     => api.post(`/admin/tenants/${id}/approve`),
+  reject:      (id)     => api.post(`/admin/tenants/${id}/reject`),
+  metrics:     ()       => api.get('/admin/metrics'),
+};

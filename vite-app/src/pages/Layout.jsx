@@ -24,6 +24,10 @@ const SETTINGS_NAV = [
   { to: '/onboarding', label: 'Onboarding', icon: IconRocket },
 ];
 
+const ADMIN_NAV = [
+  { to: '/admin', label: 'Admin Panel', icon: IconShield },
+];
+
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -92,6 +96,9 @@ export default function Layout() {
           <NavSection label="Workspace" items={NAV} />
           <NavSection label="DSP — EdTech" items={DSP_NAV} className="mt-6" />
           <NavSection label="Account" items={SETTINGS_NAV} className="mt-6" />
+          {user?.role === 'SUPERADMIN' && (
+            <NavSection label="Platform" items={ADMIN_NAV} className="mt-6" />
+          )}
         </nav>
 
         {/* User menu */}
@@ -214,3 +221,4 @@ function IconClose(p){ return <svg {...svgProps(p)}><path d="M18 6 6 18M6 6l12 1
 function IconGradCap(p){ return <svg {...svgProps(p)}><path d="M22 10v6M2 10l10-5 10 5-10 5-10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>; }
 function IconReport(p){ return <svg {...svgProps(p)}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>; }
 function IconBolt(p){ return <svg {...svgProps(p)}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>; }
+function IconShield(p){ return <svg {...svgProps(p)}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>; }
