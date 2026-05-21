@@ -1,13 +1,15 @@
 // src/main.jsx — Vite app entry point
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { useAuthStore } from '@stores/auth.store';
 import './index.css';
 
-// AdminPanel is imported eagerly (not lazy) — avoids chunk-load failures on protected route
+// AdminPanel is imported eagerly — no lazy chunk to fail
 import AdminPanelPage from '@pages/AdminPanel';
 
+// ── Error boundary ─────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(e) { return { error: e }; }
@@ -26,7 +28,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Pages (lazy-loaded for performance)
+// ── Pages (lazy-loaded) ────────────────────────────────────────
 const AuthPage          = React.lazy(() => import('@pages/Auth'));
 const DashboardLayout   = React.lazy(() => import('@pages/Layout'));
 const DashboardPage     = React.lazy(() => import('@pages/Dashboard'));
@@ -42,50 +44,57 @@ const StudentsPage      = React.lazy(() => import('@pages/Students'));
 const DSPReportsPage    = React.lazy(() => import('@pages/DSPReports'));
 const AutomationsPage   = React.lazy(() => import('@pages/Automations'));
 
-// ── Decode JWT role without a library ──────────────────────────
-function getTokenRole() {
-  try {
-    const tok = localStorage.getItem('asos_token');
-    if (!tok) return null;
-    // JWT base64url → standard base64 (add padding, swap chars)
-    const b64 = tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
-    return JSON.parse(atob(padded)).role || null;
-  } catch { return null; }
+// ── App initializer — calls /auth/me on boot ───────────────────
+// Blocks ALL rendering until the server confirms the user's role.
+// No JWT parsing. No localStorage role sniffing. Database is the source of truth.
+function AuthInitializer({ children }) {
+  const { ready, initAuth } = useAuthStore();
+
+  useEffect(() => {
+    initAuth();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!ready) {
+    return (
+      <div style={{ minHeight:'100vh', background:'#030712', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ width:32, height:32, border:'2px solid rgba(99,102,241,0.3)', borderTopColor:'#6366f1', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  return children;
 }
 
-// ── Auth guard: must be logged in ─────────────────────────────
+// ── Route guards — all use Zustand user.role (server-confirmed) ─
 const PrivateRoute = ({ children }) => {
-  const token = localStorage.getItem('asos_token');
-  const isValid = token && token !== 'dev-skip-token' && token.length > 20;
-  if (!isValid) {
-    localStorage.removeItem('asos_token');
-    return <Navigate to="/auth" replace />;
-  }
+  const { token } = useAuthStore();
+  if (!token) return <Navigate to="/auth" replace />;
   return children;
 };
 
-// ── Role-aware default redirect ────────────────────────────────
-// SUPERADMIN has no tenant — must land on /admin, not /dashboard
+// Sends user to the correct landing page based on server-confirmed role
 const DefaultRedirect = () => {
-  const role = getTokenRole();
-  return <Navigate to={role === 'SUPERADMIN' ? '/admin' : '/dashboard'} replace />;
+  const { user } = useAuthStore();
+  return <Navigate to={user?.role === 'SUPERADMIN' ? '/admin' : '/dashboard'} replace />;
 };
 
-// ── SuperAdmin guard: only SUPERADMIN may enter ────────────────
+// Only SUPERADMIN may access this route
 const SuperAdminRoute = ({ children }) => {
-  const role = getTokenRole();
-  if (role !== 'SUPERADMIN') return <Navigate to="/dashboard" replace />;
+  const { user } = useAuthStore();
+  if (user?.role !== 'SUPERADMIN') return <Navigate to="/dashboard" replace />;
   return children;
 };
 
-// ── Tenant guard: block SUPERADMIN from tenant-only pages ──────
+// Tenant-only routes — SUPERADMIN is redirected away (has no tenant)
 const TenantRoute = ({ children }) => {
-  const role = getTokenRole();
-  if (role === 'SUPERADMIN') return <Navigate to="/admin" replace />;
+  const { user } = useAuthStore();
+  if (user?.role === 'SUPERADMIN') return <Navigate to="/admin" replace />;
   return children;
 };
 
+// ── Suspense wrapper ───────────────────────────────────────────
 const Suspense = ({ children }) => (
   <React.Suspense fallback={
     <div className="min-h-screen bg-bg flex items-center justify-center">
@@ -97,7 +106,6 @@ const Suspense = ({ children }) => (
 );
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-
 const AppWithAuth = ({ children }) => GOOGLE_CLIENT_ID
   ? <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>{children}</GoogleOAuthProvider>
   : <>{children}</>;
@@ -107,40 +115,37 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ErrorBoundary>
     <AppWithAuth>
     <BrowserRouter>
-      <Suspense>
-        <Routes>
-          {/* Auth */}
-          <Route path="/auth" element={<AuthPage />} />
+      {/* AuthInitializer hits /auth/me before rendering anything */}
+      <AuthInitializer>
+        <Suspense>
+          <Routes>
+            <Route path="/auth" element={<AuthPage />} />
 
-          {/* Protected app shell */}
-          <Route path="/" element={<PrivateRoute><DashboardLayout /></PrivateRoute>}>
-            {/* Role-aware default: SUPERADMIN → /admin, everyone else → /dashboard */}
-            <Route index element={<DefaultRedirect />} />
+            <Route path="/" element={<PrivateRoute><DashboardLayout /></PrivateRoute>}>
+              <Route index element={<DefaultRedirect />} />
 
-            {/* Tenant-only pages — SUPERADMIN redirected to /admin */}
-            <Route path="dashboard"     element={<TenantRoute><DashboardPage /></TenantRoute>}     />
-            <Route path="leads"         element={<TenantRoute><PipelinePage /></TenantRoute>}      />
-            <Route path="conversations" element={<TenantRoute><ConversationsPage /></TenantRoute>}  />
-            <Route path="ai-insights"   element={<TenantRoute><AIInsightsPage /></TenantRoute>}    />
-            <Route path="ads"           element={<TenantRoute><AdsPage /></TenantRoute>}           />
-            <Route path="analytics"     element={<TenantRoute><AnalyticsPage /></TenantRoute>}     />
-            <Route path="settings"      element={<TenantRoute><SettingsPage /></TenantRoute>}      />
-            <Route path="billing"       element={<TenantRoute><BillingPage /></TenantRoute>}       />
-            <Route path="onboarding"    element={<TenantRoute><OnboardingPage /></TenantRoute>}    />
-            <Route path="students"      element={<TenantRoute><StudentsPage /></TenantRoute>}      />
-            <Route path="dsp-reports"   element={<TenantRoute><DSPReportsPage /></TenantRoute>}    />
-            <Route path="automations"   element={<TenantRoute><AutomationsPage /></TenantRoute>}   />
+              {/* Tenant pages — SUPERADMIN cannot enter */}
+              <Route path="dashboard"     element={<TenantRoute><DashboardPage /></TenantRoute>}      />
+              <Route path="leads"         element={<TenantRoute><PipelinePage /></TenantRoute>}       />
+              <Route path="conversations" element={<TenantRoute><ConversationsPage /></TenantRoute>}  />
+              <Route path="ai-insights"   element={<TenantRoute><AIInsightsPage /></TenantRoute>}     />
+              <Route path="ads"           element={<TenantRoute><AdsPage /></TenantRoute>}            />
+              <Route path="analytics"     element={<TenantRoute><AnalyticsPage /></TenantRoute>}      />
+              <Route path="settings"      element={<TenantRoute><SettingsPage /></TenantRoute>}       />
+              <Route path="billing"       element={<TenantRoute><BillingPage /></TenantRoute>}        />
+              <Route path="onboarding"    element={<TenantRoute><OnboardingPage /></TenantRoute>}     />
+              <Route path="students"      element={<TenantRoute><StudentsPage /></TenantRoute>}       />
+              <Route path="dsp-reports"   element={<TenantRoute><DSPReportsPage /></TenantRoute>}     />
+              <Route path="automations"   element={<TenantRoute><AutomationsPage /></TenantRoute>}    />
 
-            {/* SuperAdmin only */}
-            <Route path="admin" element={
-              <SuperAdminRoute><AdminPanelPage /></SuperAdminRoute>
-            } />
-          </Route>
+              {/* SUPERADMIN only */}
+              <Route path="admin" element={<SuperAdminRoute><AdminPanelPage /></SuperAdminRoute>} />
+            </Route>
 
-          {/* Catch all — role-aware */}
-          <Route path="*" element={<DefaultRedirect />} />
-        </Routes>
-      </Suspense>
+            <Route path="*" element={<DefaultRedirect />} />
+          </Routes>
+        </Suspense>
+      </AuthInitializer>
     </BrowserRouter>
     </AppWithAuth>
     </ErrorBoundary>

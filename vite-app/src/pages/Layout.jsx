@@ -28,18 +28,6 @@ const ADMIN_NAV = [
   { to: '/admin', label: 'Admin Panel', icon: IconShield },
 ];
 
-/** Decode role from JWT synchronously — no Zustand hydration wait. */
-function getRoleFromToken() {
-  try {
-    const tok = localStorage.getItem('asos_token');
-    if (!tok) return null;
-    // JWT uses base64url — convert to standard base64 then decode
-    const b64 = tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
-    return JSON.parse(atob(padded)).role || null;
-  } catch { return null; }
-}
-
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,9 +35,9 @@ export default function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Use JWT role as source of truth (synchronous), fall back to Zustand store
-  const role = user?.role || getRoleFromToken();
-  const isSuperAdmin = role === 'SUPERADMIN';
+  // Role is always server-confirmed — AuthInitializer in main.jsx called /auth/me
+  // before this component ever mounted. No JWT parsing needed here.
+  const isSuperAdmin = user?.role === 'SUPERADMIN';
 
   // Close drawer when route changes (mobile nav tap)
   useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
