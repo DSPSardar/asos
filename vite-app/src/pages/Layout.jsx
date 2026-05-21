@@ -55,7 +55,7 @@ export default function Layout() {
     navigate('/auth', { replace: true });
   };
 
-  const initials = (user?.name || user?.email || 'U')
+  const initials = (user?.fullName || user?.email || 'U')
     .split(/[\s@]/)[0]
     .slice(0, 2)
     .toUpperCase();
@@ -118,7 +118,7 @@ export default function Layout() {
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{user?.name || user?.email || 'Account'}</div>
+              <div className="truncate text-sm font-medium">{user?.fullName || user?.email || 'Account'}</div>
               <div className="truncate text-xs text-slate-500">{tenant?.name || tenant?.slug || 'Boulevard Tower REIT'}</div>
             </div>
             <IconChevron className={`h-4 w-4 text-slate-500 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
