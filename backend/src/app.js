@@ -1,6 +1,9 @@
 // src/app.js
 // Express application factory
 
+// Prisma _count fields can return BigInt — patch before any JSON serialisation
+BigInt.prototype.toJSON = function () { return Number(this); };
+
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
