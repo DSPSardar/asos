@@ -142,7 +142,8 @@ services:
       - ./vite-app/dist:/var/www/spa:ro     # Built React SPA (built by deploy/update.sh)
       - uploads_data:/var/www/uploads:ro    # Generated images — served directly by nginx
     depends_on:
-      - api
+      api:
+        condition: service_healthy           # Wait until API passes its health check
     networks:
       - asos_external
 
