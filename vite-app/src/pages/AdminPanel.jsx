@@ -239,7 +239,7 @@ export default function AdminPanel() {
   const [total, setTotal]       = useState(0);
   const [metrics, setMetrics]   = useState(null);
   const [loading, setLoading]   = useState(true);
-  const [filter, setFilter]     = useState('PENDING_APPROVAL');
+  const [filter, setFilter]     = useState('');
   const [search, setSearch]     = useState('');
   const [toast, setToast]       = useState('');
   const [acting, setActing]     = useState(null);
