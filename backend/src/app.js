@@ -73,11 +73,13 @@ const createApp = () => {
     message: { success: false, message: 'Too many requests, please try again later.' },
   }));
 
-  // ── Strict rate limit for auth
-  app.use('/api/v1/auth', rateLimit({
+  // ── Strict rate limit only for login/register/password-reset (brute-force targets)
+  // /auth/me and /auth/refresh are excluded — they fire on every page load
+  const strictAuthPaths = ['/api/v1/auth/login', '/api/v1/auth/register', '/api/v1/auth/google'];
+  app.use(strictAuthPaths, rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 20,
-    message: { success: false, message: 'Too many auth attempts.' },
+    message: { success: false, message: 'Too many auth attempts, please try again later.' },
   }));
 
   // ── Serve uploaded files (content images, reports, etc.)
