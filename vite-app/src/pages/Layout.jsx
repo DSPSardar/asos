@@ -28,12 +28,25 @@ const ADMIN_NAV = [
   { to: '/admin', label: 'Admin Panel', icon: IconShield },
 ];
 
+/** Read role directly from the JWT — synchronous, no Zustand hydration wait. */
+function getRoleFromToken() {
+  try {
+    const tok = localStorage.getItem('asos_token');
+    if (!tok) return null;
+    return JSON.parse(atob(tok.split('.')[1])).role || null;
+  } catch { return null; }
+}
+
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, tenant, logout } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Use JWT role as source of truth (synchronous), fall back to Zustand store
+  const role = user?.role || getRoleFromToken();
+  const isSuperAdmin = role === 'SUPERADMIN';
 
   // Close drawer when route changes (mobile nav tap)
   useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
@@ -96,7 +109,7 @@ export default function Layout() {
           <NavSection label="Workspace" items={NAV} />
           <NavSection label="DSP — EdTech" items={DSP_NAV} className="mt-6" />
           <NavSection label="Account" items={SETTINGS_NAV} className="mt-6" />
-          {user?.role === 'SUPERADMIN' && (
+          {isSuperAdmin && (
             <NavSection label="Platform" items={ADMIN_NAV} className="mt-6" />
           )}
         </nav>
