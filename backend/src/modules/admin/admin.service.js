@@ -1,7 +1,8 @@
 // src/modules/admin/admin.service.js
 // Superadmin only — platform-wide management
 
-const prisma = require('../../config/database');
+const prisma  = require('../../config/database');
+const bcrypt  = require('bcryptjs');
 
 const listTenants = async ({ search, plan, status, page = 1, limit = 20 }) => {
   const where = {
@@ -22,8 +23,9 @@ const listTenants = async ({ search, plan, status, page = 1, limit = 20 }) => {
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
-        _count: { select: { users: true, leads: true, contacts: true } },
+        _count:       { select: { users: true, leads: true, contacts: true } },
         subscription: { select: { plan: true, status: true, aiTokensUsed: true, aiTokensLimit: true } },
+        users:        { where: { role: 'TENANT_ADMIN' }, select: { id: true, email: true, fullName: true }, take: 1 },
       },
     }),
     prisma.tenant.count({ where }),
@@ -118,4 +120,63 @@ const rejectTenant = async (tenantId) => {
   });
 };
 
-module.exports = { listTenants, getTenant, updateTenant, getPlatformMetrics, approveTenant, rejectTenant };
+// ── Update tenant admin user (email, name, password) ──────────
+const updateTenantAdmin = async (tenantId, { fullName, email, newPassword }) => {
+  const adminUser = await prisma.user.findFirst({
+    where: { tenantId, role: 'TENANT_ADMIN' },
+    select: { id: true, email: true },
+  });
+  if (!adminUser) throw Object.assign(new Error('Admin user not found for this tenant'), { statusCode: 404, expose: true });
+
+  const data = {};
+  if (fullName?.trim()) data.fullName = fullName.trim();
+
+  if (email?.trim()) {
+    const normalised = email.trim().toLowerCase();
+    const taken = await prisma.user.findUnique({ where: { email: normalised } });
+    if (taken && taken.id !== adminUser.id) {
+      throw Object.assign(new Error('Email is already in use by another account'), { statusCode: 409, expose: true });
+    }
+    data.email = normalised;
+  }
+
+  if (newPassword?.trim()) {
+    if (newPassword.length < 8) throw Object.assign(new Error('Password must be at least 8 characters'), { statusCode: 400, expose: true });
+    data.passwordHash = await bcrypt.hash(newPassword, 12);
+  }
+
+  if (Object.keys(data).length === 0) {
+    throw Object.assign(new Error('No fields to update'), { statusCode: 400, expose: true });
+  }
+
+  const updated = await prisma.user.update({ where: { id: adminUser.id }, data });
+  return { id: updated.id, email: updated.email, fullName: updated.fullName };
+};
+
+// ── Delete tenant + all associated data ───────────────────────
+const deleteTenant = async (tenantId) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, name: true } });
+  if (!tenant) throw Object.assign(new Error('Tenant not found'), { statusCode: 404, expose: true });
+
+  await prisma.$transaction(async (tx) => {
+    // Conversations have child records — delete those first
+    const convIds = (await tx.conversation.findMany({ where: { tenantId }, select: { id: true } })).map(c => c.id);
+    if (convIds.length > 0) {
+      await tx.message.deleteMany({ where: { conversationId: { in: convIds } } });
+      await tx.aiAgentLog.deleteMany({ where: { conversationId: { in: convIds } } });
+    }
+    await tx.activity.deleteMany({ where: { tenantId } });
+    await tx.adsTracking.deleteMany({ where: { tenantId } });
+    await tx.conversation.deleteMany({ where: { tenantId } });
+    await tx.lead.deleteMany({ where: { tenantId } });
+    await tx.contact.deleteMany({ where: { tenantId } });
+    await tx.aiConfig.deleteMany({ where: { tenantId } });
+    await tx.subscription.deleteMany({ where: { tenantId } });
+    await tx.user.deleteMany({ where: { tenantId } });
+    await tx.tenant.delete({ where: { id: tenantId } });
+  });
+
+  return { deleted: true, name: tenant.name };
+};
+
+module.exports = { listTenants, getTenant, updateTenant, getPlatformMetrics, approveTenant, rejectTenant, updateTenantAdmin, deleteTenant };

@@ -211,5 +211,7 @@ export const adminAPI = {
   updateTenant:(id, data) => api.patch(`/admin/tenants/${id}`, data),
   approve:     (id)     => api.post(`/admin/tenants/${id}/approve`),
   reject:      (id)     => api.post(`/admin/tenants/${id}/reject`),
+  updateAdmin: (id, data) => api.put(`/admin/tenants/${id}/admin`, data),
+  deleteAccount:(id)    => api.delete(`/admin/tenants/${id}`),
   metrics:     ()       => api.get('/admin/metrics'),
 };

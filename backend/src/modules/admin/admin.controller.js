@@ -29,4 +29,18 @@ const reject = async (req, res, next) => {
   } catch(e){ next(e); }
 };
 
-module.exports = { list, getOne, update, metrics, approve, reject };
+const updateAdmin = async (req, res, next) => {
+  try {
+    const result = await svc.updateTenantAdmin(req.params.id, req.body);
+    return success(res, result, 'Admin account updated');
+  } catch(e){ next(e); }
+};
+
+const deleteAccount = async (req, res, next) => {
+  try {
+    const result = await svc.deleteTenant(req.params.id);
+    return success(res, result, `Account "${result.name}" and all data deleted`);
+  } catch(e){ next(e); }
+};
+
+module.exports = { list, getOne, update, metrics, approve, reject, updateAdmin, deleteAccount };
