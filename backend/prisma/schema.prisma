@@ -135,6 +135,7 @@ model Tenant {
   // Meta Ads / Conversions API
   metaPixelId       String?    @map("meta_pixel_id")
   metaAccessToken   String?    @map("meta_access_token")
+  metaAdAccountId   String?    @map("meta_ad_account_id")
 
   // Stripe billing
   stripeCustomerId  String?    @map("stripe_customer_id")

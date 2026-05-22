@@ -14,5 +14,7 @@ router.put('/whatsapp',          ctrl.updateWA);
 router.post('/whatsapp/verify',  ctrl.verifyWA);
 router.post('/whatsapp/test',    ctrl.testWA);
 router.put('/meta',              ctrl.updateMeta);
+router.post('/meta/verify',      ctrl.verifyMetaAds);
+router.post('/meta/test',        ctrl.testMetaAds);
 
 module.exports = router;

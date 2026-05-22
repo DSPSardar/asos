@@ -8,6 +8,7 @@ import { useAuthStore } from '@stores/auth.store';
 
 const TABS = [
   { id:'whatsapp',      label:'WhatsApp',         icon:IconWhatsApp,    desc:'Connect your WhatsApp Business number and test the connection.' },
+  { id:'metaads',       label:'Meta Ads',         icon:IconMeta,        desc:'Connect Meta Marketing API to manage campaigns and pull live performance data.' },
   { id:'ai',            label:'AI Configuration', icon:IconSparkles,    desc:'System prompt, model selection, and AI→human handoff rules.' },
   { id:'team',          label:'Team',             icon:IconTeam,        desc:'Invite teammates and manage roles.' },
   { id:'notifications', label:'Notifications',    icon:IconBell,        desc:'Email and WhatsApp alerts on lead activity.' },
@@ -111,6 +112,7 @@ export default function Settings() {
         {/* Right content panel */}
         <div className="min-w-0 flex-1 space-y-6">
           {tab === 'whatsapp'      && <WhatsAppTab      showToast={showToast} />}
+          {tab === 'metaads'       && <MetaAdsTab       showToast={showToast} />}
           {tab === 'ai'            && <AITab            showToast={showToast} />}
           {tab === 'team'          && <TeamTab          onSave={() => showToast('Team updated ✓')} />}
           {tab === 'notifications' && <NotificationsTab />}
@@ -497,7 +499,235 @@ function WhatsAppTab({ showToast }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// TAB 2 — AI Configuration  (live DB-backed)
+// TAB 2 — Meta Ads
+// ─────────────────────────────────────────────────────────────
+function MetaAdsTab({ showToast }) {
+  const [loading,       setLoading]      = useState(true);
+  const [saving,        setSaving]       = useState(false);
+  const [verifying,     setVerifying]    = useState(false);
+  const [testing,       setTesting]      = useState(false);
+  const [revealToken,   setRevealToken]  = useState(false);
+  const [tokenSaved,    setTokenSaved]   = useState(false);
+  const [verifyResult,  setVerifyResult] = useState(null);
+  const [testResult,    setTestResult]   = useState(null);
+
+  const [metaAccessToken,  setMetaAccessToken]  = useState('');
+  const [metaAdAccountId,  setMetaAdAccountId]  = useState('');
+  const [metaPixelId,      setMetaPixelId]      = useState('');
+
+  useEffect(() => {
+    settingsAPI.get()
+      .then((data) => {
+        const d = data?.data ?? data;
+        setMetaAdAccountId(d?.metaAdAccountId || '');
+        setMetaPixelId(d?.metaPixelId || '');
+        setTokenSaved(d?.metaTokenSaved ?? false);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setVerifyResult(null);
+    setTestResult(null);
+    try {
+      const payload = {};
+      if (metaAccessToken.trim())  payload.metaAccessToken = metaAccessToken.trim();
+      if (metaAdAccountId.trim())  payload.metaAdAccountId = metaAdAccountId.trim();
+      if (metaPixelId.trim())      payload.metaPixelId     = metaPixelId.trim();
+      await settingsAPI.updateMeta(payload);
+      if (payload.metaAccessToken) setTokenSaved(true);
+      setMetaAccessToken('');
+      showToast('Meta Ads settings saved ✓');
+    } catch (err) {
+      showToast(`Save failed: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    setVerifying(true);
+    setVerifyResult(null);
+    try {
+      const res = await settingsAPI.verifyMetaAds();
+      const d = res?.data ?? res;
+      setVerifyResult(d);
+      if (d?.ok) showToast('Meta Ads connection verified ✓');
+    } catch (err) {
+      setVerifyResult({ ok: false, error: err.response?.data?.message || err.message });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await settingsAPI.testMetaAds();
+      const d = res?.data ?? res;
+      setTestResult({ ok: true, campaigns: d.campaigns || [], total: d.total || 0 });
+    } catch (err) {
+      setTestResult({ ok: false, error: err.response?.data?.message || err.message });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const isConnected = tokenSaved && !!metaAdAccountId;
+
+  if (loading) return <div className="py-12 text-center text-sm text-slate-500">Loading settings…</div>;
+
+  return (
+    <>
+      <Section
+        title="Meta Ads Connection"
+        description="Connected via Meta Marketing API (App ID: 1289869725962804). Use the same system user token from your DSPUSER."
+        footer={
+          <>
+            <SecondaryButton onClick={handleVerify} disabled={verifying || !tokenSaved}>
+              {verifying ? 'Verifying…' : 'Verify Connection'}
+            </SecondaryButton>
+            <PrimaryButton onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</PrimaryButton>
+          </>
+        }
+      >
+        {/* Status banner */}
+        <div className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${
+          isConnected ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/10'
+        }`}>
+          <span className="relative mt-0.5 flex h-2.5 w-2.5 shrink-0">
+            {isConnected && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
+            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className={`text-sm font-semibold ${isConnected ? 'text-emerald-300' : 'text-amber-300'}`}>
+              {isConnected ? 'Connected — Meta Marketing API active' : 'Not configured — paste credentials below'}
+            </div>
+            {isConnected && metaAdAccountId && (
+              <div className="text-xs tabular-nums text-emerald-300/70 mt-0.5">Ad Account: {metaAdAccountId}</div>
+            )}
+            {!tokenSaved && (
+              <div className="text-xs text-amber-300/70 mt-0.5">No access token saved — generate one from DSPUSER in Meta Business Manager</div>
+            )}
+          </div>
+        </div>
+
+        {/* Verify result */}
+        {verifyResult && (
+          <div className={`rounded-lg border px-4 py-3 text-xs space-y-1 ${
+            verifyResult.ok
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+              : 'border-red-500/30 bg-red-500/10 text-red-300'
+          }`}>
+            {verifyResult.ok ? (
+              <>
+                <div className="font-semibold">✅ Meta confirmed the token</div>
+                <div>User: <span className="font-medium">{verifyResult.userName}</span> (ID: {verifyResult.userId})</div>
+                {verifyResult.adAccount && (
+                  <>
+                    <div>Ad Account: <span className="font-medium">{verifyResult.adAccount.name}</span> · {verifyResult.adAccount.status}</div>
+                    <div>Currency: {verifyResult.adAccount.currency} · Total Spent: {verifyResult.adAccount.amountSpent}</div>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="font-semibold">❌ Verification failed</div>
+                <div>{verifyResult.error}</div>
+                {verifyResult.code && <div className="text-red-400/70">Meta error code: {verifyResult.code}</div>}
+              </>
+            )}
+          </div>
+        )}
+
+        <Field label="Access Token" hint={tokenSaved ? 'Token saved — paste to replace' : 'Generate from Meta Business Manager → System Users → DSPUSER → Generate new token'}>
+          <div className="relative">
+            <input
+              type={revealToken ? 'text' : 'password'}
+              value={metaAccessToken}
+              onChange={(e) => setMetaAccessToken(e.target.value)}
+              placeholder={tokenSaved ? '●●●●●●●● (saved — paste to replace)' : 'EAAGm0PX… (paste system user token)'}
+              className="input-dark w-full rounded-lg px-3 py-2 pr-20 text-sm tabular-nums"
+            />
+            <button
+              type="button"
+              onClick={() => setRevealToken((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-[10px] font-medium text-accent transition-colors hover:bg-accent/10"
+            >
+              {revealToken ? 'Hide' : 'Show'}
+            </button>
+          </div>
+        </Field>
+
+        <Field label="Ad Account ID" hint="From Meta Ads Manager — format: act_2793779734331423 or just the number">
+          <input
+            value={metaAdAccountId}
+            onChange={(e) => setMetaAdAccountId(e.target.value)}
+            placeholder="act_2793779734331423"
+            className="input-dark w-full rounded-lg px-3 py-2 text-sm tabular-nums"
+          />
+        </Field>
+
+        <Field label="Pixel ID" hint="From Meta Events Manager — used for Conversions API (CAPI) attribution">
+          <input
+            value={metaPixelId}
+            onChange={(e) => setMetaPixelId(e.target.value)}
+            placeholder="e.g. 1234567890123456"
+            className="input-dark w-full rounded-lg px-3 py-2 text-sm tabular-nums"
+          />
+        </Field>
+      </Section>
+
+      {/* Test connection — fetch live campaigns */}
+      <Section
+        title="Fetch Live Campaigns"
+        description="Pulls your active campaigns from Meta to confirm the API is working end-to-end."
+      >
+        <PrimaryButton onClick={handleTest} disabled={testing || !tokenSaved}>
+          {testing ? 'Fetching…' : 'Fetch Campaigns'}
+        </PrimaryButton>
+
+        {testResult && (
+          <div className={`mt-3 rounded-lg border px-4 py-3 text-xs space-y-2 ${
+            testResult.ok
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+              : 'border-red-500/30 bg-red-500/10 text-red-300'
+          }`}>
+            {testResult.ok ? (
+              <>
+                <div className="font-semibold">✅ {testResult.total} campaign{testResult.total !== 1 ? 's' : ''} found in your ad account</div>
+                {testResult.campaigns.map((c) => (
+                  <div key={c.id} className="flex items-center gap-2">
+                    <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                      c.effective_status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-500/20 text-slate-400'
+                    }`}>{c.effective_status}</span>
+                    <span>{c.name}</span>
+                  </div>
+                ))}
+                {testResult.total === 0 && <div className="text-emerald-300/70">No campaigns found — the connection works but your ad account has no campaigns yet.</div>}
+              </>
+            ) : (
+              <>
+                <div className="font-semibold">❌ Failed to fetch campaigns</div>
+                <div>{testResult.error}</div>
+              </>
+            )}
+          </div>
+        )}
+
+        {!tokenSaved && (
+          <p className="text-[11px] text-amber-400/70">⚠ Save your access token first before testing.</p>
+        )}
+      </Section>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAB 3 — AI Configuration  (live DB-backed)
 // ─────────────────────────────────────────────────────────────
 const DEFAULT_RULES = { payment: true, unanswered: true, legal: true, hotProposal: false };
 
@@ -1417,6 +1647,7 @@ function Toast({ text }) {
 // ─────────────────────────────────────────────────────────────
 function svgProps(p) { return { fill:'none', stroke:'currentColor', strokeWidth:1.75, strokeLinecap:'round', strokeLinejoin:'round', viewBox:'0 0 24 24', ...p }; }
 function IconWhatsApp(p) { return <svg {...svgProps(p)}><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12Z"/></svg>; }
+function IconMeta(p) { return <svg {...svgProps(p)} viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>; }
 function IconSparkles(p) { return <svg {...svgProps(p)}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>; }
 function IconTeam(p)     { return <svg {...svgProps(p)}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>; }
 function IconBell(p)     { return <svg {...svgProps(p)}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>; }

@@ -8,6 +8,8 @@ const update      = async (req, res, next) => { try { return success(res, await 
 const updateWA    = async (req, res, next) => { try { return success(res, await svc.updateWhatsApp(req.tenantId, req.body), 'WhatsApp updated'); } catch(e){next(e);} };
 const verifyWA    = async (req, res, next) => { try { return success(res, await svc.verifyWhatsApp(req.tenant)); } catch(e){next(e);} };
 const testWA      = async (req, res, next) => { try { return success(res, await svc.testWhatsApp(req.tenant, req.body.testPhone)); } catch(e){next(e);} };
-const updateMeta  = async (req, res, next) => { try { return success(res, await svc.updateMeta(req.tenantId, req.body), 'Meta settings updated'); } catch(e){next(e);} };
+const updateMeta     = async (req, res, next) => { try { return success(res, await svc.updateMeta(req.tenantId, req.body), 'Meta settings updated'); } catch(e){next(e);} };
+const verifyMetaAds  = async (req, res, next) => { try { return success(res, await svc.verifyMetaAds(req.tenant)); } catch(e){next(e);} };
+const testMetaAds    = async (req, res, next) => { try { return success(res, await svc.testMetaAds(req.tenant)); } catch(e){next(e);} };
 
-module.exports = { get, update, updateWA, verifyWA, testWA, updateMeta };
+module.exports = { get, update, updateWA, verifyWA, testWA, updateMeta, verifyMetaAds, testMetaAds };

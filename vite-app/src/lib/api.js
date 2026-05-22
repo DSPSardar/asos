@@ -182,12 +182,14 @@ export const knowledgeGapsAPI = {
 };
 
 export const settingsAPI = {
-  get:          () => api.get('/settings'),
-  update:       (data) => api.put('/settings', data),
-  updateWA:     (data) => api.put('/settings/whatsapp', data),
-  verifyWA:     () => api.post('/settings/whatsapp/verify'),
-  testWA:       (testPhone) => api.post('/settings/whatsapp/test', { testPhone }),
-  updateMeta:   (data) => api.put('/settings/meta', data),
+  get:             () => api.get('/settings'),
+  update:          (data) => api.put('/settings', data),
+  updateWA:        (data) => api.put('/settings/whatsapp', data),
+  verifyWA:        () => api.post('/settings/whatsapp/verify'),
+  testWA:          (testPhone) => api.post('/settings/whatsapp/test', { testPhone }),
+  updateMeta:      (data) => api.put('/settings/meta', data),
+  verifyMetaAds:   () => api.post('/settings/meta/verify'),
+  testMetaAds:     () => api.post('/settings/meta/test'),
 };
 
 export const usersAPI = {

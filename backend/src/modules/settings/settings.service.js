@@ -1,9 +1,11 @@
 // src/modules/settings/settings.service.js
 
 const prisma = require('../../config/database');
-const { encrypt } = require('../../utils/crypto');
+const { encrypt, decrypt } = require('../../utils/crypto');
 const whatsappService = require('../../services/whatsapp.service');
 const logger = require('../../utils/logger');
+
+const META_GRAPH = 'https://graph.facebook.com/v21.0';
 
 const getSettings = async (tenantId) => {
   const tenant = await prisma.tenant.findUnique({
@@ -13,6 +15,8 @@ const getSettings = async (tenantId) => {
       waPhoneId: true,
       waAccessToken: true,   // needed for mock detection (masked below)
       metaPixelId: true,
+      metaAccessToken: true, // masked below
+      metaAdAccountId: true,
       settings: true,
       createdAt: true,
     },
@@ -25,9 +29,11 @@ const getSettings = async (tenantId) => {
 
   return {
     ...tenant,
-    waAccessToken: undefined,        // never send raw token to frontend
-    waTokenSaved:  !!tenant.waAccessToken,
-    mockMode:      mock,
+    waAccessToken:    undefined,   // never send raw token to frontend
+    metaAccessToken:  undefined,   // never send raw token to frontend
+    waTokenSaved:     !!tenant.waAccessToken,
+    metaTokenSaved:   !!tenant.metaAccessToken,
+    mockMode:         mock,
   };
 };
 
@@ -99,16 +105,86 @@ const testWhatsApp = async (tenant, testPhone) => {
   }
 };
 
-const updateMeta = async (tenantId, { metaPixelId, metaAccessToken }) => {
+const updateMeta = async (tenantId, { metaPixelId, metaAccessToken, metaAdAccountId }) => {
   const data = {};
-  if (metaPixelId)     data.metaPixelId     = metaPixelId;
-  if (metaAccessToken) data.metaAccessToken = encrypt(metaAccessToken);
+  if (metaPixelId)       data.metaPixelId       = metaPixelId;
+  if (metaAccessToken)   data.metaAccessToken   = encrypt(metaAccessToken);
+  if (metaAdAccountId !== undefined) data.metaAdAccountId = metaAdAccountId || null;
 
   return prisma.tenant.update({
     where: { id: tenantId },
     data,
-    select: { id: true, metaPixelId: true, updatedAt: true },
+    select: { id: true, metaPixelId: true, metaAdAccountId: true, updatedAt: true },
   });
 };
 
-module.exports = { getSettings, updateSettings, updateWhatsApp, verifyWhatsApp, testWhatsApp, updateMeta };
+// ── Verify Meta Ads credentials ────────────────────────────────
+const verifyMetaAds = async (tenant) => {
+  const fullTenant = await prisma.tenant.findUnique({
+    where: { id: tenant.id },
+    select: { metaAccessToken: true, metaAdAccountId: true },
+  });
+
+  if (!fullTenant?.metaAccessToken) {
+    return { ok: false, error: 'No Meta access token saved — paste one below and save first' };
+  }
+
+  const token = decrypt(fullTenant.metaAccessToken);
+
+  // Verify token by calling /me
+  const meRes  = await fetch(`${META_GRAPH}/me?access_token=${token}`);
+  const meData = await meRes.json();
+
+  if (meData.error) {
+    return { ok: false, error: meData.error.message, code: meData.error.code };
+  }
+
+  // Verify ad account if saved
+  let adAccount = null;
+  if (fullTenant.metaAdAccountId) {
+    const acctId  = fullTenant.metaAdAccountId.startsWith('act_') ? fullTenant.metaAdAccountId : `act_${fullTenant.metaAdAccountId}`;
+    const acctRes = await fetch(`${META_GRAPH}/${acctId}?fields=name,account_status,currency,amount_spent&access_token=${token}`);
+    const acctData = await acctRes.json();
+    if (!acctData.error) {
+      adAccount = {
+        id: acctData.id,
+        name: acctData.name,
+        status: acctData.account_status === 1 ? 'ACTIVE' : 'INACTIVE',
+        currency: acctData.currency,
+        amountSpent: acctData.amount_spent,
+      };
+    }
+  }
+
+  logger.info({ tenantId: tenant.id, userId: meData.id }, 'Meta Ads credentials verified');
+  return { ok: true, userId: meData.id, userName: meData.name, adAccount };
+};
+
+// ── Fetch live campaigns as a connection test ──────────────────
+const testMetaAds = async (tenant) => {
+  const fullTenant = await prisma.tenant.findUnique({
+    where: { id: tenant.id },
+    select: { metaAccessToken: true, metaAdAccountId: true },
+  });
+
+  if (!fullTenant?.metaAccessToken) {
+    throw Object.assign(new Error('No Meta access token saved'), { statusCode: 400, expose: true });
+  }
+  if (!fullTenant?.metaAdAccountId) {
+    throw Object.assign(new Error('No Ad Account ID saved'), { statusCode: 400, expose: true });
+  }
+
+  const token   = decrypt(fullTenant.metaAccessToken);
+  const acctId  = fullTenant.metaAdAccountId.startsWith('act_') ? fullTenant.metaAdAccountId : `act_${fullTenant.metaAdAccountId}`;
+
+  const res  = await fetch(`${META_GRAPH}/${acctId}/campaigns?fields=name,status,effective_status,objective&limit=10&access_token=${token}`);
+  const data = await res.json();
+
+  if (data.error) {
+    throw Object.assign(new Error(data.error.message), { statusCode: 400, expose: true });
+  }
+
+  return { campaigns: data.data || [], total: data.data?.length || 0 };
+};
+
+module.exports = { getSettings, updateSettings, updateWhatsApp, verifyWhatsApp, testWhatsApp, updateMeta, verifyMetaAds, testMetaAds };
