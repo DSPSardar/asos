@@ -35,7 +35,8 @@ Respond with ONLY a valid JSON object using this EXACT schema. No prose, no mark
   "problem_summary": "<1 sentence describing the lead's core problem or interest>",
   "next_action": "continue_qualifying" | "send_proposal" | "nurture" | "close_deal",
   "is_price_objection": <true | false>,
-  "is_enrollment_confirmed": <true | false>
+  "is_enrollment_confirmed": <true | false>,
+  "business_unit": "DSP" | "SDC" | "UNKNOWN"
 }
 
 SCORING RULES:
@@ -80,6 +81,18 @@ is_enrollment_confirmed — THE ONLY HANDOFF TRIGGER:
 
   THE TEST: ask yourself "Has this person said YES to paying and joining?"
   If there is any doubt → false. The Closer AI keeps selling until the answer is clearly YES.
+
+business_unit RULES:
+  Identify which business the lead is asking about based on their message and conversation history.
+  "DSP"     — lead is asking about an AI course, training, digital services program, agentic AI,
+              AI mastery, enrollment, batch, certificate, learning AI, freelancing with AI, etc.
+  "SDC"     — lead is asking about health products, oils, pain relief, hair fall, weight loss,
+              sunnah diagnostic, Zait, Neuro Calm, digestive issues, spiritual healing, black magic,
+              Hasad, Sihr, Nazar, Jinn, or any product/remedy from Sunnah Diagnostic.
+  "UNKNOWN" — lead's message is a greeting only, completely off-topic, or it is impossible to tell
+              which business they are interested in from the conversation so far.
+  Once established from prior context, keep returning the same value — do NOT reset to UNKNOWN
+  unless the lead explicitly switches to the other business.
 `;
 
 // Build effective handoff triggers dynamically from the tenant's handoffRules toggles.
@@ -176,6 +189,7 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
     next_action:           String(parsed.next_action || 'continue_qualifying').slice(0, 100),
     is_enrollment_confirmed: parsed.is_enrollment_confirmed === true,
     is_price_objection: parsed.is_price_objection === true,
+    business_unit:      ['DSP','SDC','UNKNOWN'].includes(parsed.business_unit) ? parsed.business_unit : 'UNKNOWN',
     _tokens:            tokens,
     _model:             QUALIFIER_MODEL,
     _ms:                Date.now() - t0,
@@ -577,6 +591,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     intent:            qualifierOutput.intent,
     problemSummary:    qualifierOutput.problem_summary,
     nextAction:        qualifierOutput.next_action,
+    businessUnit:      qualifierOutput.business_unit,
     qualifierOutput,
     closerOutput,
 

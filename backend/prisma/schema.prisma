@@ -91,6 +91,12 @@ enum CampaignStatus {
   ENDED
 }
 
+enum LeadBusinessUnit {
+  DSP
+  SDC
+  UNKNOWN
+}
+
 enum ContentDraftStatus {
   GENERATED
   SAVED
@@ -257,6 +263,9 @@ model Lead {
   metaAdsetId         String?    @map("meta_adset_id")
   metaCampaignId      String?    @map("meta_campaign_id")
   sourceUtm           Json       @default("{}") @map("source_utm")
+
+  // Business unit classification (set by Qualifier AI on first message)
+  businessUnit        LeadBusinessUnit  @default(UNKNOWN) @map("business_unit")
 
   // ── DSP EdTech fields ──
   dspPhase            String?    @map("dsp_phase")      // LEARN | BUILD | EARN

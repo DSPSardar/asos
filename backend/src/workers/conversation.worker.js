@@ -209,6 +209,12 @@ const processInboundMessage = async (job) => {
   // ── 10. Update CRM with AI results (v1.5 — Qualifier + Closer outputs) ──
   const prevStage = lead.stage;
 
+  // Only update businessUnit if the AI identified a non-UNKNOWN value;
+  // never overwrite a confirmed DSP/SDC tag back to UNKNOWN mid-conversation.
+  const resolvedBusinessUnit = aiResult.businessUnit && aiResult.businessUnit !== 'UNKNOWN'
+    ? aiResult.businessUnit
+    : (lead.businessUnit !== 'UNKNOWN' ? lead.businessUnit : 'UNKNOWN');
+
   await prisma.lead.update({
     where: { id: lead.id },
     data: {
@@ -221,6 +227,7 @@ const processInboundMessage = async (job) => {
       nextAction:             aiResult.nextAction || null,
       humanFollowupRequired:  !!aiResult.humanFollowupRequired,
       leadTemperature:        aiResult.leadStatus || 'WARM',
+      businessUnit:           resolvedBusinessUnit,
       qualificationData: {
         ...lead.qualificationData,
         ...aiResult.qualificationData,

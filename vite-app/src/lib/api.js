@@ -120,12 +120,14 @@ export const conversationsAPI = {
 };
 
 export const campaignsAPI = {
-  list:   () => api.get('/campaigns'),
-  get:    (id) => api.get(`/campaigns/${id}`),
-  create: (data) => api.post('/campaigns', data),
-  update: (id, data) => api.patch(`/campaigns/${id}`, data),
-  sync:   (id) => api.post(`/campaigns/${id}/sync`),
-  roi:    (id) => api.get(`/campaigns/${id}/roi`),
+  list:    () => api.get('/campaigns'),
+  get:     (id) => api.get(`/campaigns/${id}`),
+  create:  (data) => api.post('/campaigns', data),
+  update:  (id, data) => api.patch(`/campaigns/${id}`, data),
+  delete:  (id) => api.delete(`/campaigns/${id}`),
+  launch:  (data) => api.post('/campaigns/launch', data),
+  sync:    (id) => api.post(`/campaigns/${id}/sync`),
+  roi:     (id) => api.get(`/campaigns/${id}/roi`),
   underperforming: () => api.get('/campaigns/underperforming/list'),
   recommendations: (id) => api.get(`/campaigns/${id}/recommendations`),
 };
