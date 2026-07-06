@@ -1,0 +1,23 @@
+{
+  "name": "asos-marketing-dsp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DSP (AI Agents Bootcamp) 8-agent marketing pipeline for ASOS",
+  "scripts": {
+    "marketing": "node pipeline/run.js",
+    "marketing:dm": "node pipeline/dm-manager.js",
+    "marketing:analyst": "node pipeline/analyst.js",
+    "lint": "eslint pipeline/"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "eslint": "^9.5.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
