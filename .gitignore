@@ -22,3 +22,6 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# DSP marketing pipeline output (generated content, not source)
+marketing/output/
