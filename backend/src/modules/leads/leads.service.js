@@ -28,12 +28,13 @@ const contactClause = (fromDsp, search) => {
   return { contact: { AND: parts } };
 };
 
-const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, fromDsp, page = 1, limit = 20 }) => {
+const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, fromDsp, businessUnit, page = 1, limit = 20 }) => {
   const where = {
     tenantId,
     ...(stage       && { stage }),
     ...(scoreLabel  && { scoreLabel }),
     ...(assignedTo  && { assignedTo }),
+    ...(businessUnit && { businessUnit }),
     ...contactClause(fromDsp, search),
   };
 
@@ -128,7 +129,9 @@ const getLead = async (tenantId, leadId) => {
 
 // ── Create lead manually ──────────────────────────────────────────────
 
-const createLead = async (tenantId, { contactId, campaignId, stage, dealValue, currency }) => {
+const VALID_BUSINESS_UNITS = ['DSP', 'SDC', 'UNKNOWN'];
+
+const createLead = async (tenantId, { contactId, campaignId, stage, dealValue, currency, businessUnit }) => {
   const contact = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
   if (!contact) throw Object.assign(new Error('Contact not found'), { statusCode: 404, expose: true });
 
@@ -140,6 +143,9 @@ const createLead = async (tenantId, { contactId, campaignId, stage, dealValue, c
       stage: stage || 'NEW',
       dealValue: dealValue || null,
       currency: currency || 'BRL',
+      // Manually-created leads (e.g. marketing DM handoff) can declare their business unit;
+      // otherwise the schema default (UNKNOWN) applies and the Qualifier AI classifies later.
+      ...(VALID_BUSINESS_UNITS.includes(businessUnit) && { businessUnit }),
     },
     include: { contact: { select: { name: true, phone: true } } },
   });

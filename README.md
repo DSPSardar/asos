@@ -22,9 +22,9 @@ Sales/Closer (drafts follow-up sequences), and Analyst (weekly performance repor
 agent job descriptions live in `marketing/agents/*.md` — each also works standalone as an
 Anthropic Console system prompt.
 
-DSP leads land in the real ASOS leads API (`backend/src/modules/leads`), tagged
-`businessUnit: "DSP"` (see `backend/prisma/migrations/20260707000000_add_business_unit_to_leads/`).
-No new database or service — see `marketing/CLAUDE.md` for the integration details.
+DSP leads land in the real ASOS leads API (`backend/src/modules/leads`), tagged with the
+existing `businessUnit` enum (`LeadBusinessUnit.DSP`). No new database or service — see
+`marketing/CLAUDE.md` for the integration details.
 
 ### Quickstart
 

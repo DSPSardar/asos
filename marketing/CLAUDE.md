@@ -42,13 +42,15 @@ plain `.js`, CommonJS (`require`/`module.exports`), so no new toolchain is intro
 module. If TypeScript is ever adopted repo-wide, this is the module to convert first since
 `schema.js` is already typedef-shaped.
 
-## Why `businessUnit` exists on Lead
+## How `businessUnit` works on Lead
 
-The original Lead model had no concept of business unit — ASOS is multi-*tenant*
-(one tenant = one customer org), not multi-*business-unit*. `businessUnit` was added as a
-plain string column (`@default("DSP")`) rather than an enum, specifically so a second
-business unit is just a new string value, not a migration. See
-`backend/prisma/migrations/20260707000000_add_business_unit_to_leads/`.
+The backend's Lead model has `businessUnit LeadBusinessUnit @default(UNKNOWN)` — an enum
+(`DSP | SDC | UNKNOWN`) added by migration `20260602000000_add_lead_business_unit`. In the
+normal WhatsApp flow the Qualifier AI classifies it per message; leads created via this
+module's DM handoff declare `businessUnit: "DSP"` explicitly at `POST /leads` so they're
+tagged correctly even without a WhatsApp conversation. Adding a business unit beyond
+DSP/SDC requires extending that enum (a migration) plus the `VALID_BUSINESS_UNITS`
+whitelist in `backend/src/modules/leads/leads.service.js`.
 
 ## Auth model for scripts
 
