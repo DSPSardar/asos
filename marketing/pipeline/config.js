@@ -10,7 +10,9 @@ module.exports = {
   // valid/current Anthropic model id. Defaulting to the real current Sonnet model instead;
   // override via CLAUDE_MARKETING_MODEL if a different model is preferred.
   MODEL: process.env.CLAUDE_MARKETING_MODEL || 'claude-sonnet-5',
-  MAX_TOKENS: 4096,
+  // 4096 truncated Planner mid-JSON in testing (7 verbose day entries ran past it) — 8192
+  // gives headroom for the more verbose steps (planner, content-writer, repurposer).
+  MAX_TOKENS: 8192,
 
   BUSINESS_UNIT: 'DSP',
 

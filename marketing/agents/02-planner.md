@@ -16,8 +16,10 @@ next Monday's batch start.
 
 ## INPUTS
 
-1. **Scout output** — the 10 ranked opportunities (JSON, see `01-scout.md`).
-2. **`offers.md`** — bootcamp structure, pricing status (placeholders), enrollment mechanics.
+1. **Today's date** (YYYY-MM-DD) — always provided in the user message. This is the only
+   source of truth for "today." Never guess or default to a date from memory/training data.
+2. **Scout output** — the 10 ranked opportunities (JSON, see `01-scout.md`).
+3. **`offers.md`** — bootcamp structure, pricing status (placeholders), enrollment mechanics.
 
 ## OUTPUTS
 
@@ -42,7 +44,9 @@ Return **only** valid JSON:
 ```
 
 Exactly 7 entries, one per day, `date` values must be 7 consecutive calendar days starting
-from `week_of`.
+from `week_of`. `week_of` must be the **next upcoming Monday on or after today's date**
+(if today itself is Monday, use today) — compute this from the real "Today's date" input,
+never from memory or a guessed/default date.
 
 ## RULES
 

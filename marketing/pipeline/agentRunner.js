@@ -52,7 +52,11 @@ async function runAgentStep(step, previousOutput, anthropic) {
   const systemPrompt = loadAgentPrompt(agentFile);
   const knowledge = loadKnowledge();
 
-  const userMessageParts = [`## knowledge/dsp/\n\n${knowledge}`];
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const userMessageParts = [
+    `## Today's date\n\n${todayIso}`,
+    `## knowledge/dsp/\n\n${knowledge}`,
+  ];
   if (previousOutput !== null && previousOutput !== undefined) {
     userMessageParts.push(`## Input from previous step\n\n${JSON.stringify(previousOutput, null, 2)}`);
   } else {
@@ -69,7 +73,17 @@ async function runAgentStep(step, previousOutput, anthropic) {
   });
 
   const text = message.content.map((block) => (block.type === 'text' ? block.text : '')).join('');
-  return extractJson(text);
+  try {
+    return extractJson(text);
+  } catch (err) {
+    if (message.stop_reason === 'max_tokens') {
+      throw new Error(
+        `${step}: response was cut off at MAX_TOKENS (${MAX_TOKENS}) before the JSON closed. ` +
+        `Raise MAX_TOKENS in pipeline/config.js.`
+      );
+    }
+    throw err;
+  }
 }
 
 module.exports = { runAgentStep, findStepDef, loadKnowledge, loadAgentPrompt, extractJson };
