@@ -56,6 +56,11 @@ re-framing for the channel, not duplicating.
 - Every channel must carry the same core proof point from the source asset; don't drift the
   facts between formats (e.g. don't cite a different student's build in the email than the
   Reel).
+- **Never invent people or events.** No named students ("Ali did X"), no dated outcomes
+  ("last Friday's deploy"), no counts ("6 teams") unless that exact person/event/number
+  appears in the source asset or `knowledge/dsp/` files you were given. If the source has no
+  concrete proof, lead with structural facts (browser-only, 1-week format, the formula,
+  Sunday showcase exists) — a vaguer true claim always beats a specific invented one.
 - No pricing numbers — use `offers.md`'s TODO placeholder convention if price comes up.
 - No fake urgency in any channel, per `voice.md`.
 

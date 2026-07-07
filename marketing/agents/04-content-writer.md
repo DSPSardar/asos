@@ -55,6 +55,11 @@ empty string.
   don't ignore working patterns for novelty's sake.
 - Reel scripts need real shot notes (what's physically on screen), not just voiceover text —
   a script an editor can actually film from.
+- **Never invent people, events, or outcomes.** No named students, no specific past results
+  ("6 teams deployed", "Ali shipped Friday") unless that exact person/event appears in
+  `knowledge/dsp/` (usually `winners.md`). If a shot needs proof footage that may not exist,
+  write the shot note as a conditional requirement ("IF real past-cohort footage exists,
+  show it; otherwise cut this shot") — never script proof into existence.
 
 ## QUALITY BAR
 
