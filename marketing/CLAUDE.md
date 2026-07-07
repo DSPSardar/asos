@@ -130,6 +130,21 @@ automatically on a schedule, add a [Vercel Cron Job](https://vercel.com/docs/cro
 (`vercel.json` → `crons`) that calls it — not set up yet since nothing in the current spec
 said how often to run it.
 
+## Automated daily posting (launchd)
+
+`pipeline/daily-post.js` posts to LinkedIn **unattended** every day at 9:00 AM PKT via a
+macOS LaunchAgent (`~/Library/LaunchAgents/com.dsp.marketing.dailypost.plist` — not in this
+repo). It regenerates content fresh each morning, picks the calendar item matching today's
+weekday, and publishes ONLY if two gates pass: a placeholder check and the adversarial
+Verifier agent (`agents/09-verifier.md`) that blocks any claim unsupported by
+`knowledge/dsp/` — a blocked day posts nothing. Logs to `output/daily-post.log` +
+`output/dsp/<date>/published.md`.
+
+- Change the time: edit the plist's Hour/Minute, then `launchctl unload && launchctl load` it.
+- **Kill switch:** `launchctl unload ~/Library/LaunchAgents/com.dsp.marketing.dailypost.plist`
+- Test without posting: `DAILY_POST_DRY_RUN=1 node pipeline/daily-post.js`
+- The Mac must be awake at 9 AM; launchd runs a missed job on wake the same day.
+
 ## Auto-posting to LinkedIn and TikTok
 
 `pipeline/linkedin.js` and `pipeline/tiktok.js` are real API clients (LinkedIn Posts API,
