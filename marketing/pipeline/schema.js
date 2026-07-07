@@ -34,6 +34,21 @@
  */
 
 /**
+ * @typedef {Object} RepurposedAsset
+ * Output of Repurposer (agents/05-repurposer.md). `linkedin.js` posts `linkedin_post`
+ * directly (text, no video needed); `tiktok.js` needs an actual rendered video file at a
+ * public URL — `tiktok_script` is a shot list for a human/video tool to produce that file
+ * from, not a video itself. See marketing/CLAUDE.md "Auto-posting to LinkedIn and TikTok".
+ * @property {string} source_hook
+ * @property {Array<{shot: number, visual: string, voiceover_or_caption: string}>} reel_script
+ * @property {Array<{slide: number, text: string, visual_note: string}>} carousel_slides
+ * @property {string} whatsapp_status_text
+ * @property {{subject: string, body: string}} short_email
+ * @property {string} linkedin_post
+ * @property {Array<{shot: number, visual: string, voiceover_or_caption: string, on_screen_text: string}>} tiktok_script
+ */
+
+/**
  * @typedef {Object} LeadHandoff
  * Output of DM Manager (agents/06-dm-manager.md) that leadsClient.js turns into real
  * Contact + Lead records via the backend API.

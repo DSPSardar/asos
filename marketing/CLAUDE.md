@@ -120,3 +120,39 @@ This is a manually-triggered HTTP endpoint, not a cron job. If you want it to ru
 automatically on a schedule, add a [Vercel Cron Job](https://vercel.com/docs/cron-jobs)
 (`vercel.json` → `crons`) that calls it — not set up yet since nothing in the current spec
 said how often to run it.
+
+## Auto-posting to LinkedIn and TikTok
+
+`pipeline/linkedin.js` and `pipeline/tiktok.js` are real API clients (LinkedIn Posts API,
+TikTok Content Posting API) — not stubs — but neither can go live until you've done some
+setup on the platform side that I cannot do for you:
+
+**LinkedIn** (`publishLinkedInPost`, text-only, no video needed):
+1. Create an app at [developer.linkedin.com](https://www.linkedin.com/developers/apps),
+   request the `w_member_social` scope, complete OAuth 2.0 to get an access token tied to
+   your own profile (`urn:li:person:...`).
+2. Posting as a **company page** instead of your profile (`urn:li:organization:...`) needs
+   LinkedIn's separate Community Management API partnership approval — apply for that only
+   if profile posting isn't enough.
+3. Put the token and URN in `marketing/.env` (`LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_AUTHOR_URN`)
+   or as Vercel env vars, then `npm run marketing:publish -- --asset=<path> --linkedin`.
+4. Access tokens expire (60 days for the standard 3-legged flow) — there's no refresh-token
+   handling in `linkedin.js` yet; re-auth manually when it expires, or add refresh logic if
+   this becomes routine.
+
+**TikTok** (`publishTikTokVideo`, needs an actual video file, not a script):
+1. `tiktok_script` from Repurposer is a **shot list** — a human or a video-generation tool
+   still has to actually film/render it into an .mp4 hosted at a public URL. Nothing in this
+   repo does that rendering step.
+2. Create an app at [developers.tiktok.com](https://developers.tiktok.com/), request the
+   Content Posting API and `video.publish` scope, complete OAuth to get an access token.
+3. **Until TikTok audits and approves your app for public posting, every post is forced to
+   `privacy_level: SELF_ONLY`** — it lands as a private draft in your own TikTok inbox, not
+   published to your public profile. `tiktok.js` defaults to `SELF_ONLY` for exactly this
+   reason; don't override it until TikTok confirms your app passed audit.
+4. Once you have a rendered video at a public URL:
+   `npm run marketing:publish -- --asset=<path> --tiktok --video-url=<url>`.
+
+Treat both of these as "wire up once you have real platform credentials," not "works out of
+the box" — I can't create LinkedIn/TikTok developer apps or pass TikTok's audit on your
+behalf.

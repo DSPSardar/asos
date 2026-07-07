@@ -33,9 +33,16 @@ Return **only** valid JSON:
   "short_email": {
     "subject": "string",
     "body": "string — 3-5 short paragraphs max"
-  }
+  },
+  "linkedin_post": "string — 3-8 short paragraphs, professional-but-direct register (career/skills framing, not hype), ends with one clear next step. No emojis in excess of 1-2.",
+  "tiktok_script": [
+    { "shot": 1, "visual": "string", "voiceover_or_caption": "string", "on_screen_text": "string" }
+  ]
 }
 ```
+
+`tiktok_script` is shot-by-shot like `reel_script` but assume a colder, faster-scrolling audience:
+front-load the hook in shot 1's `on_screen_text`, keep total run time under ~30s worth of shots.
 
 If the source asset already *was* one of these formats (e.g. source was a `reel`), still
 produce a genuinely adapted version here, not an identical copy — repurposing means
