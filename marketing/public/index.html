@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>DSP Marketing Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- App shell: sidebar + main column. app.js renders views into #view. -->
+  <div id="app">
+    <aside id="sidebar">
+      <div class="brand">
+        <div class="brand-logo">DSP</div>
+        <div class="brand-text">
+          <strong>Marketing Studio</strong>
+          <span>Digital Services Program</span>
+        </div>
+      </div>
+
+      <nav id="nav">
+        <a href="#/dashboard" data-route="dashboard"><span class="nav-ico">▦</span> Dashboard</a>
+        <a href="#/chat" data-route="chat"><span class="nav-ico">💬</span> AI Marketing Chat</a>
+        <a href="#/campaign" data-route="campaign"><span class="nav-ico">🚀</span> Campaign Generator</a>
+        <a href="#/social" data-route="social"><span class="nav-ico">📣</span> Social Post Generator</a>
+        <a href="#/adcopy" data-route="adcopy"><span class="nav-ico">🎯</span> Ad Copy Generator</a>
+        <a href="#/funnel" data-route="funnel"><span class="nav-ico">🪜</span> Funnel Planner</a>
+        <a href="#/saved" data-route="saved"><span class="nav-ico">📁</span> Saved Outputs</a>
+        <a href="#/settings" data-route="settings"><span class="nav-ico">⚙</span> Settings</a>
+      </nav>
+
+      <div class="sidebar-foot">
+        <span id="conn-dot" class="dot dot-gray"></span>
+        <span id="conn-label">Not connected</span>
+      </div>
+    </aside>
+
+    <div id="main">
+      <header id="topbar">
+        <button id="menu-btn" aria-label="Menu">☰</button>
+        <h1 id="page-title">Dashboard</h1>
+        <div class="topbar-right">
+          <span class="badge badge-gold">DSP</span>
+        </div>
+      </header>
+
+      <main id="view" aria-live="polite"><!-- views render here --></main>
+    </div>
+  </div>
+
+  <!-- Toasts (success / error notifications) -->
+  <div id="toasts" aria-live="assertive"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

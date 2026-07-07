@@ -1,8 +1,10 @@
 {
   "version": 2,
+  "outputDirectory": "public",
   "functions": {
-    "api/run.js": {
-      "maxDuration": 60
+    "api/*.js": {
+      "maxDuration": 60,
+      "includeFiles": "{agents,knowledge,pipeline}/**"
     }
   }
 }

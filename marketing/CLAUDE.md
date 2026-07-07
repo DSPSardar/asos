@@ -87,6 +87,28 @@ npm run marketing:analyst -- --metrics=path/to/metrics.csv
 `ANTHROPIC_API_KEY` must be set in the environment (see `.env.example`). Never write a key to
 any file in this repo.
 
+## Marketing Studio frontend (public/ + api/)
+
+`public/` is a no-build single-page dashboard (plain HTML/CSS/JS, hash routing) served by
+Vercel alongside the serverless API. Pages: Dashboard, AI Marketing Chat, Campaign
+Generator (runs the real 5-agent pipeline via `/api/run`, one step per request), Social
+Post / Ad Copy / Funnel generators (`/api/generate`), Saved Outputs (browser localStorage —
+there is no database), Settings (stores the API secret in localStorage).
+
+API surface (all POST, all require the `x-trigger-secret` header):
+- `/api/run` — one pipeline step per call (pre-existing).
+- `/api/chat` — DSP marketing consultant chat, knowledge-grounded.
+- `/api/generate` — modes: `campaign` | `social_post` | `ad_copy` | `funnel`.
+- `/api/publish` — LinkedIn publish; runs the SAME placeholder + Verifier gates as
+  daily-post.js. Do not add a bypass — if the Verifier blocks correct content, fix
+  `knowledge/dsp/`, not the gate.
+
+Local development: `node dev-server.js` (http://localhost:4100) mimics Vercel — static
+`public/` + mounted `api/*.js` handlers. `vercel.json` sets `outputDirectory: public` and
+bundles `{agents,knowledge,pipeline}/**` into the functions via `includeFiles` (the
+handlers read those .md files at runtime with dynamic fs paths that Vercel's tracer would
+otherwise miss).
+
 ## Deploying to Vercel
 
 The CLI (`run.js`) writes output to local disk — that doesn't work on Vercel, whose

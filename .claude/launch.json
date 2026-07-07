@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "marketing-studio",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["dev-server.js"],
+      "cwd": "marketing",
+      "port": 4100
+    }
+  ]
+}
