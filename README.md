@@ -41,3 +41,11 @@ npm run marketing:analyst -- --metrics=path/to/metrics.csv
 ```
 
 Output is written to `marketing/output/dsp/<YYYY-MM-DD>/` (gitignored).
+
+### Deploying just the marketing system to Vercel
+
+The sales/CRM side (`backend/`, `vite-app/`) is not part of this deploy — only the content
+pipeline, via `marketing/api/run.js`. Import this repo into a new Vercel project with
+**Root Directory = `marketing`**, set `ANTHROPIC_API_KEY` and `MARKETING_TRIGGER_SECRET` as
+env vars, and deploy. Full steps and the request format are in
+[`marketing/CLAUDE.md`](marketing/CLAUDE.md#deploying-to-vercel).

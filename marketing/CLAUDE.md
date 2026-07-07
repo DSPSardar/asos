@@ -31,8 +31,13 @@ service — it's a set of scripts that call the Anthropic API and the existing b
   - `leadsClient.js` — the only file that talks to the real backend. Logs in via
     `POST /auth/login`, finds-or-creates a Contact, then `POST /leads` with
     `businessUnit: "DSP"`.
-- `output/` — gitignored. Every pipeline run writes JSON + a human-readable `.md` per step to
-  `output/dsp/<YYYY-MM-DD>/`.
+  - `agentRunner.js` — the pure "call one agent, return its JSON" logic (knowledge loading,
+    prompt loading, the Claude call, JSON extraction). No filesystem writes. Shared by
+    `run.js` (CLI, persists to disk) and `api/run.js` (Vercel, returns the result in the
+    response instead — see below).
+- `api/run.js` — Vercel serverless entrypoint. See "Deploying to Vercel" below.
+- `output/` — gitignored. Every *local* pipeline run writes JSON + a human-readable `.md` per
+  step to `output/dsp/<YYYY-MM-DD>/`. Not used when running via Vercel (see below).
 
 ## Why plain JS, not TypeScript
 
@@ -72,3 +77,46 @@ npm run marketing:analyst -- --metrics=path/to/metrics.csv
 
 `ANTHROPIC_API_KEY` must be set in the environment (see `.env.example`). Never write a key to
 any file in this repo.
+
+## Deploying to Vercel
+
+The CLI (`run.js`) writes output to local disk — that doesn't work on Vercel, whose
+serverless functions have no durable/shared filesystem and time out. `api/run.js` is a
+separate entrypoint built for that environment: it runs **one step per HTTP call** and
+returns the JSON directly in the response instead of writing a file. The caller chains steps
+by passing the previous response's `output` back in as `previousOutput` on the next call —
+this repo does not persist pipeline output anywhere when run via Vercel; save the responses
+yourself if you need a record of them.
+
+Setup (Vercel dashboard → Add New Project → import this GitHub repo):
+1. **Root Directory**: `marketing` (this subfolder only — not the repo root).
+2. **Environment Variables**:
+   - `ANTHROPIC_API_KEY` — real key, same as local `.env`.
+   - `MARKETING_TRIGGER_SECRET` — a long random value (`openssl rand -hex 32`). Required —
+     `api/run.js` refuses every request without a matching `x-trigger-secret` header. Without
+     this, anyone who finds the URL can spend your Claude API credits.
+3. Deploy. Vercel auto-detects `api/run.js` as a Node serverless function (no build step
+   needed for this repo — there's no frontend to build here).
+
+Calling it once deployed:
+```bash
+curl -X POST https://<your-project>.vercel.app/api/run \
+  -H "content-type: application/json" \
+  -H "x-trigger-secret: <MARKETING_TRIGGER_SECRET>" \
+  -d '{"step":"scout"}'
+
+# chain planner off scout's output:
+curl -X POST https://<your-project>.vercel.app/api/run \
+  -H "content-type: application/json" \
+  -H "x-trigger-secret: <MARKETING_TRIGGER_SECRET>" \
+  -d '{"step":"planner","previousOutput": <scout response .output> }'
+```
+Valid `step` values: `scout`, `planner`, `hook-writer`, `content-writer`, `repurposer` (same
+order as `config.js`'s `PIPELINE_STEPS`). `dm-manager` and `analyst` are not yet exposed as
+API routes — they're CLI-only today; same `agentRunner.js` pattern would extend to them if
+needed.
+
+This is a manually-triggered HTTP endpoint, not a cron job. If you want it to run
+automatically on a schedule, add a [Vercel Cron Job](https://vercel.com/docs/cron-jobs)
+(`vercel.json` → `crons`) that calls it — not set up yet since nothing in the current spec
+said how often to run it.
