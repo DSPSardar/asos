@@ -9,8 +9,10 @@ const axios = require('axios');
 
 const LINKEDIN_API_BASE = 'https://api.linkedin.com/rest';
 // Pin a specific version rather than "latest" — LinkedIn versions its REST API by
-// year-month and expects this header on every call. Bump deliberately, not silently.
-const LINKEDIN_API_VERSION = '202405';
+// year-month and expects this header on every call, sunsetting versions after ~1 year
+// (a 426 NONEXISTENT_VERSION response means this pin has expired — bump it).
+// Overridable via env so an expired pin doesn't require a code change to fix.
+const LINKEDIN_API_VERSION = process.env.LINKEDIN_API_VERSION || '202606';
 
 function requireEnv(name) {
   const value = process.env[name];
