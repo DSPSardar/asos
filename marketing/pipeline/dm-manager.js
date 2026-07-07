@@ -63,7 +63,13 @@ async function main() {
       const { contact, lead } = await submitLeadHandoff(handoff);
       console.log(`✓ Created lead ${lead.id} for contact ${contact.id} (businessUnit: DSP)`);
     } catch (err) {
-      console.error('Failed to create lead in backend:', err.response?.data || err.message);
+      // axios connection failures often have an empty .message — fall through to .code
+      // (e.g. ECONNREFUSED) so the error is actually actionable.
+      const detail = err.response?.data
+        ? JSON.stringify(err.response.data)
+        : err.message || err.code || String(err);
+      console.error(`Failed to create lead in backend (${process.env.MARKETING_API_BASE_URL || 'http://localhost:3000/api/v1'}):`, detail);
+      console.error('Is the ASOS backend running and are MARKETING_API_EMAIL/PASSWORD correct in marketing/.env?');
       process.exit(1);
     }
   }
