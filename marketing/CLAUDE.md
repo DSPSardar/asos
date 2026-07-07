@@ -57,6 +57,15 @@ tagged correctly even without a WhatsApp conversation. Adding a business unit be
 DSP/SDC requires extending that enum (a migration) plus the `VALID_BUSINESS_UNITS`
 whitelist in `backend/src/modules/leads/leads.service.js`.
 
+**Decided: DSP does not get its own WhatsApp number.** The webhook resolves tenant strictly
+by `waPhoneId` (one number → one tenant, `backend/src/webhooks/whatsapp.webhook.js`), and a
+dedicated DSP number would fight the classification scheme above, which was built precisely
+so DSP and SDC can share one number with the AI sorting conversations by business unit. If a
+second number is ever genuinely needed, it requires either a second Tenant (isolated
+dashboard/login, DSP leads won't appear alongside sales leads) or real multi-number-per-tenant
+support (schema change + webhook rewrite) — don't build either without re-confirming, since
+the whole point of `businessUnit` was to avoid this.
+
 ## Auth model for scripts
 
 `POST /leads` and `POST /contacts` require a JWT tied to a real tenant/user — there is no
