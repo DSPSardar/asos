@@ -55,22 +55,25 @@ function placeholderProblems(text) {
 }
 
 // Gate (b): adversarial fact-check by the Verifier agent.
-async function verify(anthropic, postText) {
+async function verify(anthropic, postText, scoutResearch) {
   const systemPrompt = loadAgentPrompt('09-verifier.md');
   const todayIso = new Date().toISOString().slice(0, 10);
   const weekday = WEEKDAYS[new Date().getDay()];
+  const parts = [
+    `## Today's date\n\n${todayIso} (${weekday})`,
+    `## knowledge/dsp/\n\n${loadKnowledge()}`,
+  ];
+  // Scout's sourced web research legitimizes external-world claims (news, stats) — the
+  // Verifier checks post claims against these sources instead of blanket-blocking them.
+  if (scoutResearch) {
+    parts.push(`## Scout research (sourced, from live web search today)\n\n${JSON.stringify(scoutResearch, null, 2)}`);
+  }
+  parts.push(`## Content to verify\n\n${postText}`);
   const message = await anthropic.messages.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
     system: systemPrompt,
-    messages: [{
-      role: 'user',
-      content: [
-        `## Today's date\n\n${todayIso} (${weekday})`,
-        `## knowledge/dsp/\n\n${loadKnowledge()}`,
-        `## Content to verify\n\n${postText}`,
-      ].join('\n\n---\n\n'),
-    }],
+    messages: [{ role: 'user', content: parts.join('\n\n---\n\n') }],
   });
   const text = message.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
   return extractJson(text);
@@ -108,32 +111,48 @@ async function main() {
   const hooks = await runAgentStep('hook-writer', { calendar_item: item }, anthropic);
   saveStep(dir, 'hook-writer', hooks);
 
-  const asset = await runAgentStep('content-writer', { calendar_item: item, hooks }, anthropic);
-  saveStep(dir, 'content-writer', asset);
+  // Write → gate loop: if the Verifier blocks, regenerate ONCE with the violations passed
+  // to the Content Writer as explicit constraints, then re-verify. One retry only — if the
+  // writers can't produce a clean post with the feedback in hand, skip the window (the
+  // next launchd window regenerates from scratch anyway).
+  let repurposed;
+  let postText;
+  let verdict;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const writerInput = { calendar_item: item, hooks };
+    if (verdict && !verdict.approved) {
+      writerInput.verifier_feedback = {
+        instruction: 'Your previous draft was BLOCKED for the unsupported claims below. Rewrite WITHOUT these claims or any equivalent of them — replace with structural facts or drop the angle.',
+        violations: verdict.violations,
+      };
+    }
+    const asset = await runAgentStep('content-writer', writerInput, anthropic);
+    saveStep(dir, 'content-writer', asset);
 
-  const repurposed = await runAgentStep('repurposer', asset, anthropic);
-  saveStep(dir, 'repurposer', repurposed);
+    repurposed = await runAgentStep('repurposer', asset, anthropic);
+    saveStep(dir, 'repurposer', repurposed);
 
-  const postText = repurposed.linkedin_post;
-  if (!postText) throw new Error('Repurposer output has no linkedin_post');
+    postText = repurposed.linkedin_post;
+    if (!postText) throw new Error('Repurposer output has no linkedin_post');
 
-  // ── Gates ──
-  const placeholderIssues = placeholderProblems(postText);
-  if (placeholderIssues.length) {
-    appendLog(dir, [`## LinkedIn — BLOCKED (placeholder gate) — ${new Date().toISOString()}`, ...placeholderIssues.map((p) => `- ${p}`), '']);
-    console.error('[daily-post] BLOCKED by placeholder gate:', placeholderIssues.join('; '));
-    process.exit(2);
+    const placeholderIssues = placeholderProblems(postText);
+    if (placeholderIssues.length) {
+      verdict = { approved: false, violations: placeholderIssues.map((p) => ({ claim: '(text)', problem: p })) };
+    } else {
+      verdict = await verify(anthropic, postText, scout);
+    }
+    saveStep(dir, 'verifier', verdict);
+    if (verdict.approved) break;
+    console.error(`[daily-post] attempt ${attempt} blocked:`, JSON.stringify(verdict.violations));
   }
 
-  const verdict = await verify(anthropic, postText);
-  saveStep(dir, 'verifier', verdict);
   if (!verdict.approved) {
     appendLog(dir, [
-      `## LinkedIn — BLOCKED (verifier) — ${new Date().toISOString()}`,
+      `## LinkedIn — BLOCKED (verifier, after retry) — ${new Date().toISOString()}`,
       ...(verdict.violations || []).map((v) => `- "${v.claim}" — ${v.problem}`),
       '',
     ]);
-    console.error('[daily-post] BLOCKED by verifier:', JSON.stringify(verdict.violations));
+    console.error('[daily-post] BLOCKED after retry — skipping this window.');
     process.exit(2);
   }
 

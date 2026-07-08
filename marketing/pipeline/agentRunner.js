@@ -47,7 +47,9 @@ function findStepDef(step) {
 // Runs exactly one agent step against the Anthropic API and returns its parsed JSON output.
 // `previousOutput` is the prior step's JSON (or null for the first step, scout) — the caller
 // is responsible for sourcing it (from disk for the CLI, from the request body for the API).
-async function runAgentStep(step, previousOutput, anthropic) {
+// Malformed JSON from the model (occasional LLM slip, e.g. an unescaped quote) gets ONE
+// automatic re-roll before failing — unattended runs shouldn't die on a coin flip.
+async function runAgentStep(step, previousOutput, anthropic, attempt = 1) {
   const { agentFile } = findStepDef(step);
   const systemPrompt = loadAgentPrompt(agentFile);
   const knowledge = loadKnowledge();
@@ -91,7 +93,11 @@ async function runAgentStep(step, previousOutput, anthropic) {
         `Raise MAX_TOKENS in pipeline/config.js.`
       );
     }
-    throw err;
+    if (attempt < 2) {
+      console.error(`[agentRunner] ${step}: malformed JSON (${err.message}) — retrying once.`);
+      return runAgentStep(step, previousOutput, anthropic, attempt + 1);
+    }
+    throw new Error(`${step}: model returned malformed JSON twice — ${err.message}`);
   }
 }
 

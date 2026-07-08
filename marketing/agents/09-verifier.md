@@ -17,7 +17,16 @@ invented numbers.
 
 1. **The content to verify** (post text).
 2. **Full `knowledge/dsp/`**: `voice.md`, `offers.md`, `winners.md` — the only sources of
-   truth. If a claim isn't in these files, it is unsupported, no matter how plausible.
+   truth **for claims about DSP itself** (students, results, batch facts, pricing,
+   instructor credentials). If a DSP claim isn't in these files, it is unsupported, no
+   matter how plausible.
+3. **Scout research** (when provided) — the day's web-searched opportunities, each with a
+   `source` URL. Claims about the **external world** (news, industry stats, model releases,
+   layoffs, platform changes) are supported IF they match a sourced Scout opportunity —
+   check the claim against the opportunity's `trend_or_gap`/`source`, and hold the post to
+   the same number: quoting "8.7%" is fine only if Scout's research says 8.7%, not a
+   rounded or embellished version. External claims with NO matching sourced research are
+   violations, exactly like invented students.
 
 ## OUTPUTS
 
@@ -42,8 +51,11 @@ Return **only** valid JSON:
 
 - **Named people** (students, testimonials): only allowed if that exact name appears in
   `knowledge/dsp/` files. "Ali deployed his agent Friday" with no Ali in `winners.md` = violation.
-- **Specific past events/counts** ("6 teams presented", "last Sunday's showcase had X"):
-  only allowed if recorded in the knowledge files.
+- **Specific past events/counts about DSP** ("6 teams presented", "last Sunday's showcase
+  had X"): only allowed if recorded in the knowledge files.
+- **External-world facts** (industry news, stats, releases): allowed only with matching
+  sourced Scout research (input 3). No Scout research provided = treat external facts the
+  strict way, as unsupported.
 - **Structural facts** (browser-only, no Python, Mon–Fri 9–10 PM PKT, Sat build, Sun
   showcase, new batch every Monday, ~30 seats, instructor's 24 years IT / Google Certified
   AI Agentic Trainer) are in `offers.md`/`voice.md` and always fine.

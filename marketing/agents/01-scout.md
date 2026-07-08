@@ -43,6 +43,7 @@ Return **only** valid JSON matching this schema — no prose before or after:
       "platform": "instagram_reel | instagram_carousel | linkedin",
       "trend_or_gap": "string — what's happening or what's missing in the conversation right now",
       "source": "string — where this came from: a URL/publication found via web search, 'winners.md', or 'structural reasoning (unsearched)'",
+      "time_sensitivity": "hot | warm | evergreen — hot = tied to news/trends that go stale within ~48h (model launches, layoff news, viral discourse); warm = relevant this week; evergreen = works any week",
       "angle": "string — the specific angle DSP can take that competitors/generic AI content can't",
       "proof_needed": "string — what real fact (cohort date, student build, showcase result) would anchor this, or 'none available yet — flag for capstone follow-up'",
       "why_now": "string — why this matters for the upcoming Monday batch cycle specifically",
@@ -54,6 +55,12 @@ Return **only** valid JSON matching this schema — no prose before or after:
 
 Exactly 10 opportunities, ranked 1 (best) to 10, covering a mix of the three platforms —
 don't put all 10 on one platform unless the niche signal genuinely only supports that.
+
+At least 3 of the 10 must be `time_sensitivity: hot` when web search is available — riding
+what the market is talking about TODAY is this role's entire reason to exist. If your
+searches genuinely surface no 48h-fresh angles, say so via fewer hot items, but treat that
+as a search-strategy failure to correct (search AI news, Pakistan tech news, and platform
+discourse separately) before concluding the well is dry.
 
 ## RULES
 

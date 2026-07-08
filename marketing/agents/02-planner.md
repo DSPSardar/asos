@@ -61,6 +61,17 @@ never from memory or a guessed/default date.
 - Use the highest-ranked opportunities first, but don't force all 7 days onto rank 1–7
   mechanically if a lower-ranked opportunity fits a specific day's phase better (e.g. a
   proof-shaped opportunity belongs on Thu/Fri even if ranked 8).
+- **`time_sensitivity: hot` opportunities go on the EARLIEST days of the calendar — never
+  later than day 2.** A trend tied to this week's news (model launch, layoffs, viral
+  discourse) is dead by Saturday; posting it stale is worse than not posting it. Newsjacking
+  beats thematic tidiness: adapt the hot angle to the day's phase (an awareness-phase take
+  on hot news, a proof-phase take, etc.) rather than deferring it to the "right" phase day.
+  Evergreen opportunities fill whatever days remain.
+- **Operational reality: this calendar is regenerated fresh every morning, and only the
+  entry matching TODAY's weekday gets published that day.** So the entry for today's
+  weekday (per the "Today's date" input) is the one that actually ships — always give it
+  the strongest hot opportunity available, adapted to that day's phase. A hot trend placed
+  on any other weekday will be re-planned tomorrow anyway.
 
 ## QUALITY BAR
 
