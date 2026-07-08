@@ -8,6 +8,7 @@
     "marketing:dm": "node pipeline/dm-manager.js",
     "marketing:analyst": "node pipeline/analyst.js",
     "marketing:publish": "node pipeline/publish.js",
+    "marketing:posters": "node pipeline/posters.js",
     "lint": "eslint pipeline/"
   },
   "dependencies": {

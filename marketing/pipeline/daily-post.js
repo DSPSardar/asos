@@ -83,6 +83,14 @@ async function main() {
   const dryRun = process.env.DAILY_POST_DRY_RUN === '1';
   const weekday = WEEKDAYS[new Date().getDay()];
 
+  // Idempotency: the LaunchAgent fires at several times a day (9/12/15/18) so a sleeping
+  // Mac at 9 AM doesn't mean a missed day — but only the FIRST successful run may post.
+  const logPath = path.join(dir, 'published.md');
+  if (!dryRun && fs.existsSync(logPath) && /## LinkedIn — urn:/.test(fs.readFileSync(logPath, 'utf8'))) {
+    console.log(`[daily-post] ${new Date().toISOString()} — already posted today, exiting.`);
+    return;
+  }
+
   console.log(`[daily-post] ${new Date().toISOString()} — generating for ${weekday}${dryRun ? ' (DRY RUN)' : ''}`);
 
   const scout = await runAgentStep('scout', null, anthropic);
@@ -146,6 +154,16 @@ async function main() {
     '',
   ]);
   console.log(`[daily-post] PUBLISHED: ${result.postUrn}`);
+
+  // Render the day's poster images (carousel slides + WhatsApp status story) so they're
+  // sitting ready in output/dsp/<date>/posters/ for manual Instagram/WhatsApp posting.
+  // Best-effort: a poster-render failure must never mark the (already published) day failed.
+  try {
+    const { execFileSync } = require('child_process');
+    execFileSync(process.execPath, [path.join(__dirname, 'posters.js')], { stdio: 'inherit' });
+  } catch (err) {
+    console.error('[daily-post] poster render failed (post itself succeeded):', err.message);
+  }
 }
 
 main().catch((err) => {
