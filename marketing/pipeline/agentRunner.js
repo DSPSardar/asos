@@ -65,11 +65,20 @@ async function runAgentStep(step, previousOutput, anthropic) {
     );
   }
 
+  // Scout gets live web search so "trend research" is actual research, not the model
+  // guessing from training data. Server-side tool — Anthropic runs the searches and the
+  // model reads results before producing its ranked opportunities. Other agents stay
+  // search-free: their inputs are the knowledge files + the previous step's output.
+  const useWebSearch = step === 'scout' && process.env.SCOUT_WEB_SEARCH !== '0';
+
   const message = await anthropic.messages.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessageParts.join('\n\n---\n\n') }],
+    ...(useWebSearch && {
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }],
+    }),
   });
 
   const text = message.content.map((block) => (block.type === 'text' ? block.text : '')).join('');

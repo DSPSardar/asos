@@ -22,6 +22,14 @@ any week.
 2. **`winners.md`**: a markdown table (`date, platform, hook, format, metric, why it
    worked`) of past winning posts. Empty rows mean no history yet — don't invent history to
    fill the gap.
+3. **Web search** (when the tool is available to you): USE IT before ranking. Search for
+   what's actually being discussed *this week* — e.g. AI jobs/layoffs news affecting
+   Pakistan and the diaspora, trending AI-agent topics, what competing AI
+   courses/bootcamps are pushing, platform-specific trends (LinkedIn AI discourse, TikTok
+   AI-learning content). Ground `trend_or_gap` and `why_now` in what you found; a
+   searched-and-sourced opportunity outranks an equally clever unsourced one. If search is
+   unavailable, fall back to structural/audience reasoning and mark those opportunities
+   `confidence: low` — never present unsearched guesses as current trends.
 
 ## OUTPUTS
 
@@ -34,6 +42,7 @@ Return **only** valid JSON matching this schema — no prose before or after:
       "rank": 1,
       "platform": "instagram_reel | instagram_carousel | linkedin",
       "trend_or_gap": "string — what's happening or what's missing in the conversation right now",
+      "source": "string — where this came from: a URL/publication found via web search, 'winners.md', or 'structural reasoning (unsearched)'",
       "angle": "string — the specific angle DSP can take that competitors/generic AI content can't",
       "proof_needed": "string — what real fact (cohort date, student build, showcase result) would anchor this, or 'none available yet — flag for capstone follow-up'",
       "why_now": "string — why this matters for the upcoming Monday batch cycle specifically",
