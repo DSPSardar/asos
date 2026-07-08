@@ -137,15 +137,30 @@ async function main() {
     process.exit(2);
   }
 
+  // Render the day's poster images BEFORE publishing so the LinkedIn post can carry the
+  // cover slide. Best-effort: if rendering fails we still publish text-only — a missing
+  // image must never cost the day's post.
+  let coverPath = null;
+  try {
+    const { execFileSync } = require('child_process');
+    execFileSync(process.execPath, [path.join(__dirname, 'posters.js')], { stdio: 'inherit' });
+    const candidate = path.join(dir, 'posters', 'slide-01.png');
+    if (fs.existsSync(candidate)) coverPath = candidate;
+  } catch (err) {
+    console.error('[daily-post] poster render failed (continuing text-only):', err.message);
+  }
+
   if (dryRun) {
-    console.log('[daily-post] DRY RUN — gates passed, would have posted:\n\n' + postText);
+    console.log(`[daily-post] DRY RUN — gates passed, would have posted${coverPath ? ' WITH cover image' : ''}:\n\n` + postText);
     return;
   }
 
-  const result = await publishLinkedInPost(postText);
+  const result = await publishLinkedInPost(postText, {
+    ...(coverPath && { imagePath: coverPath, imageAltText: 'DSP — AI Agents Bootcamp' }),
+  });
   appendLog(dir, [
     `## LinkedIn — ${result.postUrn}`,
-    `- **Posted:** ${new Date().toISOString()} (automated daily post, verifier-approved)`,
+    `- **Posted:** ${new Date().toISOString()} (automated daily post, verifier-approved${coverPath ? ', with cover poster' : ', text-only'})`,
     `- **Calendar item:** ${weekday} [${item.cycle_phase}] — ${item.content_goal}`,
     '',
     '```',
@@ -153,17 +168,7 @@ async function main() {
     '```',
     '',
   ]);
-  console.log(`[daily-post] PUBLISHED: ${result.postUrn}`);
-
-  // Render the day's poster images (carousel slides + WhatsApp status story) so they're
-  // sitting ready in output/dsp/<date>/posters/ for manual Instagram/WhatsApp posting.
-  // Best-effort: a poster-render failure must never mark the (already published) day failed.
-  try {
-    const { execFileSync } = require('child_process');
-    execFileSync(process.execPath, [path.join(__dirname, 'posters.js')], { stdio: 'inherit' });
-  } catch (err) {
-    console.error('[daily-post] poster render failed (post itself succeeded):', err.message);
-  }
+  console.log(`[daily-post] PUBLISHED: ${result.postUrn}${coverPath ? ' (with cover poster)' : ''}`);
 }
 
 main().catch((err) => {
