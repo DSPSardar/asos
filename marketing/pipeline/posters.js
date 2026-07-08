@@ -147,6 +147,29 @@ function main() {
     console.log(`✓ ${path.relative(process.cwd(), file)}`);
   }
 
+  // Slideshow reel: the carousel slides as a 1080x1920 vertical MP4, ~2.8s per slide,
+  // slides letterboxed onto the navy background. Silent by design — the standard playbook
+  // is adding a trending sound inside the TikTok/Instagram app (which also helps reach);
+  // baking in licensed-music-free audio would just get replaced anyway.
+  // The filmed-with-a-human reel_script remains the primary reel; this is the no-filming
+  // fallback so every day has SOME postable vertical video.
+  if (slides.length && fs.existsSync('/opt/homebrew/bin/ffmpeg')) {
+    const reelPath = path.join(outDir, 'slideshow-reel.mp4');
+    try {
+      execFileSync('/opt/homebrew/bin/ffmpeg', [
+        '-y', '-framerate', '1/2.8',
+        '-i', path.join(outDir, 'slide-%02d.png'),
+        '-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x14203a,format=yuv420p',
+        '-r', '30', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
+        reelPath,
+      ], { stdio: 'pipe' });
+      notes.push(`- slideshow-reel.mp4 — ${slides.length} slides x 2.8s, silent; add trending audio in-app before posting`);
+      console.log(`✓ ${path.relative(process.cwd(), reelPath)}`);
+    } catch (err) {
+      console.error(`slideshow reel failed (posters unaffected): ${err.message}`);
+    }
+  }
+
   fs.writeFileSync(path.join(outDir, 'posters-notes.md'), notes.join('\n') + '\n');
   console.log(`\n${slides.length} carousel slides + story poster → ${path.relative(process.cwd(), outDir)}/`);
 }
