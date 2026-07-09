@@ -79,7 +79,10 @@ async function runAgentStep(step, previousOutput, anthropic, attempt = 1) {
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessageParts.join('\n\n---\n\n') }],
     ...(useWebSearch && {
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }],
+      // max_uses caps how many searches Scout can run per morning — fewer searches means
+      // fewer full-page results loaded into context, which is most of what drove output
+      // tokens up (not the final JSON itself).
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
     }),
   });
 

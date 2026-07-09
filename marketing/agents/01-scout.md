@@ -22,14 +22,19 @@ any week.
 2. **`winners.md`**: a markdown table (`date, platform, hook, format, metric, why it
    worked`) of past winning posts. Empty rows mean no history yet — don't invent history to
    fill the gap.
-3. **Web search** (when the tool is available to you): USE IT before ranking. Search for
-   what's actually being discussed *this week* — e.g. AI jobs/layoffs news affecting
-   Pakistan and the diaspora, trending AI-agent topics, what competing AI
-   courses/bootcamps are pushing, platform-specific trends (LinkedIn AI discourse, TikTok
-   AI-learning content). Ground `trend_or_gap` and `why_now` in what you found; a
-   searched-and-sourced opportunity outranks an equally clever unsourced one. If search is
-   unavailable, fall back to structural/audience reasoning and mark those opportunities
-   `confidence: low` — never present unsearched guesses as current trends.
+3. **Web search** (when the tool is available to you): USE IT before ranking, but budget
+   your searches — you have a limited number of calls per run. Pick 3-4 sharp, distinct
+   queries (e.g. one on AI-jobs/layoffs news for Pakistan/diaspora, one on trending
+   AI-agent topics, one on competing AI bootcamps, one on platform-specific discourse)
+   rather than many overlapping ones. Search for what's actually being discussed *this
+   week*. Ground `trend_or_gap` and `why_now` in what you found; a searched-and-sourced
+   opportunity outranks an equally clever unsourced one. If search is unavailable, fall
+   back to structural/audience reasoning and mark those opportunities `confidence: low` —
+   never present unsearched guesses as current trends.
+   **Extract and move on**: pull the one or two facts/numbers/quotes you actually need from
+   each result and discard the rest — do not reproduce, quote at length, or carry full
+   article text into your reasoning. Your `trend_or_gap` field should be a 1-2 sentence
+   summary of the finding, not a transcript of the source.
 
 ## OUTPUTS
 
