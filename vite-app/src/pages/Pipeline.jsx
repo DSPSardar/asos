@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { PageHeader } from '@pages/Layout';
 import { contactsAPI, leadsAPI } from '@lib/api';
+import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 
 // ─────────────────────────────────────────────────────────────
 // Style maps
@@ -230,6 +231,7 @@ function buildTimeline(lead) {
 // Page
 // ─────────────────────────────────────────────────────────────
 export default function Pipeline() {
+  const isDemo = useAuthStore((state) => state.token === DEMO_ACCESS_TOKEN);
   const [view, setView] = useState('kanban'); // 'kanban' | 'table'
   const [search, setSearch] = useState('');
   const [scoreFilter, setScoreFilter] = useState('all');
@@ -242,9 +244,15 @@ export default function Pipeline() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
 
-  const allLeads = useMemo(() => dbLeads, [dbLeads]);
+  const allLeads = useMemo(() => (isDemo && dbLeads.length === 0 ? LEADS : dbLeads), [dbLeads, isDemo]);
 
   const loadDbLeads = useCallback(async () => {
+    if (isDemo) {
+      setDbLeads([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const params = { page: 1, limit: 100 };
@@ -259,7 +267,7 @@ export default function Pipeline() {
     } finally {
       setLoading(false);
     }
-  }, [sourceFilter, search, scoreFilter]);
+  }, [sourceFilter, search, scoreFilter, isDemo]);
 
   useEffect(() => {
     loadDbLeads();

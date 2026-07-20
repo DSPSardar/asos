@@ -31,6 +31,7 @@ export default function Auth() {
   const navigate       = useNavigate();
   const [params]       = useSearchParams();
   const setAuth        = useAuthStore((s) => s.setAuth);
+  const startDemo      = useAuthStore((s) => s.startDemo);
 
   // tab is driven by ?tab=register query param so links can deep-link
   const [tab, setTab]           = useState(params.get('tab') === 'register' ? 'register' : 'login');
@@ -176,16 +177,11 @@ export default function Auth() {
     clearMessages();
     setSubmit(true);
     try {
-      const res = await authAPI.login({ email: 'admin@demo-empresa.com', password: 'admin123!' });
-      const payload = res?.data ?? res;
-      const { accessToken, refreshToken, user, tenant } = payload || {};
-      if (!accessToken) throw new Error('Demo login failed.');
-      localStorage.setItem('asos_token', accessToken);
-      setAuth({ accessToken, refreshToken, user, tenant });
+      startDemo();
       setSuccess('Entering demo workspace…');
       setTimeout(() => navigate('/dashboard', { replace: true }), 600);
     } catch {
-      setError('Demo login unavailable. Please sign in manually.');
+      setError('Demo preview could not start. Please refresh and try again.');
     } finally {
       setSubmit(false);
     }

@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@pages/Layout';
 import { leadsAPI, usersAPI } from '@lib/api';
+import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 
 // ── Poll interval ─────────────────────────────────────────────────────
 const POLL_MS = 30_000;
@@ -24,8 +25,51 @@ const PIPELINE = [
   { stage: 'Lost',     count: 6,  color: '#475569' },
 ];
 
+const DEMO_AGENTS = [
+  { id: 'demo-agent', fullName: 'Saad Khan' },
+  { id: 'demo-agent-2', fullName: 'AI Sales Agent' },
+];
+
+const DEMO_HOT_LEADS = [
+  {
+    id: 'demo-hot-1', aiScore: 94, scoreLabel: 'HOT', stage: 'PROPOSED',
+    dealValue: 4200000, currency: 'PKR', updatedAt: new Date().toISOString(),
+    contact: { name: 'Hassan Raza', phone: '+92 300 7654129' },
+    campaign: { name: 'WhatsApp Ads' }, agent: DEMO_AGENTS[0],
+    activities: [{ content: 'Ready for a payment-plan consultation.' }],
+    conversations: [{ status: 'AI_HANDLING' }],
+    qualificationData: { budget: 'PKR 4.2M', timeline: 'This week', authority: 'Decision maker' },
+  },
+  {
+    id: 'demo-hot-2', aiScore: 89, scoreLabel: 'HOT', stage: 'QUALIFYING',
+    dealValue: 2500000, currency: 'PKR', updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
+    contact: { name: 'Ayesha Malik', phone: '+92 321 9870034' },
+    campaign: { name: 'Facebook Ads' }, agent: DEMO_AGENTS[1],
+    activities: [{ content: 'Requested a consultation tomorrow at 3 PM.' }],
+    conversations: [{ status: 'AI_HANDLING' }],
+    qualificationData: { budget: 'PKR 2.5M', timeline: 'This month', authority: 'Decision maker' },
+  },
+  {
+    id: 'demo-hot-3', aiScore: 86, scoreLabel: 'HOT', stage: 'DIAGNOSED',
+    dealValue: 6000000, currency: 'PKR', updatedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+    contact: { name: 'Maryam Ali', phone: '+92 308 1122334' },
+    campaign: { name: 'Instagram' }, agent: DEMO_AGENTS[0],
+    activities: [{ content: 'Asked for booking documents and next steps.' }],
+    conversations: [{ status: 'NEEDS_HUMAN' }],
+    qualificationData: { budget: 'PKR 6M', timeline: 'Today', authority: 'Decision maker' },
+  },
+];
+
+const DEMO_HANDOFF = [
+  {
+    id: 'demo-handoff-1', status: 'NEEDS_HUMAN', lastMessageAt: new Date().toISOString(),
+    lead: DEMO_HOT_LEADS[2],
+  },
+];
+
 // ── Main page ─────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const isDemo = useAuthStore((state) => state.token === DEMO_ACCESS_TOKEN);
   const [hotLeads,    setHotLeads]    = useState([]);
   const [handoff,     setHandoff]     = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -43,6 +87,13 @@ export default function Dashboard() {
   }, []);
 
   const fetchData = useCallback(async (isFirst = false) => {
+    if (isDemo) {
+      setHotLeads(DEMO_HOT_LEADS);
+      setHandoff(DEMO_HANDOFF);
+      setLoading(false);
+      return;
+    }
+
     try {
       const [hotRes, handoffRes] = await Promise.all([
         leadsAPI.hot(50),
@@ -64,14 +115,19 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
+  }, [addToast, isDemo]);
 
   useEffect(() => {
     fetchData(true);
+    if (isDemo) {
+      setAgents(DEMO_AGENTS);
+      return undefined;
+    }
+
     usersAPI.list().then(r => setAgents(r?.data ?? r ?? [])).catch(() => {});
     const t = setInterval(() => fetchData(false), POLL_MS);
     return () => clearInterval(t);
-  }, [fetchData]);
+  }, [fetchData, isDemo]);
 
   const filteredHot = hotLeads.filter(l => {
     if (filter.score    && l.scoreLabel !== filter.score)          return false;

@@ -1,7 +1,7 @@
 // src/pages/Layout.jsx — Authenticated app shell (sidebar + outlet)
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { useAuthStore } from '@stores/auth.store';
+import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 
 const NAV = [
   { to: '/dashboard',     label: 'Dashboard',     icon: IconDashboard },
@@ -31,13 +31,14 @@ const ADMIN_NAV = [
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, tenant, logout } = useAuthStore();
+  const { user, tenant, token, logout } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Role is always server-confirmed — AuthInitializer in main.jsx called /auth/me
   // before this component ever mounted. No JWT parsing needed here.
   const isSuperAdmin = user?.role === 'SUPERADMIN';
+  const isDemo = token === DEMO_ACCESS_TOKEN;
 
   // Close drawer when route changes (mobile nav tap)
   useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
@@ -154,6 +155,12 @@ export default function Layout() {
           </div>
           <span className="text-sm font-semibold tracking-tight">ASOS</span>
         </div>
+
+        {isDemo && (
+          <div className="flex shrink-0 items-center justify-center border-b border-amber-400/20 bg-amber-400/10 px-4 py-2 text-center text-xs text-amber-200">
+            Demo preview · sample data only · changes are not saved
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto">
           <Outlet />

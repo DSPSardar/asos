@@ -1,6 +1,6 @@
 // src/lib/api.js — Production Axios API client for Vite app
 import axios from 'axios';
-import { useAuthStore } from '@stores/auth.store';
+import { isDemoSession, useAuthStore } from '@stores/auth.store';
 
 export const API_BASE_URL = String(import.meta.env.VITE_API_URL || '/api/v1').replace(/\/+$/, '');
 const BASE_URL = API_BASE_URL;
@@ -46,8 +46,46 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const previewDataFor = (url = '') => {
+  const path = String(url).split('?')[0];
+
+  if (path === '/leads/hot' || path === '/leads/handoff' || path === '/leads') return [];
+  if (path === '/users' || path.startsWith('/conversations') || path.startsWith('/campaigns')) return [];
+  if (path === '/reports' || path === '/billing/invoices' || path.includes('/drafts')) return [];
+  if (path === '/settings') return { name: 'ASOS Demo Workspace', mockMode: true };
+  if (path === '/ai/knowledge-gaps') return { gaps: [] };
+
+  // Returning null lets pages keep their built-in chart/demo constants.
+  return null;
+};
+
+const previewAdapter = async (config) => {
+  if (String(config.method || 'get').toLowerCase() !== 'get') {
+    const message = 'Demo preview is read-only. Create an account to save changes.';
+    const error = new Error(message);
+    error.config = config;
+    error.response = { status: 403, data: { message }, config, headers: {} };
+    throw error;
+  }
+
+  return {
+    data: { success: true, data: previewDataFor(config.url) },
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    config,
+    request: null,
+  };
+};
+
 // ── Request interceptor — attach JWT ─────────────────────────
 api.interceptors.request.use((config) => {
+  if (isDemoSession()) {
+    config.adapter = previewAdapter;
+    delete config.headers.Authorization;
+    return config;
+  }
+
   const token = useAuthStore.getState().token;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;

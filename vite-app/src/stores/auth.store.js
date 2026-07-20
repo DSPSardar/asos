@@ -4,6 +4,25 @@ import { persist } from 'zustand/middleware';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
+// Local, read-only preview session used by the public "Skip login" button.
+// This is deliberately not a real JWT and is never sent to the API.
+export const DEMO_ACCESS_TOKEN = 'asos-demo-preview-v1';
+export const DEMO_USER = {
+  id: 'demo-user',
+  email: 'demo@asos.local',
+  fullName: 'Demo User',
+  role: 'TENANT_ADMIN',
+};
+export const DEMO_TENANT = {
+  id: 'demo-tenant',
+  slug: 'demo-workspace',
+  name: 'ASOS Demo Workspace',
+  plan: 'PRO',
+  status: 'ACTIVE',
+};
+
+export const isDemoSession = () => useAuthStore.getState().token === DEMO_ACCESS_TOKEN;
+
 export const useAuthStore = create(
   persist(
     (set, get) => ({
@@ -17,6 +36,16 @@ export const useAuthStore = create(
         set({ token: accessToken, refreshToken, user, tenant });
       },
 
+      startDemo: () => {
+        set({
+          token: DEMO_ACCESS_TOKEN,
+          refreshToken: null,
+          user: DEMO_USER,
+          tenant: DEMO_TENANT,
+          ready: true,
+        });
+      },
+
       // Called once on app boot — hits /auth/me to get role from database.
       // Blocks app rendering until resolved. No JWT parsing anywhere.
       initAuth: async () => {
@@ -24,6 +53,13 @@ export const useAuthStore = create(
 
         if (!token) {
           set({ ready: true });
+          return;
+        }
+
+        // A demo preview is local by design. Do not ask the production API to
+        // validate a token that is intentionally not a JWT.
+        if (token === DEMO_ACCESS_TOKEN) {
+          set({ user: DEMO_USER, tenant: DEMO_TENANT, refreshToken: null, ready: true });
           return;
         }
 
