@@ -3,8 +3,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@pages/Layout';
-import { settingsAPI, aiConfigAPI, knowledgeGapsAPI, authAPI } from '@lib/api';
+import { settingsAPI, aiConfigAPI, knowledgeGapsAPI, authAPI, resolveWhatsAppWebhookUrl } from '@lib/api';
 import { useAuthStore } from '@stores/auth.store';
+
+const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || 'info@digitalservicesprogram.com';
 
 const TABS = [
   { id:'whatsapp',      label:'WhatsApp',         icon:IconWhatsApp,    desc:'Connect your WhatsApp Business number and test the connection.' },
@@ -250,8 +252,8 @@ function WhatsAppTab({ showToast }) {
   const [waAppSecret,   setWaAppSecret]   = useState('');
   const [waVerifyToken, setWaVerifyToken] = useState('');
 
-  // Fixed webhook URL — no tenant ID suffix
-  const webhookUrl = 'https://api.getaisales.com/webhooks/whatsapp';
+  // Domain-agnostic webhook URL — no tenant ID suffix.
+  const webhookUrl = resolveWhatsAppWebhookUrl();
 
   useEffect(() => {
     settingsAPI.get()
@@ -491,7 +493,7 @@ function WhatsAppTab({ showToast }) {
           </p>
         )}
         <p className="text-[11px] text-slate-500">
-          Need help? <a href="mailto:support@getaisales.com" className="text-accent hover:underline">Contact support →</a>
+          Need help? <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent hover:underline">Contact support →</a>
         </p>
       </Section>
     </>

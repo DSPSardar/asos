@@ -6,6 +6,9 @@ import { useAuthStore } from '@stores/auth.store';
 import { authAPI } from '@lib/api';
 
 const GOOGLE_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const BRAND_NAME = import.meta.env.VITE_BRAND_NAME || 'ASOS';
+const MARKETING_URL = import.meta.env.VITE_MARKETING_URL || 'https://www.digitalservicesprogram.com';
+const SALES_EMAIL = import.meta.env.VITE_SALES_EMAIL || 'info@digitalservicesprogram.com';
 
 // ── Password strength helper ───────────────────────────────────────────
 function getStrength(val) {
@@ -341,8 +344,8 @@ export default function Auth() {
             <span className="text-white font-bold text-lg">A</span>
           </div>
           <div>
-            <div className="text-lg font-bold text-white tracking-tight">getaisales</div>
-            <div className="text-[10px] text-indigo-400 tracking-widest font-mono">.com · AI SALES</div>
+            <div className="text-lg font-bold text-white tracking-tight">{BRAND_NAME}</div>
+            <div className="text-[10px] text-indigo-400 tracking-widest font-mono">AI SALES OPERATING SYSTEM</div>
           </div>
         </div>
 
@@ -424,7 +427,7 @@ export default function Auth() {
                    style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
                 <span className="text-white font-bold text-lg">A</span>
               </div>
-              <span className="text-lg font-bold text-white">getaisales.com</span>
+              <span className="text-lg font-bold text-white">{BRAND_NAME}</span>
             </div>
 
             {/* Header */}
@@ -646,11 +649,11 @@ export default function Auth() {
 
             {/* Bottom links */}
             <div className="flex items-center justify-between mt-3">
-              <a href="https://getaisales.com" target="_blank" rel="noreferrer"
+              <a href={MARKETING_URL} target="_blank" rel="noreferrer"
                  className="text-xs text-slate-600 hover:text-slate-400 transition-colors">
                 ← Back to site
               </a>
-              <a href="mailto:sales@getaisales.com?subject=Demo%20Request"
+              <a href={`mailto:${SALES_EMAIL}?subject=ASOS%20Demo%20Request`}
                  className="text-xs text-slate-600 hover:text-slate-400 transition-colors">
                 Contact sales →
               </a>

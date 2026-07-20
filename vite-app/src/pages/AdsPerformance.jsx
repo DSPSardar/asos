@@ -30,6 +30,7 @@ const OBJECTIVES = [
 const CTA_TYPES = [
   'LEARN_MORE', 'SIGN_UP', 'GET_QUOTE', 'CONTACT_US', 'APPLY_NOW', 'DOWNLOAD', 'BOOK_TRAVEL',
 ];
+const DEFAULT_MARKETING_URL = import.meta.env.VITE_MARKETING_URL || 'https://www.digitalservicesprogram.com';
 const EMPTY_FORM = {
   name: '', objective: 'OUTCOME_LEADS',
   dailyBudget: 500, countries: ['PK'], ageMin: 25, ageMax: 65, startDate: '', endDate: '',
@@ -621,7 +622,7 @@ export default function AdsPerformance() {
                     <textarea value={wizardForm.body} onChange={wf('body')} rows={3} placeholder="Sardar Group ka premium project, Arif Habib managed. I-14 Islamabad. 20% down, 42 months…" className="input-dark w-full rounded-lg px-3 py-2 text-sm leading-relaxed" />
                   </Field>
                   <Field label="Destination URL *" hint="Where people land after clicking the ad">
-                    <input value={wizardForm.linkUrl} onChange={wf('linkUrl')} placeholder="https://getaisales.com" className="input-dark w-full rounded-lg px-3 py-2 text-sm" />
+                    <input value={wizardForm.linkUrl} onChange={wf('linkUrl')} placeholder={DEFAULT_MARKETING_URL} className="input-dark w-full rounded-lg px-3 py-2 text-sm" />
                   </Field>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Ad Image URL" hint="Optional — publicly accessible HTTPS URL">

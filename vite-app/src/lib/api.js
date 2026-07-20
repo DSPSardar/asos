@@ -2,7 +2,27 @@
 import axios from 'axios';
 import { useAuthStore } from '@stores/auth.store';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+export const API_BASE_URL = String(import.meta.env.VITE_API_URL || '/api/v1').replace(/\/+$/, '');
+const BASE_URL = API_BASE_URL;
+
+/**
+ * Public WhatsApp webhook URL shown in Settings.
+ *
+ * Prefer an explicit value when the public webhook hostname differs from the
+ * dashboard. Otherwise derive it from the configured API URL.
+ */
+export function resolveWhatsAppWebhookUrl() {
+  const explicit = String(import.meta.env.VITE_WHATSAPP_WEBHOOK_URL || '').trim();
+  if (explicit) return explicit.replace(/\/+$/, '');
+
+  if (/^https?:\/\//i.test(API_BASE_URL)) {
+    const apiOrigin = API_BASE_URL.replace(/\/api\/v1\/?$/i, '');
+    return `${apiOrigin}/webhooks/whatsapp`;
+  }
+
+  if (typeof window !== 'undefined') return `${window.location.origin}/webhooks/whatsapp`;
+  return '/webhooks/whatsapp';
+}
 
 /** API origin for static `/uploads/*` (set in production when SPA host ≠ API host). */
 const UPLOADS_ORIGIN = String(import.meta.env.VITE_UPLOADS_ORIGIN || '').trim().replace(/\/+$/, '');
