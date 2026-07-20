@@ -8,6 +8,8 @@ const router = Router();
 
 router.post('/register', ctrl.register);
 router.post('/login',    ctrl.login);
+router.post('/forgot-password', ctrl.forgotPassword);
+router.post('/reset-password',  ctrl.resetPassword);
 router.post('/google',   ctrl.googleAuth);
 router.post('/refresh',  ctrl.refresh);
 router.post('/logout',   authenticate, ctrl.logout);

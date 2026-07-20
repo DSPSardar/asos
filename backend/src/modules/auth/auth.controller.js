@@ -19,6 +19,15 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().regex(/^[a-f0-9]{64}$/i, 'Invalid reset token'),
+  password: z.string().min(8).max(128),
+});
+
 const register = async (req, res, next) => {
   try {
     const body = registerSchema.parse(req.body);
@@ -34,6 +43,26 @@ const login = async (req, res, next) => {
     const body = loginSchema.parse(req.body);
     const result = await authService.login(body);
     return success(res, result, 'Login successful');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = forgotPasswordSchema.parse(req.body);
+    await authService.requestPasswordReset(email);
+    return success(res, {}, 'If an account exists for that email, a reset link has been sent.');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const resetPassword = async (req, res, next) => {
+  try {
+    const body = resetPasswordSchema.parse(req.body);
+    const result = await authService.resetPassword(body);
+    return success(res, result, 'Password reset successfully');
   } catch (err) {
     next(err);
   }
@@ -108,4 +137,16 @@ const changeEmail = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { register, login, refresh, logout, me, googleAuth, savePhone, changePassword, changeEmail };
+module.exports = {
+  register,
+  login,
+  forgotPassword,
+  resetPassword,
+  refresh,
+  logout,
+  me,
+  googleAuth,
+  savePhone,
+  changePassword,
+  changeEmail,
+};

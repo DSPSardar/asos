@@ -55,6 +55,7 @@ const envSchema = z.object({
 
   RESEND_API_KEY:          z.string().optional(),
   EMAIL_FROM:              z.string().email().optional(),
+  PASSWORD_RESET_URL:      z.string().url().default('https://asos-kappa.vercel.app/reset-password'),
 
   APP_URL:                 z.string().url().default('http://localhost:3001'),
   ALLOWED_ORIGINS:         z.string().default('http://localhost:3001'),

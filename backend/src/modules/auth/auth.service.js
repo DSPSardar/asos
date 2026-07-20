@@ -6,6 +6,9 @@ const crypto = require('crypto');
 const prisma = require('../../config/database');
 const env = require('../../config/env');
 const logger = require('../../utils/logger');
+const { isPasswordResetEmailConfigured, sendPasswordResetEmail } = require('../../services/email.service');
+
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 
 // ── Token generators ──────────────────────────────────
 
@@ -196,6 +199,88 @@ const login = async ({ email, password }) => {
     },
     tenant: user.tenant,
   };
+};
+
+// ── Password reset ─────────────────────────────────────
+
+const requestPasswordReset = async (email) => {
+  if (!isPasswordResetEmailConfigured()) {
+    throw Object.assign(new Error('Password reset email is not configured yet. Please contact support.'), {
+      statusCode: 503,
+      expose: true,
+    });
+  }
+
+  const normalisedEmail = email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({
+    where: { email: normalisedEmail },
+    select: { id: true, email: true, isActive: true },
+  });
+
+  // Always return the same public response so this endpoint cannot be used
+  // to discover which email addresses have ASOS accounts.
+  if (!user || !user.isActive) return { requested: true };
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+  const resetUrl = new URL(env.PASSWORD_RESET_URL);
+  resetUrl.searchParams.set('token', token);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordResetTokenHash: tokenHash,
+      passwordResetExpiresAt: expiresAt,
+    },
+  });
+
+  try {
+    const delivery = await sendPasswordResetEmail({ to: user.email, resetUrl: resetUrl.toString() });
+    logger.info({ userId: user.id, emailId: delivery.id }, 'Password reset email accepted by provider');
+  } catch (err) {
+    await prisma.user.updateMany({
+      where: { id: user.id, passwordResetTokenHash: tokenHash },
+      data: { passwordResetTokenHash: null, passwordResetExpiresAt: null },
+    });
+    logger.error({ err, userId: user.id }, 'Password reset email delivery failed');
+    throw Object.assign(new Error('We could not send the reset email right now. Please try again shortly.'), {
+      statusCode: 502,
+      expose: true,
+    });
+  }
+
+  return { requested: true };
+};
+
+const resetPassword = async ({ token, password }) => {
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  // updateMany makes token consumption atomic: the same link cannot succeed twice.
+  const result = await prisma.user.updateMany({
+    where: {
+      passwordResetTokenHash: tokenHash,
+      passwordResetExpiresAt: { gt: new Date() },
+      isActive: true,
+    },
+    data: {
+      passwordHash,
+      passwordResetTokenHash: null,
+      passwordResetExpiresAt: null,
+      refreshTokenHash: null,
+    },
+  });
+
+  if (result.count !== 1) {
+    throw Object.assign(new Error('This reset link is invalid or has expired. Request a new link.'), {
+      statusCode: 400,
+      expose: true,
+    });
+  }
+
+  logger.info('Password reset completed and refresh tokens revoked');
+  return { changed: true };
 };
 
 // ── Refresh access token ──────────────────────────────
@@ -406,4 +491,15 @@ const changeEmail = async (userId, { newEmail, currentPassword }) => {
   return { email: normalised };
 };
 
-module.exports = { register, login, googleAuth, refresh, logout, saveOrganicPhone, changePassword, changeEmail };
+module.exports = {
+  register,
+  login,
+  requestPasswordReset,
+  resetPassword,
+  googleAuth,
+  refresh,
+  logout,
+  saveOrganicPhone,
+  changePassword,
+  changeEmail,
+};

@@ -30,6 +30,7 @@ class ErrorBoundary extends React.Component {
 
 // ── Pages (lazy-loaded) ────────────────────────────────────────
 const AuthPage          = React.lazy(() => import('@pages/Auth'));
+const ResetPasswordPage = React.lazy(() => import('@pages/ResetPassword'));
 const DashboardLayout   = React.lazy(() => import('@pages/Layout'));
 const DashboardPage     = React.lazy(() => import('@pages/Dashboard'));
 const PipelinePage      = React.lazy(() => import('@pages/Pipeline'));
@@ -120,6 +121,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Suspense>
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
 
             <Route path="/" element={<PrivateRoute><DashboardLayout /></PrivateRoute>}>
               <Route index element={<DefaultRedirect />} />

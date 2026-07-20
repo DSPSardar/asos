@@ -75,7 +75,13 @@ const createApp = () => {
 
   // ── Strict rate limit only for login/register/password-reset (brute-force targets)
   // /auth/me and /auth/refresh are excluded — they fire on every page load
-  const strictAuthPaths = ['/api/v1/auth/login', '/api/v1/auth/register', '/api/v1/auth/google'];
+  const strictAuthPaths = [
+    '/api/v1/auth/login',
+    '/api/v1/auth/register',
+    '/api/v1/auth/google',
+    '/api/v1/auth/forgot-password',
+    '/api/v1/auth/reset-password',
+  ];
   app.use(strictAuthPaths, rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 20,

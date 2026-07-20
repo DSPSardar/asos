@@ -191,6 +191,10 @@ model User {
   // Refresh token (hashed, stored for revocation)
   refreshTokenHash  String?  @map("refresh_token_hash")
 
+  // One-time password reset token (only the SHA-256 hash is stored)
+  passwordResetTokenHash String?   @map("password_reset_token_hash")
+  passwordResetExpiresAt DateTime? @map("password_reset_expires_at")
+
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
@@ -198,6 +202,7 @@ model User {
   assignedLeads Lead[]    @relation("AgentLeads")
   activities    Activity[]
 
+  @@index([passwordResetTokenHash])
   @@map("users")
 }
 

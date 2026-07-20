@@ -37,7 +37,7 @@ export default function Auth() {
   const [error, setError]       = useState('');
   const [success, setSuccess]   = useState('');
   const [submitting, setSubmit] = useState(false);
-  const [showForgot, setShowForgot] = useState(false);
+  const [showForgot, setShowForgot] = useState(params.get('forgot') === '1');
 
   // login fields
   const [loginEmail, setLoginEmail]       = useState('');
@@ -64,6 +64,8 @@ export default function Auth() {
 
   // forgot password
   const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSubmitting, setForgotSubmitting] = useState(false);
 
   const clearMessages = () => {
     setError('');
@@ -303,10 +305,20 @@ export default function Auth() {
   };
 
   // ── Forgot password ───────────────────────────────────────────────────
-  const handleForgot = (e) => {
+  const handleForgot = async (e) => {
     e.preventDefault();
-    setShowForgot(false);
-    setSuccess('If that email exists, a reset link is on its way. Check your inbox.');
+    if (forgotSubmitting) return;
+    setForgotError('');
+    setForgotSubmitting(true);
+    try {
+      await authAPI.forgotPassword(forgotEmail.trim().toLowerCase());
+      setShowForgot(false);
+      setSuccess('If that email has an ASOS account, a secure reset link is on its way. Check your inbox and spam folder.');
+    } catch (err) {
+      setForgotError(err?.message || 'Could not send the reset email. Please try again.');
+    } finally {
+      setForgotSubmitting(false);
+    }
   };
 
   const strengthBars = Array.from({ length: 4 }, (_, i) => ({
@@ -489,7 +501,7 @@ export default function Auth() {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Password</label>
-                    <button type="button" onClick={() => setShowForgot(true)}
+                    <button type="button" onClick={() => { setForgotEmail(loginEmail); setForgotError(''); setShowForgot(true); }}
                             className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
                       Forgot password?
                     </button>
@@ -687,7 +699,7 @@ export default function Auth() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
              style={{ background: 'rgba(3,7,18,0.85)', backdropFilter: 'blur(8px)' }}>
           <div className="glass rounded-3xl p-8 w-full max-w-sm relative">
-            <button onClick={() => setShowForgot(false)}
+            <button onClick={() => setShowForgot(false)} disabled={forgotSubmitting}
                     className="absolute top-4 right-5 text-slate-500 hover:text-slate-300 text-2xl leading-none">
               ×
             </button>
@@ -695,11 +707,17 @@ export default function Auth() {
             <p className="text-sm text-slate-400 mb-6">Enter your email and we'll send a reset link.</p>
             <form onSubmit={handleForgot} className="space-y-4">
               <AuthInput type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)}
-                         placeholder="you@company.com" required />
-              <button type="submit"
-                      className="w-full rounded-xl py-3 text-sm font-semibold text-white"
+                         placeholder="you@company.com" required disabled={forgotSubmitting} />
+              {forgotError && (
+                <div className="p-3 rounded-xl text-xs leading-relaxed text-red-300"
+                     style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                  {forgotError}
+                </div>
+              )}
+              <button type="submit" disabled={forgotSubmitting}
+                      className="w-full rounded-xl py-3 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
-                Send Reset Link →
+                {forgotSubmitting ? 'Sending secure link…' : 'Send Reset Link →'}
               </button>
             </form>
           </div>
