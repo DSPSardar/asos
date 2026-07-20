@@ -1,3 +1,4 @@
+// Public Vercel Function used by the same-origin rewrites in vercel.json.
 const ALLOWED_ROOTS = new Set(['api/v1', 'webhooks', 'uploads']);
 const REQUEST_HEADER_BLOCKLIST = new Set([
   'connection',

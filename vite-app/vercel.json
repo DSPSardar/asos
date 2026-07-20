@@ -6,15 +6,15 @@
   "rewrites": [
     {
       "source": "/api/v1/:path*",
-      "destination": "/api/_proxy?_asosRoot=api/v1&_asosPath=:path*"
+      "destination": "/api/proxy?_asosRoot=api/v1&_asosPath=:path*"
     },
     {
       "source": "/webhooks/:path*",
-      "destination": "/api/_proxy?_asosRoot=webhooks&_asosPath=:path*"
+      "destination": "/api/proxy?_asosRoot=webhooks&_asosPath=:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "/api/_proxy?_asosRoot=uploads&_asosPath=:path*"
+      "destination": "/api/proxy?_asosRoot=uploads&_asosPath=:path*"
     },
     {
       "source": "/(.*)",
