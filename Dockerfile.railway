@@ -1,0 +1,35 @@
+# Railway builds from the repository root; the application itself lives in /backend.
+FROM node:22-alpine AS deps
+WORKDIR /app
+RUN apk add --no-cache libc6-compat python3 make g++ openssl openssl-dev
+COPY backend/package.json backend/package-lock.json* ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+FROM node:22-alpine AS prisma
+WORKDIR /app
+RUN apk add --no-cache openssl openssl-dev
+COPY --from=deps /app/node_modules ./node_modules
+COPY backend/package.json ./
+COPY backend/prisma ./prisma
+RUN npx prisma generate
+
+FROM node:22-alpine AS production
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+RUN apk add --no-cache openssl openssl-dev su-exec && \
+    addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 asos
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=prisma /app/node_modules/.prisma ./node_modules/.prisma
+COPY backend/src ./src
+COPY backend/prisma ./prisma
+COPY backend/package.json ./
+COPY backend/docker-entrypoint-api.sh /docker-entrypoint-api.sh
+RUN chmod +x /docker-entrypoint-api.sh && chown -R asos:nodejs /app
+USER root
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health || exit 1
+ENTRYPOINT ["/docker-entrypoint-api.sh"]
+CMD ["node", "src/server.js"]
