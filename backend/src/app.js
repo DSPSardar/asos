@@ -29,6 +29,7 @@ const adminRoutes        = require('./modules/admin/admin.routes');
 const contentStudioRoutes = require('./modules/content-studio/content-studio.routes');
 const reportsRoutes = require('./modules/reports/reports.routes');
 const webhookRoutes      = require('./webhooks/webhook.routes');
+const twilioVoiceWebhook = require('./webhooks/twilio.webhook');
 // Dev-only routes (mounted only when WHATSAPP_MOCK=true)
 const devRoutes = env.WHATSAPP_MOCK === 'true' ? require('./modules/dev/dev.routes') : null;
 
@@ -55,7 +56,11 @@ const createApp = () => {
   app.use('/api', express.json({ limit: '10mb' }));
   app.use('/api', express.urlencoded({ extended: true }));
 
-  // Webhooks need raw body for signature verification
+  // Twilio voice webhooks submit form data. Mount these before the raw-body
+  // middleware used by Meta and Stripe signature verification.
+  app.use('/webhooks/twilio', express.urlencoded({ extended: false }), twilioVoiceWebhook);
+
+  // Meta and Stripe webhooks need the original raw body for signature verification.
   app.use('/webhooks', express.raw({ type: '*/*', limit: '5mb' }));
 
   // ── HTTP request logging
