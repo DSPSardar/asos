@@ -28,8 +28,24 @@ const envSchema = z.object({
   WHATSAPP_VERIFY_TOKEN:   z.string().optional().default('mock-verify-token'),
   WHATSAPP_MOCK:           z.enum(['true','false']).optional().default('false'),
 
-  ANTHROPIC_API_KEY:       z.string().startsWith('sk-ant-'),
-  CLAUDE_MODEL:            z.string().default('claude-3-5-sonnet-20241022'),
+  // OpenAI powers the customer-facing WhatsApp sales agent.
+  OPENAI_API_KEY:          z.string().startsWith('sk-'),
+  OPENAI_MODEL:            z.string().default('gpt-5.4-mini'),
+  OPENAI_QUALIFIER_MODEL:  z.string().optional(),
+  OPENAI_CLOSER_MODEL:     z.string().optional(),
+
+  // Twilio connects the existing WhatsApp Business sender to Calling.
+  TWILIO_ACCOUNT_SID:      z.string().optional(),
+  TWILIO_AUTH_TOKEN:       z.string().optional(),
+  // Verified caller ID for standard phone calls. This stays separate from the
+  // Meta WhatsApp sender used for messages and voice notes.
+  TWILIO_VOICE_FROM:       z.string().optional(),
+  TWILIO_WHATSAPP_FROM:    z.string().optional(),
+  VOICE_WEBHOOK_BASE_URL:  z.string().url().optional(),
+
+  // Kept optional while Content Studio is migrated separately.
+  ANTHROPIC_API_KEY:       z.string().startsWith('sk-ant-').optional(),
+  CLAUDE_MODEL:            z.string().optional(),
   CLAUDE_MAX_TOKENS:       z.string().default('512'),
   CLAUDE_TEMPERATURE:      z.string().default('0.3'),
 

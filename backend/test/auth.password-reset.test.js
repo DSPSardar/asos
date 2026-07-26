@@ -8,7 +8,7 @@ Object.assign(process.env, {
   DATABASE_URL: 'postgresql://asos:password@localhost:5432/asos',
   JWT_SECRET: 'test-jwt-secret-that-is-at-least-32-characters',
   JWT_REFRESH_SECRET: 'test-refresh-secret-that-is-at-least-32-chars',
-  ANTHROPIC_API_KEY: 'sk-ant-test-key',
+  OPENAI_API_KEY: 'sk-test-key',
   RESEND_API_KEY: 're_test_key',
   EMAIL_FROM: 'noreply@example.com',
   PASSWORD_RESET_URL: 'https://asos-kappa.vercel.app/reset-password',

@@ -8,18 +8,27 @@
 // processMessage() is kept as a thin wrapper so the worker / existing API
 // surface is unchanged.
 
-const Anthropic = require('@anthropic-ai/sdk');
+const OpenAI = require('openai');
 const env = require('../config/env');
 const logger = require('../utils/logger');
 const prisma = require('../config/database');
 const kgSvc = require('../modules/knowledge-gaps/knowledge-gaps.service');
 
-const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
 // ── Model selection (per-agent) ───────────────────────────────────────
 // Qualifier = fast/cheap (analytic). Closer = better copy.
-const QUALIFIER_MODEL = env.QUALIFIER_MODEL || 'claude-sonnet-4-6';
-const CLOSER_MODEL    = env.CLOSER_MODEL    || env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022';
+const QUALIFIER_MODEL = env.OPENAI_QUALIFIER_MODEL || env.OPENAI_MODEL;
+const CLOSER_MODEL    = env.OPENAI_CLOSER_MODEL || env.OPENAI_MODEL;
+
+const createResponse = async ({ model, maxOutputTokens, instructions, input }) => {
+  return client.responses.create({
+    model,
+    instructions,
+    input,
+    max_output_tokens: maxOutputTokens,
+  });
+};
 
 // =====================================================================
 // QUALIFIER AI
@@ -158,14 +167,13 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
   let tokens = 0;
 
   try {
-    const resp = await client.messages.create({
+    const resp = await createResponse({
       model: QUALIFIER_MODEL,
-      max_tokens: 512,
-      temperature: 0,                   // deterministic — this is analysis
-      system,
-      messages: history,
+      maxOutputTokens: 512,
+      instructions: system,
+      input: history,
     });
-    raw = resp.content[0]?.text || '';
+    raw = resp.output_text || '';
     tokens = (resp.usage?.input_tokens || 0) + (resp.usage?.output_tokens || 0);
   } catch (err) {
     logger.error({ err, leadId: lead.id }, 'Qualifier API call failed');
@@ -355,14 +363,13 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
   let tokens = 0;
 
   try {
-    const resp = await client.messages.create({
+    const resp = await createResponse({
       model: CLOSER_MODEL,
-      max_tokens: aiConfig.maxTokens || 1024,
-      temperature: aiConfig.temperature ?? 0.4,
-      system,
-      messages: history,
+      maxOutputTokens: aiConfig.maxTokens || 1024,
+      instructions: system,
+      input: history,
     });
-    raw = resp.content[0]?.text || '';
+    raw = resp.output_text || '';
     tokens = (resp.usage?.input_tokens || 0) + (resp.usage?.output_tokens || 0);
   } catch (err) {
     logger.error({ err, leadId: lead.id }, 'Closer API call failed');
@@ -616,14 +623,14 @@ const generateSummary = async ({ tenantId, messageHistory }) => {
     content: m.content || '[media]',
   }));
 
-  const response = await client.messages.create({
-    model: env.CLAUDE_MODEL,
-    max_tokens: 300,
-    system: 'You are a CRM assistant. Summarize this sales conversation in 3-5 bullet points. Focus on: lead need, budget signals, objections, and next steps. Respond in the same language as the conversation.',
-    messages,
+  const response = await createResponse({
+    model: env.OPENAI_MODEL,
+    maxOutputTokens: 300,
+    instructions: 'You are a CRM assistant. Summarize this sales conversation in 3-5 bullet points. Focus on: lead need, budget signals, objections, and next steps. Respond in the same language as the conversation.',
+    input: messages,
   });
 
-  return response.content[0]?.text || 'Unable to generate summary.';
+  return response.output_text || 'Unable to generate summary.';
 };
 
 module.exports = {
