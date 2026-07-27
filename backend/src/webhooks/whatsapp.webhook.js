@@ -13,14 +13,27 @@ const { decrypt } = require('../utils/crypto');
 const router = Router();
 
 // ── GET — WhatsApp webhook verification handshake ─────────────────────
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const mode      = req.query['hub.mode'];
   const token     = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  if (mode === 'subscribe' && token === env.WHATSAPP_VERIFY_TOKEN) {
-    logger.info('WhatsApp webhook verified');
-    return res.status(200).send(challenge);
+  if (mode === 'subscribe') {
+    // A tenant can configure its own Meta verify token from the dashboard.
+    // Keep the environment token as a fallback for existing deployments.
+    let verified = token === env.WHATSAPP_VERIFY_TOKEN;
+    if (!verified && token) {
+      const tenant = await prisma.tenant.findFirst({
+        where: { waVerifyToken: token },
+        select: { id: true },
+      });
+      verified = Boolean(tenant);
+    }
+
+    if (verified) {
+      logger.info('WhatsApp webhook verified');
+      return res.status(200).send(challenge);
+    }
   }
 
   logger.warn({ mode, token }, 'WhatsApp webhook verification failed');
