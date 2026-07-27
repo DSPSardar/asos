@@ -58,6 +58,11 @@ const envSchema = z.object({
   META_API_URL:            z.string().url().default('https://graph.facebook.com'),
   META_API_VERSION:        z.string().default('v20.0'),
 
+  // Optional — voice-note replies via a cloned voice. Feature stays a no-op
+  // (plain text replies only) unless both are set.
+  ELEVENLABS_API_KEY:      z.string().optional(),
+  ELEVENLABS_VOICE_ID:     z.string().optional(),
+
   REPLICATE_API_TOKEN:     z.string().optional(),
   REPLICATE_MODEL:         z.string().default('black-forest-labs/flux-dev'),
   /** Optional. If set (e.g. https://api.yourdomain.com), draft image API returns imageAbsoluteUrl so the SPA works when only /api is proxied to Node and /uploads needs the full API origin. */

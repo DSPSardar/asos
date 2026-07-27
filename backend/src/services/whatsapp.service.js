@@ -60,6 +60,57 @@ const sendText = async (tenant, to, text) => {
   }
 };
 
+// ── Send audio message (voice note) ───────────────────────────────────
+// Two-step Cloud API flow: upload the buffer to Meta's media endpoint
+// (multipart/form-data — a fresh axios call, not getClient()'s JSON
+// instance), then send a message referencing the returned media id.
+// mimeType should be a WhatsApp-supported audio type, e.g. 'audio/mpeg'.
+
+const sendAudio = async (tenant, to, audioBuffer, mimeType) => {
+  if (isMockMode(tenant)) {
+    const mockId = `mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const reason = env.WHATSAPP_MOCK === 'true' ? 'global mock env' : 'no credentials saved';
+    logger.info({ to, tenantId: tenant.id, mockId, reason }, '[MOCK] WA audio message suppressed — would have been sent');
+    return mockId;
+  }
+
+  try {
+    const token = decrypt(tenant.waAccessToken) || tenant.waAccessToken;
+    const baseURL = `${env.WHATSAPP_API_URL}/${tenant.waPhoneId}`;
+    const extension = mimeType.includes('ogg') ? 'ogg' : 'mp3';
+
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', mimeType);
+    form.append('file', new Blob([audioBuffer], { type: mimeType }), `voice-note.${extension}`);
+
+    const uploadRes = await axios.post(`${baseURL}/media`, form, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 20000,
+    });
+
+    const mediaId = uploadRes.data?.id;
+    if (!mediaId) throw new Error('Media upload returned no id');
+
+    const client = getClient(tenant);
+    const res = await client.post('/messages', {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: normalizePhone(to),
+      type: 'audio',
+      audio: { id: mediaId },
+    });
+
+    logger.info({ to, tenantId: tenant.id, waMessageId: res.data?.messages?.[0]?.id, mediaId }, 'WA audio message sent');
+    return res.data?.messages?.[0]?.id;
+
+  } catch (err) {
+    const apiError = err.response?.data?.error;
+    logger.error({ err: apiError || err.message, to, tenantId: tenant.id }, 'Failed to send WA audio message');
+    return null;
+  }
+};
+
 // ── Send template message ─────────────────────────────────────────────
 
 const sendTemplate = async (tenant, to, templateName, languageCode = 'pt_BR', components = []) => {
@@ -273,6 +324,7 @@ const normalizePhone = (phone) => {
 
 module.exports = {
   sendText,
+  sendAudio,
   sendTemplate,
   sendButtons,
   markAsRead,

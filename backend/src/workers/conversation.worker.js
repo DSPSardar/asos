@@ -8,6 +8,7 @@ const redis = require('../config/redis');
 const prisma = require('../config/database');
 const claudeService = require('../services/claude.service');
 const whatsappService = require('../services/whatsapp.service');
+const elevenlabsService = require('../services/elevenlabs.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
 const logger = require('../utils/logger');
@@ -414,6 +415,35 @@ const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content
       aiRawResponse: rawResponse,
     },
   });
+
+  // ── Optional voice-note follow-up, in the owner's ElevenLabs cloned voice.
+  // Best-effort and fully isolated: the text reply above has already been
+  // sent and saved, so nothing here can affect it.
+  if (elevenlabsService.isVoiceCloneConfigured()) {
+    try {
+      const tts = await elevenlabsService.textToSpeech(content);
+      if (tts) {
+        const audioMessageId = await whatsappService.sendAudio(tenant, phone, tts.buffer, tts.mimeType);
+
+        await prisma.message.create({
+          data: {
+            tenantId,
+            conversationId: conversation.id,
+            waMessageId: audioMessageId,
+            direction: 'OUTBOUND',
+            sender: 'AI',
+            type: 'AUDIO',
+            content,
+            status: audioMessageId ? 'SENT' : 'FAILED',
+            aiTokensUsed: 0,
+            aiRawResponse: null,
+          },
+        });
+      }
+    } catch (err) {
+      logger.error({ err, tenantId, phone }, 'Voice-note follow-up failed (non-blocking)');
+    }
+  }
 };
 
 const handleHandoff = async (tenant, conversation, lead, reason) => {
