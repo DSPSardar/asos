@@ -22,11 +22,15 @@ const QUALIFIER_MODEL = env.OPENAI_QUALIFIER_MODEL || env.OPENAI_MODEL;
 const CLOSER_MODEL    = env.OPENAI_CLOSER_MODEL || env.OPENAI_MODEL;
 
 const createResponse = async ({ model, maxOutputTokens, instructions, input }) => {
-  return client.responses.create({
+  const messages = [
+    { role: 'system', content: instructions },
+    ...(input || []),
+  ];
+
+  return client.chat.completions.create({
     model,
-    instructions,
-    input,
-    max_output_tokens: maxOutputTokens,
+    messages,
+    max_tokens: maxOutputTokens,
   });
 };
 
@@ -173,8 +177,8 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
       instructions: system,
       input: history,
     });
-    raw = resp.output_text || '';
-    tokens = (resp.usage?.input_tokens || 0) + (resp.usage?.output_tokens || 0);
+    raw = resp.choices?.[0]?.message?.content || '';
+    tokens = resp.usage?.total_tokens || 0;
   } catch (err) {
     logger.error({ err, leadId: lead.id }, 'Qualifier API call failed');
     throw Object.assign(new Error('Qualifier AI unavailable'), { agent: 'qualifier', statusCode: 503 });
@@ -369,8 +373,8 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
       instructions: system,
       input: history,
     });
-    raw = resp.output_text || '';
-    tokens = (resp.usage?.input_tokens || 0) + (resp.usage?.output_tokens || 0);
+    raw = resp.choices?.[0]?.message?.content || '';
+    tokens = resp.usage?.total_tokens || 0;
   } catch (err) {
     logger.error({ err, leadId: lead.id }, 'Closer API call failed');
     throw Object.assign(new Error('Closer AI unavailable'), { agent: 'closer', statusCode: 503 });
@@ -630,7 +634,7 @@ const generateSummary = async ({ tenantId, messageHistory }) => {
     input: messages,
   });
 
-  return response.output_text || 'Unable to generate summary.';
+  return response.choices?.[0]?.message?.content || 'Unable to generate summary.';
 };
 
 module.exports = {
