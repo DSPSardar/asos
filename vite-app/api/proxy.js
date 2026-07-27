@@ -69,7 +69,7 @@ function copyResponseHeaders(upstream, res) {
 export default async function handler(req, res) {
   // DSP production traffic now runs on the Railway API; the former
   // getaisales endpoint has been retired for this dashboard.
-  const backendOrigin = 'https://app-production-3bc7.up.railway.app';
+  const backendOrigin = 'https://asos-production.up.railway.app';
   const root = queryValue(req.query?._asosRoot);
 
   if (!backendOrigin || !ALLOWED_ROOTS.has(root)) {

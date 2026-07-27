@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-const BASE_URL = 'https://app-production-3bc7.up.railway.app/api/v1';
+const BASE_URL = 'https://asos-production.up.railway.app/api/v1';
 
 // Local, read-only preview session used by the public "Skip login" button.
 // This is deliberately not a real JWT and is never sent to the API.
