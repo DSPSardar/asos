@@ -30,7 +30,7 @@ const createResponse = async ({ model, maxOutputTokens, instructions, input }) =
   return client.chat.completions.create({
     model,
     messages,
-    max_tokens: maxOutputTokens,
+    max_completion_tokens: maxOutputTokens,
   });
 };
 
