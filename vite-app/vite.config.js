@@ -56,6 +56,8 @@ export default defineConfig({
   },
 
   preview: {
+    host: '0.0.0.0',
     port: 3001,
+    allowedHosts: ['dashboard-production-b65c.up.railway.app'],
   },
 });

@@ -2,7 +2,9 @@
 import axios from 'axios';
 import { isDemoSession, useAuthStore } from '@stores/auth.store';
 
-export const API_BASE_URL = String(import.meta.env.VITE_API_URL || '/api/v1').replace(/\/+$/, '');
+// The dashboard and API are both deployed on Railway. Use the public API
+// directly so the dashboard has no dependency on a Vercel proxy.
+export const API_BASE_URL = 'https://app-production-3bc7.up.railway.app/api/v1';
 const BASE_URL = API_BASE_URL;
 
 /**
