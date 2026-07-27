@@ -3,7 +3,9 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.railway"
 
 [deploy]
-healthcheckPath = "/health"
-healthcheckTimeout = 120
+# healthcheckPath and healthcheckTimeout were removed here because this config
+# applies globally to all services (including asos-worker, which has no HTTP
+# server). Configure a healthcheck for the asos API service individually in
+# Railway's service settings if needed.
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
