@@ -58,6 +58,11 @@ export default defineConfig({
   preview: {
     host: '0.0.0.0',
     port: Number(process.env.PORT) || 3001,
-    allowedHosts: ['dashboard-production-b65c.up.railway.app', 'asos-dashboard-production.up.railway.app'],
+    allowedHosts: [
+      'dashboard-production-b65c.up.railway.app',
+      'asos-dashboard-production.up.railway.app',
+      'dspagenthub.com',
+      'www.dspagenthub.com',
+    ],
   },
 });
