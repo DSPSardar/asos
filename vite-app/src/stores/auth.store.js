@@ -2,7 +2,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-const BASE_URL = 'https://asos-production.up.railway.app/api/v1';
+// Kept independent from src/lib/api.js's API_BASE_URL (which imports from
+// this file) to avoid a circular import — same env var, same fallback.
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://asos-production.up.railway.app/api/v1';
 
 // Local, read-only preview session used by the public "Skip login" button.
 // This is deliberately not a real JWT and is never sent to the API.

@@ -4,7 +4,10 @@ import { isDemoSession, useAuthStore } from '@stores/auth.store';
 
 // The dashboard and API are both deployed on Railway. Use the public API
 // directly so the dashboard has no dependency on a Vercel proxy.
-export const API_BASE_URL = 'https://asos-production.up.railway.app/api/v1';
+// VITE_API_URL lets this point at a custom domain without a code change —
+// falls back to the Railway URL when unset (Vite env vars are build-time,
+// so a new value takes effect on the next build, not at runtime).
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://asos-production.up.railway.app/api/v1';
 const BASE_URL = API_BASE_URL;
 
 /**
