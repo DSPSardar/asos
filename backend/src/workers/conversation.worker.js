@@ -18,10 +18,62 @@ const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
 
 // ─────────────────────────────────────────────────────────────────────
+// PER-CONVERSATION LOCK
+// ─────────────────────────────────────────────────────────────────────
+// The worker runs with concurrency:10 so unrelated leads process in
+// parallel, but two messages from the SAME lead arriving close together
+// must never run concurrently: each independently reads messageHistory
+// before the other's reply is saved, so a concurrent run has no idea the
+// other message exists and produces a stale/repeated answer instead of
+// addressing the new one. This serializes per (tenant, phone) without
+// touching cross-lead throughput.
+
+const acquireConversationLock = async (lockKey, token, { ttlMs = 30000, maxWaitMs = 20000, pollMs = 250 } = {}) => {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    const acquired = await redis.set(lockKey, token, 'PX', ttlMs, 'NX');
+    if (acquired) return true;
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  return false;
+};
+
+const releaseConversationLock = async (lockKey, token) => {
+  // Compare-and-delete so we never release a lock some other job acquired
+  // after ours expired — the TTL is a crash safety net, not the common path.
+  const script = `
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+      return redis.call("del", KEYS[1])
+    end
+    return 0
+  `;
+  await redis.eval(script, 1, lockKey, token).catch(() => {});
+};
+
+// ─────────────────────────────────────────────────────────────────────
 // MAIN JOB PROCESSOR
 // ─────────────────────────────────────────────────────────────────────
 
 const processInboundMessage = async (job) => {
+  const { tenantId, phone } = job.data;
+  const lockKey = `asos:lock:msg:${tenantId}:${whatsappService.normalizePhone(phone)}`;
+  const lockToken = String(job.id);
+
+  const gotLock = await acquireConversationLock(lockKey, lockToken);
+  if (!gotLock) {
+    // Another message for this same lead is still mid-processing — throw
+    // so BullMQ retries with its existing backoff instead of racing ahead.
+    throw new Error(`Could not acquire conversation lock for ${lockKey} — retrying`);
+  }
+
+  try {
+    await handleInboundMessage(job);
+  } finally {
+    await releaseConversationLock(lockKey, lockToken);
+  }
+};
+
+const handleInboundMessage = async (job) => {
   let { tenantId, phone, contactName, content, waMessageId, messageType,
         referral, mediaId, timestamp } = job.data;
 
@@ -166,7 +218,7 @@ const processInboundMessage = async (job) => {
   }
 
   // ── 6. Persist inbound message to DB ─────────────────────────────
-  await prisma.message.create({
+  const inboundMessage = await prisma.message.create({
     data: {
       tenantId,
       conversationId: conversation.id,
@@ -200,7 +252,7 @@ const processInboundMessage = async (job) => {
   const messageHistory = await prisma.message.findMany({
     where: { conversationId: conversation.id, tenantId },
     orderBy: { sentAt: 'asc' },
-    select: { sender: true, content: true, sentAt: true },
+    select: { id: true, sender: true, content: true, sentAt: true },
   });
 
   // ── 9. Call Claude AI Engine ──────────────────────────────────────
@@ -212,7 +264,13 @@ const processInboundMessage = async (job) => {
       contact,
       conversation,
       newMessage: content || '[non-text message]',
-      messageHistory: messageHistory.slice(0, -1), // exclude current message
+      // Exclude by id, not position: sentAt mixes WhatsApp's own inbound
+      // timestamp with our server wall-clock outbound timestamp, so a fast
+      // follow-up can sort earlier than the AI's own just-saved reply —
+      // slicing off "the last item" would then strip that reply instead
+      // of the current message, and the AI would never see it already
+      // answered.
+      messageHistory: messageHistory.filter((m) => m.id !== inboundMessage.id),
       handedBackToAI,
     });
   } catch (aiErr) {
