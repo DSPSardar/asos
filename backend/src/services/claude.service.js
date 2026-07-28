@@ -21,7 +21,7 @@ const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 const QUALIFIER_MODEL = env.OPENAI_QUALIFIER_MODEL || env.OPENAI_MODEL;
 const CLOSER_MODEL    = env.OPENAI_CLOSER_MODEL || env.OPENAI_MODEL;
 
-const createResponse = async ({ model, maxOutputTokens, instructions, input }) => {
+const createResponse = async ({ model, maxOutputTokens, instructions, input, jsonMode = false }) => {
   const messages = [
     { role: 'system', content: instructions },
     ...(input || []),
@@ -31,6 +31,15 @@ const createResponse = async ({ model, maxOutputTokens, instructions, input }) =
     model,
     messages,
     max_completion_tokens: maxOutputTokens,
+    // Qualifier/Closer prompts demand strict JSON, but the model isn't
+    // always compliant on its own — it occasionally answers in plain
+    // prose instead, which fails JSON.parse() downstream and falls back
+    // to a hardcoded generic reply (the "same answer every time" bug).
+    // response_format forces the API to guarantee syntactically valid
+    // JSON output, closing that failure mode at the source instead of
+    // parsing around it. generateSummary() wants plain text, so this is
+    // opt-in per call site, not global.
+    ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
   });
 };
 
@@ -176,6 +185,7 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
       maxOutputTokens: 512,
       instructions: system,
       input: history,
+      jsonMode: true,
     });
     raw = resp.choices?.[0]?.message?.content || '';
     tokens = resp.usage?.total_tokens || 0;
@@ -372,6 +382,7 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
       maxOutputTokens: aiConfig.maxTokens || 1024,
       instructions: system,
       input: history,
+      jsonMode: true,
     });
     raw = resp.choices?.[0]?.message?.content || '';
     tokens = resp.usage?.total_tokens || 0;
