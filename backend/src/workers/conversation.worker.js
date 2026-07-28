@@ -9,6 +9,7 @@ const prisma = require('../config/database');
 const claudeService = require('../services/claude.service');
 const whatsappService = require('../services/whatsapp.service');
 const elevenlabsService = require('../services/elevenlabs.service');
+const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
 const logger = require('../utils/logger');
@@ -21,8 +22,8 @@ const env = require('../config/env');
 // ─────────────────────────────────────────────────────────────────────
 
 const processInboundMessage = async (job) => {
-  const { tenantId, phone, contactName, content, waMessageId, messageType,
-          referral, mediaId, timestamp } = job.data;
+  let { tenantId, phone, contactName, content, waMessageId, messageType,
+        referral, mediaId, timestamp } = job.data;
 
   logger.info({ jobId: job.id, tenantId, phone, waMessageId }, '▶ Processing inbound message');
 
@@ -40,6 +41,19 @@ const processInboundMessage = async (job) => {
   if (!tenant.waPhoneId && env.WHATSAPP_MOCK !== 'true') {
     logger.warn({ tenantId }, 'No WA phone configured — skipping');
     return;
+  }
+
+  // ── 1b. Transcribe inbound voice notes ─────────────────────────────
+  // extractMessageContent() only returns a '[Audio message]' placeholder —
+  // it's synchronous and can't do the download + Whisper round trip. Do
+  // that here instead, before `content` is saved or handed to the AI, so
+  // the placeholder never leaks downstream. Falls back to an explicit
+  // "could not transcribe" marker on any failure rather than pretending
+  // the AI understood a voice note it never actually heard.
+  if (messageType === 'audio' && mediaId) {
+    const media = await whatsappService.downloadMedia(tenant, mediaId);
+    const transcript = media ? await transcriptionService.transcribeAudio(media.buffer, media.mimeType) : null;
+    content = transcript || '[Voice message — could not transcribe]';
   }
 
   // ── 2. Mark message as read (async, non-blocking) ─────────────────

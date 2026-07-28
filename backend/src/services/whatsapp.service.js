@@ -196,6 +196,33 @@ const getMediaUrl = async (tenant, mediaId) => {
   }
 };
 
+// Resolves the temporary signed URL via getMediaUrl(), then fetches the
+// actual bytes — Meta's media URLs require the same bearer token as the
+// rest of the Graph API, so this is a second authenticated request, not a
+// plain public download.
+
+const downloadMedia = async (tenant, mediaId) => {
+  const url = await getMediaUrl(tenant, mediaId);
+  if (!url) return null;
+
+  try {
+    const token = decrypt(tenant.waAccessToken) || tenant.waAccessToken;
+    const res = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      responseType: 'arraybuffer',
+      timeout: 20000,
+    });
+
+    return {
+      buffer: Buffer.from(res.data),
+      mimeType: res.headers['content-type'] || 'application/octet-stream',
+    };
+  } catch (err) {
+    logger.warn({ err: err.message, mediaId }, 'Failed to download WA media');
+    return null;
+  }
+};
+
 // ── Parse incoming webhook message ───────────────────────────────────
 
 const parseInboundMessage = (webhookBody) => {
@@ -329,6 +356,7 @@ module.exports = {
   sendButtons,
   markAsRead,
   getMediaUrl,
+  downloadMedia,
   parseInboundMessage,
   verifySignature,
   verifyCredentials,
