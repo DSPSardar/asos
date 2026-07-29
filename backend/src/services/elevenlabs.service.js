@@ -41,6 +41,16 @@ const SPOKEN_ABBREVIATIONS = {
   Pvt: 'Private',
 };
 
+// Bank/brand names the model doesn't pronounce correctly on its own — a
+// looser phonetic respelling nudges ElevenLabs closer to the real
+// pronunciation. Trial-and-error by nature (no way to hear the actual
+// audio from here), so add to this list as more come up.
+const NAME_RESPELLINGS = {
+  Meezan: 'Mee-zaan',
+};
+
+const DIGIT_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+
 const normalizeForSpeech = (text) => {
   let out = text
     .replace(/\b(\d{1,2})\s*:\s*00\s*(AM|PM|am|pm)\b/g, '$1 $2')
@@ -48,14 +58,21 @@ const normalizeForSpeech = (text) => {
     .replace(/\bPKT\b/g, 'Pakistan Time')
     .replace(/\bIBAN\b/gi, 'I B A N')
     // Long digit runs (bank account / IBAN numbers) get read out as one
-    // gigantic number ("one hundred fifty two trillion...") instead of
-    // individual digits — space them out so they're spoken digit by digit.
-    // Threshold is 8+ (not 6+) so it doesn't also catch plain 6-7 digit
-    // prices written without commas (e.g. "100000").
-    .replace(/\d{8,}/g, (run) => run.split('').join(' '));
+    // gigantic number, or out of sequence / with "0" read as the letter
+    // "O" — spelling each digit out as its own word removes any room for
+    // the model to reinterpret the run. Threshold is 8+ (not 6+) so it
+    // doesn't also catch plain 6-7 digit prices written without commas
+    // (e.g. "100000").
+    // Padded with spaces so it doesn't run together with adjacent letters
+    // when there's no whitespace in the original (e.g. "IBANPK36...").
+    .replace(/\d{8,}/g, (run) => ` ${run.split('').map(d => DIGIT_WORDS[Number(d)]).join(' ')} `)
+    .replace(/ {2,}/g, ' ');
 
   for (const [abbr, full] of Object.entries(SPOKEN_ABBREVIATIONS)) {
     out = out.replace(new RegExp(`\\b${abbr}\\b`, 'gi'), full);
+  }
+  for (const [name, respelling] of Object.entries(NAME_RESPELLINGS)) {
+    out = out.replace(new RegExp(`\\b${name}\\b`, 'gi'), respelling);
   }
 
   return out;
