@@ -17,6 +17,18 @@ const isVoiceCloneConfigured = () => {
   );
 };
 
+// ElevenLabs reads raw clock-time text literally, which sounds wrong out
+// loud even though it reads fine on screen: "9:00 PM" comes out as "nine
+// hundred pm", "9-10 PM" as a mumbled hyphen, and "PKT" gets spelled out
+// letter by letter. Only the audio gets this rewrite — the WhatsApp text
+// reply keeps its normal written form untouched.
+const normalizeForSpeech = (text) => {
+  return text
+    .replace(/\b(\d{1,2}):00\s*(AM|PM|am|pm)\b/g, '$1 $2')
+    .replace(/\b(\d{1,2})\s*-\s*(\d{1,2}\s*(?:AM|PM|am|pm))/g, '$1 to $2')
+    .replace(/\bPKT\b/g, 'Pakistan Time');
+};
+
 // Returns { buffer, mimeType } on success, or null on any failure — a TTS
 // error must never block or break the text reply that already went out.
 // Emits MP3 (ElevenLabs' default), not OGG/Opus: WhatsApp accepts MP3 as a
@@ -32,7 +44,7 @@ const textToSpeech = async (text) => {
     const res = await axios.post(
       `${ELEVENLABS_API_URL}/text-to-speech/${env.ELEVENLABS_VOICE_ID}`,
       {
-        text,
+        text: normalizeForSpeech(text),
         model_id: 'eleven_multilingual_v2',
         voice_settings: { stability: 0.5, similarity_boost: 0.75 },
       },
