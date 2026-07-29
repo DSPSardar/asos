@@ -25,7 +25,11 @@ const isVoiceCloneConfigured = () => {
 // "sat" (past tense of sit), and "sun" instead of the weekday. Only the
 // audio gets this rewrite — the WhatsApp text reply keeps its normal
 // written form untouched.
-const WEEKDAY_ABBREVIATIONS = {
+// Same problem also shows up with company suffixes ("Ltd"/"Pvt" read as
+// garbled single words instead of "Limited"/"Private") and banking details
+// ("IBAN" mispronounced as a word, and the long digit string after it read
+// out as one giant number instead of individual digits).
+const SPOKEN_ABBREVIATIONS = {
   Mon: 'Monday',
   Tue: 'Tuesday', Tues: 'Tuesday',
   Wed: 'Wednesday',
@@ -33,15 +37,24 @@ const WEEKDAY_ABBREVIATIONS = {
   Fri: 'Friday',
   Sat: 'Saturday',
   Sun: 'Sunday',
+  Ltd: 'Limited',
+  Pvt: 'Private',
 };
 
 const normalizeForSpeech = (text) => {
   let out = text
     .replace(/\b(\d{1,2})\s*:\s*00\s*(AM|PM|am|pm)\b/g, '$1 $2')
     .replace(/\b(\d{1,2})\s*-\s*(\d{1,2}\s*(?:AM|PM|am|pm))/g, '$1 to $2')
-    .replace(/\bPKT\b/g, 'Pakistan Time');
+    .replace(/\bPKT\b/g, 'Pakistan Time')
+    .replace(/\bIBAN\b/gi, 'I B A N')
+    // Long digit runs (bank account / IBAN numbers) get read out as one
+    // gigantic number ("one hundred fifty two trillion...") instead of
+    // individual digits — space them out so they're spoken digit by digit.
+    // Threshold is 8+ (not 6+) so it doesn't also catch plain 6-7 digit
+    // prices written without commas (e.g. "100000").
+    .replace(/\d{8,}/g, (run) => run.split('').join(' '));
 
-  for (const [abbr, full] of Object.entries(WEEKDAY_ABBREVIATIONS)) {
+  for (const [abbr, full] of Object.entries(SPOKEN_ABBREVIATIONS)) {
     out = out.replace(new RegExp(`\\b${abbr}\\b`, 'gi'), full);
   }
 
