@@ -17,16 +17,35 @@ const isVoiceCloneConfigured = () => {
   );
 };
 
-// ElevenLabs reads raw clock-time text literally, which sounds wrong out
-// loud even though it reads fine on screen: "9:00 PM" comes out as "nine
-// hundred pm", "9-10 PM" as a mumbled hyphen, and "PKT" gets spelled out
-// letter by letter. Only the audio gets this rewrite — the WhatsApp text
-// reply keeps its normal written form untouched.
+// ElevenLabs reads raw clock-time text and weekday abbreviations literally,
+// which sounds wrong out loud even though it reads fine on screen: "9:00 PM"
+// (or "9 : 00 PM" — the model isn't consistent about spacing) comes out as
+// "nine hundred pm", "9-10 PM" as a mumbled hyphen, "PKT" gets spelled out
+// letter by letter, and "Mon"/"Sat"/"Sun" get read as the words "moon",
+// "sat" (past tense of sit), and "sun" instead of the weekday. Only the
+// audio gets this rewrite — the WhatsApp text reply keeps its normal
+// written form untouched.
+const WEEKDAY_ABBREVIATIONS = {
+  Mon: 'Monday',
+  Tue: 'Tuesday', Tues: 'Tuesday',
+  Wed: 'Wednesday',
+  Thu: 'Thursday', Thur: 'Thursday', Thurs: 'Thursday',
+  Fri: 'Friday',
+  Sat: 'Saturday',
+  Sun: 'Sunday',
+};
+
 const normalizeForSpeech = (text) => {
-  return text
-    .replace(/\b(\d{1,2}):00\s*(AM|PM|am|pm)\b/g, '$1 $2')
+  let out = text
+    .replace(/\b(\d{1,2})\s*:\s*00\s*(AM|PM|am|pm)\b/g, '$1 $2')
     .replace(/\b(\d{1,2})\s*-\s*(\d{1,2}\s*(?:AM|PM|am|pm))/g, '$1 to $2')
     .replace(/\bPKT\b/g, 'Pakistan Time');
+
+  for (const [abbr, full] of Object.entries(WEEKDAY_ABBREVIATIONS)) {
+    out = out.replace(new RegExp(`\\b${abbr}\\b`, 'gi'), full);
+  }
+
+  return out;
 };
 
 // Returns { buffer, mimeType } on success, or null on any failure — a TTS
