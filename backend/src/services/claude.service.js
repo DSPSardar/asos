@@ -374,6 +374,33 @@ OUTPUT FORMAT
 ${CLOSER_SCHEMA}
 `;
 
+// Hard technical block — rules 11/12 above are prompt-level instructions,
+// which the model can still ignore (it has before). This is enforcement,
+// not persuasion: it inspects the actual generated reply_message and vetoes
+// it outright if it contains a discount/installment/out-of-scope offer,
+// regardless of what the model decided to write. The ONLY thing this bot
+// is ever allowed to sell is DSP admission — nothing else, no exceptions.
+// Deliberately scoped tight to the exact violations seen in production —
+// e.g. NOT "freelance"/"consulting", since the Closer's own legitimate
+// script already asks "Freelancing karte hain ya job ki talash mein hain?"
+// and a broader pattern would veto that real qualifying question too.
+const OUT_OF_SCOPE_REPLY_PATTERNS = [
+  /\bdiscount(s|ed)?\b/i,
+  /\binstall?ment(s)?\b/i,
+  /\d+\s*%\s*(off|discount)/i,
+  /\bwaiver\b/i,
+  /\bSEO\b/i,
+];
+
+const containsOutOfScopeOffer = (text) => {
+  if (!text) return false;
+  return OUT_OF_SCOPE_REPLY_PATTERNS.some((re) => re.test(text));
+};
+
+const SAFE_FALLBACK_REPLY =
+  'DSP AI Agents Bootcamp ka fee fixed hai — koi discount ya kisi aur service ka option available nahi. ' +
+  'Kya main aapko seat confirm karne mein madad karun?';
+
 const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [] }) => {
   const t0 = Date.now();
   const messageCount = (messageHistory || []).length;
@@ -411,8 +438,14 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
     throw Object.assign(new Error('Closer returned invalid JSON'), { agent: 'closer', raw });
   }
 
+  const rawReplyMessage = String(parsed.reply_message || '').slice(0, 1000);
+  const blocked = containsOutOfScopeOffer(rawReplyMessage);
+  if (blocked) {
+    logger.warn({ leadId: lead.id, raw: rawReplyMessage }, '🚫 Closer reply vetoed — contained discount/installment/out-of-scope offer');
+  }
+
   const result = {
-    reply_message:   String(parsed.reply_message || '').slice(0, 1000),
+    reply_message:   blocked ? SAFE_FALLBACK_REPLY : rawReplyMessage,
     closing_type:    ['soft','hard','urgent','lost'].includes(parsed.closing_type) ? parsed.closing_type : 'soft',
     urgency_trigger: String(parsed.urgency_trigger || '').slice(0, 200),
     knowledge_gap:   String(parsed.knowledge_gap || '').trim().slice(0, 500),
