@@ -1,13 +1,11 @@
 // src/main.jsx — Vite app entry point
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useAuthStore } from '@stores/auth.store';
+import { AppRoutes } from './AppRoutes';
 import './index.css';
-
-// AdminPanel is imported eagerly — no lazy chunk to fail
-import AdminPanelPage from '@pages/AdminPanel';
 
 // ── Error boundary ─────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
@@ -27,23 +25,6 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
-
-// ── Pages (lazy-loaded) ────────────────────────────────────────
-const AuthPage          = React.lazy(() => import('@pages/Auth'));
-const ResetPasswordPage = React.lazy(() => import('@pages/ResetPassword'));
-const DashboardLayout   = React.lazy(() => import('@pages/Layout'));
-const DashboardPage     = React.lazy(() => import('@pages/Dashboard'));
-const PipelinePage      = React.lazy(() => import('@pages/Pipeline'));
-const ConversationsPage = React.lazy(() => import('@pages/Conversations'));
-const AIInsightsPage    = React.lazy(() => import('@pages/AIInsights'));
-const AdsPage           = React.lazy(() => import('@pages/AdsPerformance'));
-const AnalyticsPage     = React.lazy(() => import('@pages/Analytics'));
-const SettingsPage      = React.lazy(() => import('@pages/Settings'));
-const BillingPage       = React.lazy(() => import('@pages/Billing'));
-const OnboardingPage    = React.lazy(() => import('@pages/Onboarding'));
-const StudentsPage      = React.lazy(() => import('@pages/Students'));
-const DSPReportsPage    = React.lazy(() => import('@pages/DSPReports'));
-const AutomationsPage   = React.lazy(() => import('@pages/Automations'));
 
 // ── App initializer — calls /auth/me on boot ───────────────────
 // Blocks ALL rendering until the server confirms the user's role.
@@ -67,33 +48,6 @@ function AuthInitializer({ children }) {
 
   return children;
 }
-
-// ── Route guards — all use Zustand user.role (server-confirmed) ─
-const PrivateRoute = ({ children }) => {
-  const { token } = useAuthStore();
-  if (!token) return <Navigate to="/auth" replace />;
-  return children;
-};
-
-// Sends user to the correct landing page based on server-confirmed role
-const DefaultRedirect = () => {
-  const { user } = useAuthStore();
-  return <Navigate to={user?.role === 'SUPERADMIN' ? '/admin' : '/dashboard'} replace />;
-};
-
-// Only SUPERADMIN may access this route
-const SuperAdminRoute = ({ children }) => {
-  const { user } = useAuthStore();
-  if (user?.role !== 'SUPERADMIN') return <Navigate to="/dashboard" replace />;
-  return children;
-};
-
-// Tenant-only routes — SUPERADMIN is redirected away (has no tenant)
-const TenantRoute = ({ children }) => {
-  const { user } = useAuthStore();
-  if (user?.role === 'SUPERADMIN') return <Navigate to="/admin" replace />;
-  return children;
-};
 
 // ── Suspense wrapper ───────────────────────────────────────────
 const Suspense = ({ children }) => (
@@ -119,33 +73,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       {/* AuthInitializer hits /auth/me before rendering anything */}
       <AuthInitializer>
         <Suspense>
-          <Routes>
-            <Route path="/auth" element={<AuthPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-
-            <Route path="/" element={<PrivateRoute><DashboardLayout /></PrivateRoute>}>
-              <Route index element={<DefaultRedirect />} />
-
-              {/* Tenant pages — SUPERADMIN cannot enter */}
-              <Route path="dashboard"     element={<TenantRoute><DashboardPage /></TenantRoute>}      />
-              <Route path="leads"         element={<TenantRoute><PipelinePage /></TenantRoute>}       />
-              <Route path="conversations" element={<TenantRoute><ConversationsPage /></TenantRoute>}  />
-              <Route path="ai-insights"   element={<TenantRoute><AIInsightsPage /></TenantRoute>}     />
-              <Route path="ads"           element={<TenantRoute><AdsPage /></TenantRoute>}            />
-              <Route path="analytics"     element={<TenantRoute><AnalyticsPage /></TenantRoute>}      />
-              <Route path="settings"      element={<TenantRoute><SettingsPage /></TenantRoute>}       />
-              <Route path="billing"       element={<TenantRoute><BillingPage /></TenantRoute>}        />
-              <Route path="onboarding"    element={<TenantRoute><OnboardingPage /></TenantRoute>}     />
-              <Route path="students"      element={<TenantRoute><StudentsPage /></TenantRoute>}       />
-              <Route path="dsp-reports"   element={<TenantRoute><DSPReportsPage /></TenantRoute>}     />
-              <Route path="automations"   element={<TenantRoute><AutomationsPage /></TenantRoute>}    />
-
-              {/* SUPERADMIN only */}
-              <Route path="admin" element={<SuperAdminRoute><AdminPanelPage /></SuperAdminRoute>} />
-            </Route>
-
-            <Route path="*" element={<DefaultRedirect />} />
-          </Routes>
+          <AppRoutes />
         </Suspense>
       </AuthInitializer>
     </BrowserRouter>
