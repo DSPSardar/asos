@@ -6,7 +6,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AppRoutes } from './AppRoutes';
 import { useAuthStore } from '@stores/auth.store';
 
@@ -25,12 +25,22 @@ const DASHBOARD_PATHS = [
   '/dsp-reports', '/automations', '/admin',
 ];
 
+// Reports the location AFTER any redirect chain has settled. Without this,
+// a deleted route silently falls through to the catch-all and still renders
+// a shell, so the assertions below would pass against the very regression
+// this suite exists to catch.
+function LocationProbe() {
+  const { pathname } = useLocation();
+  return <div data-testid="pathname">{pathname}</div>;
+}
+
 function renderAt(path) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <React.Suspense fallback={<div data-testid="loading" />}>
         <AppRoutes />
       </React.Suspense>
+      <LocationProbe />
     </MemoryRouter>
   );
 }
@@ -54,6 +64,7 @@ describe('routing', () => {
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
       /close deals while you sleep/i
     );
+    expect(screen.getByTestId('pathname').textContent).toBe('/');
   });
 
   it('renders the landing page at /landing when logged out', async () => {
@@ -61,6 +72,7 @@ describe('routing', () => {
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
       /close deals while you sleep/i
     );
+    expect(screen.getByTestId('pathname').textContent).toBe('/landing');
   });
 
   it('redirects a logged-in tenant user from / to the dashboard', async () => {
@@ -68,6 +80,7 @@ describe('routing', () => {
     renderAt('/');
     expect(await screen.findByTestId('shell')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 1, name: /close deals/i })).toBeNull();
+    expect(screen.getByTestId('pathname').textContent).toBe('/dashboard');
   });
 
   it('sends a logged-out visitor at an unknown path to the landing page', async () => {
@@ -75,17 +88,20 @@ describe('routing', () => {
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
       /close deals while you sleep/i
     );
+    expect(screen.getByTestId('pathname').textContent).toBe('/');
   });
 
   it.each(DASHBOARD_PATHS)('keeps %s behind the authenticated shell', async (path) => {
     loginAs(path === '/admin' ? 'SUPERADMIN' : 'TENANT_ADMIN');
     renderAt(path);
     expect(await screen.findByTestId('shell')).toBeInTheDocument();
+    expect(screen.getByTestId('pathname').textContent).toBe(path);
   });
 
   it.each(DASHBOARD_PATHS)('does not expose %s to a logged-out visitor', async (path) => {
     renderAt(path);
     expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(screen.queryByTestId('shell')).toBeNull();
+    expect(screen.getByTestId('pathname').textContent).toBe('/auth');
   });
 });
