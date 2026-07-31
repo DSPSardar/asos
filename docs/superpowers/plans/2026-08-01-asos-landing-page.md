@@ -50,6 +50,7 @@ These apply to **every** task. Do not restate them per task; they are always in 
 
 | File | Responsibility |
 |---|---|
+| `vite-app/src/AppRoutes.jsx` | The route tree as a pure, side-effect-free module |
 | `vite-app/vitest.config.js` | Test runner config (jsdom, aliases mirroring `vite.config.js`) |
 | `vite-app/src/test/setup.js` | Test setup — jest-dom matchers |
 | `vite-app/src/routes.test.jsx` | Router tests: public `/`, redirects, all 13 dashboard paths |
@@ -76,7 +77,7 @@ These apply to **every** task. Do not restate them per task; they are always in 
 | File | Change |
 |---|---|
 | `vite-app/package.json` | Add `test` script + 4 devDependencies |
-| `vite-app/src/main.jsx` | `PublicHome`, pathless layout route, auth-aware `*` |
+| `vite-app/src/main.jsx` | Slimmed to the entry point; route tree moves to `AppRoutes.jsx` |
 | `vite-app/index.html` | SEO/OG tags, `lang="en"` |
 
 **Task order rationale:** Task 1 lands the risky routing change behind tests first, with a stub `Landing`. Tasks 2–6 fill in sections top-to-bottom, each independently viewable in the browser. Task 7 finishes with SEO and the OG asset.
@@ -94,10 +95,13 @@ The highest-risk change in this plan. Making `/` public means restructuring the 
 - Create: `vite-app/src/routes.test.jsx`
 - Create: `vite-app/src/pages/Landing.jsx` (stub — filled in by Tasks 2–6)
 - Create: `vite-app/src/components/landing/links.js`
+- Create: `vite-app/src/AppRoutes.jsx`
 - Modify: `vite-app/src/main.jsx`
 
 **Interfaces:**
-- Produces: `<AppRoutes />` — named export from `src/main.jsx`, the `<Routes>` tree with no `BrowserRouter` around it, so tests can wrap it in `MemoryRouter`. `main.jsx` keeps its default side-effect of mounting the app.
+- Produces: `AppRoutes` — **named** export from `src/AppRoutes.jsx`, the `<Routes>` tree with no `BrowserRouter` around it, so tests can wrap it in `MemoryRouter`.
+
+  The route tree lives in its own module rather than in `main.jsx` because `main.jsx` calls `ReactDOM.createRoot(...)` at module scope. Importing it from a test would execute that call — either crashing on a missing `#root`, or (if the test supplies one) mounting the entire real app into the document so that every `screen` query matches both the mounted app and the test's own render. `AppRoutes.jsx` must therefore stay free of top-level side effects: no `ReactDOM`, no `./index.css`.
 - Produces: `Landing` — default export from `src/pages/Landing.jsx`.
 - Produces: from `src/components/landing/links.js` — `SIGNUP_HREF: string`, `LOGIN_HREF: string`, `BRAND_NAME: string`, `SALES_EMAIL: string`, `NAV_LINKS: Array<{href: string, label: string}>`.
 
@@ -219,7 +223,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { AppRoutes } from './main';
+import { AppRoutes } from './AppRoutes';
 import { useAuthStore } from '@stores/auth.store';
 
 // Replace the dashboard shell with a bare marker. Deliberately NO
@@ -311,13 +315,19 @@ Note on the last block: a logged-out visitor hitting a dashboard path is redirec
 npm test
 ```
 
-Expected: FAIL. `AppRoutes` is not exported from `./main`, so every test errors with something like `SyntaxError: The requested module './main' does not provide an export named 'AppRoutes'`.
+Expected: FAIL. `src/AppRoutes.jsx` does not exist yet, so every test errors with `Failed to resolve import "./AppRoutes"`.
 
 - [ ] **Step 9: Restructure the router**
 
-In `vite-app/src/main.jsx`:
+The route tree moves out of `main.jsx` into a new `src/AppRoutes.jsx`, leaving `main.jsx` as a thin entry point that owns the side effects (CSS import, `createRoot`). See the Interfaces note above for why.
 
-**9a.** Add the `Landing` import alongside the eager `AdminPanel` import (around line 10). It is eager, not lazy — this is the paid-traffic entry point and a lazy chunk costs a round trip before LCP.
+**Move into `vite-app/src/AppRoutes.jsx`, unchanged:** the eager `AdminPanelPage` import, every `React.lazy(...)` page constant, and the `PrivateRoute`, `DefaultRedirect`, `SuperAdminRoute` and `TenantRoute` guards. That file imports only `React`, `{ Routes, Route, Navigate }` from `react-router-dom`, and `{ useAuthStore }` from `@stores/auth.store`.
+
+**`vite-app/src/main.jsx` keeps:** `ErrorBoundary`, `AuthInitializer`, the `Suspense` wrapper, `GOOGLE_CLIENT_ID` / `AppWithAuth`, `import './index.css'`, and the `createRoot` call. Add `import { AppRoutes } from './AppRoutes';` and reduce its `react-router-dom` import to just `BrowserRouter`.
+
+Then, in `AppRoutes.jsx`:
+
+**9a.** Add the eager `Landing` import alongside the eager `AdminPanel` import. It is eager, not lazy — this is the paid-traffic entry point and a lazy chunk costs a round trip before LCP.
 
 ```jsx
 // AdminPanel is imported eagerly — no lazy chunk to fail
@@ -347,7 +357,7 @@ const NotFoundRedirect = () => {
 };
 ```
 
-**9c.** Extract the route tree into an exported `AppRoutes` component and convert the dashboard shell to a **pathless layout route** with absolute child paths. Replace the whole `<Routes>…</Routes>` block with this, and export the component:
+**9c.** Define the exported `AppRoutes` component, converting the dashboard shell to a **pathless layout route** with absolute child paths:
 
 ```jsx
 // Exported without a Router around it so tests can mount it inside a
@@ -387,7 +397,7 @@ export function AppRoutes() {
 }
 ```
 
-**9d.** Update the render call to use it — replace the `<Routes>…</Routes>` block inside `<Suspense>` with `<AppRoutes />`:
+**9d.** In `main.jsx`, the render call now uses the imported component:
 
 ```jsx
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -418,7 +428,7 @@ npm test
 
 Expected: PASS — 30 tests (4 standalone + 13 + 13 from the two `it.each` blocks).
 
-- [ ] **Step 11: Verify the build**
+- [ ] **Step 11: Verify the build and the running app**
 
 ```bash
 npm run build
@@ -426,13 +436,21 @@ npm run build
 
 Expected: build succeeds, no unresolved-import errors.
 
+This step split the app's entry point, so also confirm the refactor is behaviour-neutral at runtime:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3001/auth` and confirm the auth page still renders.
+
 - [ ] **Step 12: Commit**
 
 ```bash
 git add vite-app/package.json vite-app/package-lock.json vite-app/vitest.config.js \
         vite-app/src/test/setup.js vite-app/src/routes.test.jsx \
         vite-app/src/pages/Landing.jsx vite-app/src/components/landing/links.js \
-        vite-app/src/main.jsx
+        vite-app/src/AppRoutes.jsx vite-app/src/main.jsx
 git commit -m "feat(landing): make / public and add routing tests
 
 Converts the dashboard shell to a pathless layout route so every
