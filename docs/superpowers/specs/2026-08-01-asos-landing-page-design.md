@@ -73,13 +73,13 @@ New directory `vite-app/src/components/landing/`, one focused file per section.
 | `src/components/landing/StatsBar.jsx` | 78% / 11.1% / 5.68x |
 | `src/components/landing/HowItWorks.jsx` | 4 steps |
 | `src/components/landing/Features.jsx` | 3-column feature breakdown |
-| `src/components/landing/LiveDemo.jsx` | "Claude AI · Active" qualification example |
+| `src/components/landing/AgentPipeline.jsx` | Animated replay of one qualification, end to end |
 | `src/components/landing/Pricing.jsx` | 4 tiers + monthly/yearly toggle |
 | `src/components/landing/Faq.jsx` | Objection-handling accordion |
 | `src/components/landing/FinalCta.jsx` | Repeat trial offer |
 | `src/components/landing/LandingFooter.jsx` | Nav, contact sales, security/uptime badges |
 
-Each component owns its own copy and renders from a local array where the content repeats. No shared state between sections; `Pricing` holds the only piece of local state on the page (`cycle`).
+Each component owns its own copy and renders from a local array where the content repeats. Two components hold local state — `Pricing` (`cycle`) and `AgentPipeline` (animation step); everything else is presentational.
 
 ### `links.js` contract
 
@@ -99,9 +99,9 @@ CTAs are plain `<a href>` rather than react-router `<Link>`. `/auth` is a lazy-l
 ### Hero
 - Eyebrow: `THE FUTURE OF SALES` (mono, uppercase, tracked)
 - H1: "Close deals while **you sleep.**" — second line in `.gradient-text`
-- Sub: "Claude AI qualifies every lead, diagnoses their problem, and sends the perfect WhatsApp message — automatically."
+- Sub: "AI agents qualify every lead, diagnose their problem, and send the perfect WhatsApp message — automatically." (vendor-neutral; see below)
 - Primary CTA: "Start free trial →" → `SIGNUP_HREF`
-- Secondary CTA: "See it in action" → `#demo` anchor (in-page, no new form)
+- Secondary CTA: "Watch the agents work" → `#demo` anchor (in-page, no new form)
 - Microcopy: "14-day free trial · No credit card required · Cancel anytime"
 
 ### Stats bar
@@ -109,19 +109,57 @@ CTAs are plain `<a href>` rather than react-router `<Link>`. `/auth` is a lazy-l
 
 ### How it works — 4 steps
 1. **Lead comes in** — from a Meta ad, a WhatsApp message, or an organic signup.
-2. **Claude qualifies & diagnoses** — the Qualifier agent scores intent and identifies the real problem.
+2. **AI qualifies & diagnoses** — the Qualifier agent scores intent and identifies the real problem.
 3. **Personalized WhatsApp sent** — the Closer agent writes and sends the reply, grounded strictly in your configured facts.
 4. **Deal closes, tracked in CRM** — stage advances, activity is logged, Meta CAPI fires server-side.
 
 ### Features — 3 columns
-- **Claude AI Engine** ◎ — qualifies, diagnoses and closes leads via WhatsApp
+- **Dual-Agent AI Engine** ◎ — a Qualifier scores and diagnoses every lead, a Closer writes the reply
 - **Multi-tenant CRM** ◈ — full pipeline, contacts and activity tracking
 - **Meta Ads Attribution** ⬗ — server-side CAPI for pixel-perfect ROI
 
-### Live demo (`id="demo"`)
-Reproduces the floating card from `Auth.jsx:402-422` at section scale: "Claude AI · Active" header with a pulsing green dot, the message "Based on your answers, I can see this is costing you ~$40k/month in lost leads. Let me show you how we fix this…", and a footer row with a `● HOT` pill and `Score 91/100`.
+### Agent pipeline — animated (`id="demo"`)
 
-Presented as a static, styled transcript — no timers, no fake streaming. It illustrates a real qualification; it does not pretend to be a live session.
+The conversion centerpiece. Replays one full qualification on a loop, so a visitor watches the product work instead of reading about it. The dual-agent architecture is the actual differentiator, so the animation is built to *explain* it, not just to move.
+
+**Scripted timeline** (~12s, then loops after a 2s hold):
+
+| Step | Duration | What appears |
+|---|---|---|
+| 1 | 0–2s | Inbound WhatsApp bubble slides in from the left — a lead's message |
+| 2 | 2–6s | **Qualifier agent** card: fields populate one at a time, each with a brief shimmer |
+| 3 | 6–10s | **Closer agent** card: `reply_message` types out character by character |
+| 4 | 10–12s | CRM row: stage advances `NEW → QUALIFYING → DIAGNOSED`, lead score counts up to 91/100 |
+
+**Field names and value sets are taken verbatim from `claude.service.js`**, so the animation doubles as accurate product documentation:
+
+- Qualifier (`QUALIFIER_SCHEMA`, `claude.service.js:50-58`) — `lead_status: HOT`, `score: 9/10`, `intent: high`, `problem_summary`, `next_action: send_proposal`
+- Closer (`CLOSER_SCHEMA`, `claude.service.js:228-234`) — `reply_message`, `closing_type: urgent`
+
+The `reply_message` reuses the established line: *"Based on your answers, I can see this is costing you ~$40k/month in lost leads. Let me show you how we fix this…"* — carried over from `Auth.jsx:415` for continuity between the two pages.
+
+**Two score scales, deliberately.** The Qualifier returns `score` on a 1–10 scale (`claude.service.js:55`), while `Lead.aiScore` is stored out of 100 (`claude.service.js:153`). The animation shows `9/10` on the Qualifier card and `91/100` on the CRM row. These are different fields, not an inconsistency; the section labels them distinctly so the page doesn't imply one number contradicts the other.
+
+**Honesty constraints — non-negotiable:**
+- A persistent `SIMULATED DEMO` badge sits on the section, in the mono eyebrow style.
+- No wording anywhere implies real-time production traffic, live customer data, or current activity. No "right now", no relative timestamps, no fabricated customer names or counters.
+- The example lead is generic and unattributed.
+
+**Implementation:**
+- A single `useEffect` state machine driving a step index with `setTimeout`; cleared on unmount. No animation library, no new dependency.
+- An `IntersectionObserver` pauses the loop when the section is off-screen, so it costs nothing while a visitor reads the rest of the page.
+- A visible **Replay** button lets a user restart it deliberately.
+- `prefers-reduced-motion: reduce` → the animation does not run at all. The section renders its **final state** immediately, statically, with all content present. Nothing is hidden behind motion, so the section is fully legible either way.
+
+### AI vendor claim
+
+The page describes the engine in **vendor-neutral** terms: "dual-agent AI engine", "AI qualifies every lead". It does not name Claude, Anthropic, GPT, or OpenAI.
+
+This is a correctness requirement, not a style preference. The pipeline in `claude.service.js` — despite its filename — instantiates the OpenAI SDK (`claude.service.js:11,17`) with `OPENAI_MODEL` defaulting to `gpt-5.4-mini` (`env.js:33`). `ANTHROPIC_API_KEY` is optional in the env schema, and the Anthropic SDK is imported only by `content-studio.service.js` for ad-copy generation — not by the sales agents. A landing page claiming "Claude AI qualifies every lead" would therefore misstate the product to paid traffic.
+
+Vendor-neutral copy is also durable: it stays true if the models are swapped again.
+
+**Note:** the inaccurate claim already exists in `Auth.jsx:368` and in `getaisales-Landing.html`. Correcting those is out of scope here but should be picked up — see §10.
 
 ### Pricing
 Four tiers with a monthly/yearly toggle. Numbers are taken from `vite-app/src/pages/Billing.jsx` (`PLANS`), which is the in-app source of truth, rather than from the stale static HTML:
@@ -177,12 +215,12 @@ Rationale: the app is a client-rendered Vite SPA with no SSR. Facebook, LinkedIn
 
 ```html
 <title>ASOS — Close deals while you sleep | AI Sales Operating System</title>
-<meta name="description" content="Claude AI qualifies every lead, diagnoses their problem, and sends the perfect WhatsApp message — automatically. 14-day free trial, no credit card required.">
+<meta name="description" content="AI agents qualify every lead, diagnose their problem, and send the perfect WhatsApp message — automatically. 14-day free trial, no credit card required.">
 <link rel="canonical" href="https://dspagenthub.com/">
 <meta property="og:type"        content="website">
 <meta property="og:url"         content="https://dspagenthub.com/">
 <meta property="og:title"       content="ASOS — Close deals while you sleep">
-<meta property="og:description" content="Claude AI qualifies every lead, diagnoses their problem, and sends the perfect WhatsApp message — automatically.">
+<meta property="og:description" content="AI agents qualify every lead, diagnose their problem, and send the perfect WhatsApp message — automatically.">
 <meta property="og:image"       content="https://dspagenthub.com/og-cover.png">
 <meta name="twitter:card"       content="summary_large_image">
 ```
@@ -200,6 +238,8 @@ Two additional fixes in the same file:
 - Visible `focus-visible` rings on every link and button
 - **Contrast:** body copy is held at `slate-300`/`slate-400` minimum against `#030712`. `Auth.jsx` uses `slate-600`/`slate-700` for microcopy; those shades fail WCAG AA at small sizes and are deliberately **not** reused for any load-bearing text on this page.
 - The `.grid-bg` overlay and background orbs are `pointer-events-none` and decorative only
+- **Motion:** `prefers-reduced-motion: reduce` disables the `AgentPipeline` loop entirely and renders its final state statically. No information is conveyed by motion alone, and the section has no auto-advancing content a user cannot control (it also has an explicit Replay button)
+- The `AgentPipeline` typing effect writes into a container marked `aria-live="off"` with the completed text also present in the DOM, so screen readers announce the finished message once rather than character by character
 
 ## 9. Responsiveness & performance
 
@@ -207,7 +247,8 @@ Two additional fixes in the same file:
 - Nav collapses to logo + "Start free trial" below `md`; anchor links hide rather than opening a JS drawer
 - No images in the page body — the visual identity is CSS gradients, borders and type, so there is nothing to lazily load and no layout shift from image loading
 - No new npm dependencies. `recharts`, `axios` and the auth store are not imported by any landing component, so the landing bundle stays small
-- Total added JS is a set of presentational components with one `useState` (the pricing toggle)
+- The `AgentPipeline` animation is `setTimeout`-driven and `IntersectionObserver`-gated, so it consumes nothing while off-screen and stops cleanly on unmount. Its container is a fixed height at each breakpoint so the loop causes **no layout shift** (CLS) as content populates
+- Added JS is a set of presentational components plus two small state machines (pricing toggle, animation step)
 
 ## 10. Out of scope
 
@@ -216,6 +257,8 @@ Two additional fixes in the same file:
 - `getaisales-Landing.html`, `getaisales-shell.js`, the other top-level `*.html` files, and `frontend/` are untouched. They still reference the retired `app.getaisales.com` domain; cleaning them up is separate work.
 - `vite-app/.env.example` still lists a stale `VITE_APP_URL` (`asos-kappa.vercel.app`) and points `VITE_MARKETING_URL` at `digitalservicesprogram.com`, which drives the "← Back to site" link on `/auth`. Repointing that link at the new landing page is a small follow-up, tracked separately.
 - No test suite is wired up in this repo (`CLAUDE.md`); verification is manual — see below.
+- **The "Claude AI" claim elsewhere in the product is not corrected here.** `Auth.jsx:368` and `getaisales-Landing.html` both state that Claude qualifies leads, which the code contradicts (§5). This spec makes the *new* page accurate; bringing the auth page and legacy marketing site in line is a separate, small follow-up worth doing before the paid campaign runs.
+- `CLAUDE.md` is also stale on this point — it documents the agents as `claude-haiku-4-5` / `claude-3-5-sonnet`, and describes a `next_action === "handoff_human"` branch that `claude.service.js:74` explicitly says does not exist. Not touched here.
 
 ## 11. Verification
 
@@ -232,6 +275,10 @@ npm run dev
 5. Every CTA lands on `/auth` with the **Get Started** tab preselected
 6. `#demo` and footer anchors scroll to the right sections
 7. Pricing toggle switches all four cards between monthly and yearly
-8. Responsive check at 375px, 768px, 1280px — no horizontal scroll
-9. Keyboard-only pass: tab through nav → hero CTAs → FAQ (expand with Enter/Space) → footer
-10. `npm run build` succeeds and `npm run lint` is clean
+8. `AgentPipeline` runs its full cycle and loops; Replay restarts it; scrolling away and back does not leave it mid-state or stacked with duplicate timers
+9. With `prefers-reduced-motion: reduce` set at the OS level, the pipeline renders its complete final state and never animates
+10. No layout shift as the pipeline populates — the section height is stable from first paint
+11. Responsive check at 375px, 768px, 1280px — no horizontal scroll
+12. Keyboard-only pass: tab through nav → hero CTAs → pipeline Replay → FAQ (expand with Enter/Space) → footer
+13. No text on the page names Claude, Anthropic, GPT or OpenAI
+14. `npm run build` succeeds and `npm run lint` is clean
