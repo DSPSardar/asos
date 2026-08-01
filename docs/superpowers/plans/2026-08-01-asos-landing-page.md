@@ -1444,8 +1444,14 @@ export default function Pricing() {
                 style={cycle === value ? { background: 'linear-gradient(135deg,rgba(99,102,241,0.25),rgba(139,92,246,0.2))' } : undefined}
               >
                 {label}
+                {/* Explicit space: JSX drops whitespace between two expression
+                    children, so without it the accessible name of this button
+                    reads "Yearlysave 20%". */}
                 {value === 'yearly' && (
-                  <span className="ml-2 text-[10px] font-mono text-emerald-400">save 20%</span>
+                  <>
+                    {' '}
+                    <span className="ml-2 text-[10px] font-mono text-emerald-400">save 20%</span>
+                  </>
                 )}
               </button>
             ))}
