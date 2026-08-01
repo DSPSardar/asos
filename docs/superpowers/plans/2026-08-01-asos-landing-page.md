@@ -872,12 +872,12 @@ const FEATURES = [
   {
     icon: '◎',
     title: 'Dual-Agent AI Engine',
-    body: 'A Qualifier agent scores and diagnoses every lead. A Closer agent writes the reply. Two specialists instead of one generalist — and the Closer is hard-blocked from inventing facts you never gave it.',
+    body: 'A Qualifier agent scores and diagnoses every lead. A Closer agent writes the reply — working only from the facts you configure, with unauthorised discounts and out-of-scope offers blocked before they send.',
   },
   {
     icon: '◈',
     title: 'Multi-tenant CRM',
-    body: 'A full pipeline, contacts, and an activity trail on every lead. Each workspace is isolated at the database layer, so agencies can run many clients side by side.',
+    body: 'A full pipeline, contacts, and an activity trail on every lead. Every record is scoped to your workspace, so agencies can run many clients side by side.',
   },
   {
     icon: '⬗',
@@ -1584,7 +1584,7 @@ import Eyebrow from './Eyebrow';
 const FAQS = [
   {
     q: 'Is my data secure?',
-    a: 'Every workspace is isolated at the database layer, so no tenant can read another\'s data. WhatsApp and Meta credentials are encrypted at rest, and traffic is served over TLS. If you need a security review before signing up, contact sales and we will walk you through the setup.',
+    a: 'Every record is scoped to your own workspace, and your WhatsApp and Meta credentials are encrypted at rest with AES-256-GCM. Traffic is served over TLS. If you need a security review before signing up, contact sales and we will walk you through exactly how the setup works.',
   },
   {
     q: 'How long does setup take?',
