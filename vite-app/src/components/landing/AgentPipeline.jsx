@@ -48,72 +48,82 @@ export default function AgentPipeline() {
   );
 
   const sectionRef = useRef(null);
-  const timers     = useRef([]);
+  const frameRef   = useRef(0);
+  const startRef   = useRef(0);
 
-  const clearTimers = useCallback(() => {
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-  }, []);
+  // Absolute offsets from the start of a cycle, in ms. Every value below is
+  // measured from t=0, and the render loop derives state from elapsed time
+  // rather than chaining setTimeouts.
+  //
+  // An earlier version scheduled nested setTimeouts whose delays were written
+  // as absolute offsets — but setTimeout is relative to when it is scheduled,
+  // so each nesting level compounded: the CRM step fired before the reply had
+  // finished typing, and the score count-up landed ~17s in. A single
+  // elapsed-time loop cannot drift that way, and cannot deadlock if a frame
+  // is missed.
+  const T_QUALIFIER = 1600;
+  const T_TYPING    = T_QUALIFIER + QUALIFIER_FIELDS.length * FIELD_INTERVAL_MS;
+  const T_TYPED_END = T_TYPING + CLOSER_REPLY.length * TYPING_MS;
+  const T_CRM       = T_TYPED_END + 400;
+  const STAGE_MS    = 420;
+  const SCORE_MS    = 700;
+  const FINAL_SCORE = 91;
+  const CYCLE_MS    = T_CRM + STAGE_MS * STAGES.length + HOLD_MS;
 
-  const after = useCallback((ms, fn) => {
-    timers.current.push(setTimeout(fn, ms));
-  }, []);
-
-  // Jump straight to the finished state — used for reduced motion and as
-  // the resting state after each loop.
   const showFinalState = useCallback(() => {
-    clearTimers();
     setStep(4);
     setFieldCnt(QUALIFIER_FIELDS.length);
     setTyped(CLOSER_REPLY);
     setStageIdx(STAGES.length - 1);
-    setScore(91);
-  }, [clearTimers]);
+    setScore(FINAL_SCORE);
+  }, [FINAL_SCORE]);
 
-  const runCycle = useCallback(() => {
-    clearTimers();
-    setStep(1);
-    setFieldCnt(0);
-    setTyped('');
-    setStageIdx(0);
-    setScore(0);
+  // Derive every visible value from one elapsed-time reading.
+  const applyFrame = useCallback((elapsed) => {
+    if (elapsed < T_QUALIFIER)      setStep(1);
+    else if (elapsed < T_TYPING)    setStep(2);
+    else if (elapsed < T_CRM)       setStep(3);
+    else                            setStep(4);
 
-    // Step 2 — Qualifier fields populate one at a time.
-    after(1600, () => {
-      setStep(2);
-      QUALIFIER_FIELDS.forEach((_, i) => {
-        after(1600 + i * FIELD_INTERVAL_MS, () => setFieldCnt(i + 1));
-      });
-    });
+    const fields = elapsed < T_QUALIFIER
+      ? 0
+      : Math.min(QUALIFIER_FIELDS.length,
+                 Math.floor((elapsed - T_QUALIFIER) / FIELD_INTERVAL_MS) + 1);
+    setFieldCnt(fields);
 
-    const qualifierDone = 1600 + QUALIFIER_FIELDS.length * FIELD_INTERVAL_MS;
+    const chars = elapsed < T_TYPING
+      ? 0
+      : Math.min(CLOSER_REPLY.length, Math.floor((elapsed - T_TYPING) / TYPING_MS));
+    setTyped(CLOSER_REPLY.slice(0, chars));
 
-    // Step 3 — Closer types its reply.
-    after(qualifierDone, () => {
-      setStep(3);
-      for (let i = 1; i <= CLOSER_REPLY.length; i += 1) {
-        after(qualifierDone + i * TYPING_MS, () => setTyped(CLOSER_REPLY.slice(0, i)));
-      }
-    });
+    const sinceCrm = elapsed - T_CRM;
+    setStageIdx(sinceCrm < 0
+      ? 0
+      : Math.min(STAGES.length - 1, Math.floor(sinceCrm / STAGE_MS)));
+    setScore(sinceCrm < 0
+      ? 0
+      : Math.round(FINAL_SCORE * Math.min(1, sinceCrm / SCORE_MS)));
+  }, [T_QUALIFIER, T_TYPING, T_CRM, STAGE_MS, SCORE_MS, FINAL_SCORE]);
 
-    const closerDone = qualifierDone + CLOSER_REPLY.length * TYPING_MS + 400;
+  const stopLoop = useCallback(() => {
+    if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    frameRef.current = 0;
+  }, []);
 
-    // Step 4 — CRM stage advances and the lead score counts up.
-    after(closerDone, () => {
-      setStep(4);
-      STAGES.forEach((_, i) => after(closerDone + i * 420, () => setStageIdx(i)));
-      for (let v = 0; v <= 91; v += 7) {
-        after(closerDone + 300 + (v / 7) * 45, () => setScore(Math.min(v, 91)));
-      }
-      after(closerDone + 300 + 14 * 45, () => setScore(91));
-    });
-
-    // Loop.
-    after(closerDone + 2200 + HOLD_MS, runCycle);
-  }, [after, clearTimers]);
+  const startLoop = useCallback(() => {
+    stopLoop();
+    startRef.current = performance.now();
+    const tick = (now) => {
+      const elapsed = (now - startRef.current) % CYCLE_MS;
+      applyFrame(elapsed);
+      frameRef.current = requestAnimationFrame(tick);
+    };
+    frameRef.current = requestAnimationFrame(tick);
+  }, [applyFrame, stopLoop, CYCLE_MS]);
 
   // Respect the user's motion preference.
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     const apply = () => setReduced(mq.matches);
     apply();
@@ -121,29 +131,33 @@ export default function AgentPipeline() {
     return () => mq.removeEventListener('change', apply);
   }, []);
 
-  // Only animate while the section is on screen.
+  // Only animate while the section is on screen. threshold 0 (not 0.25):
+  // stacked single-column layouts make this section taller than the
+  // viewport, so a ratio-based threshold can sit near or below its trigger
+  // point and never fire.
   useEffect(() => {
     if (reduced) {
+      stopLoop();
       showFinalState();
       return undefined;
     }
     const node = sectionRef.current;
-    if (!node) return undefined;
+    if (!node || typeof IntersectionObserver !== 'function') return undefined;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) runCycle();
-        else clearTimers();
+        if (entry.isIntersecting) startLoop();
+        else stopLoop();
       },
-      { threshold: 0.25 }
+      { threshold: 0 }
     );
     observer.observe(node);
 
     return () => {
       observer.disconnect();
-      clearTimers();
+      stopLoop();
     };
-  }, [reduced, runCycle, clearTimers, showFinalState]);
+  }, [reduced, startLoop, stopLoop, showFinalState]);
 
   return (
     <section
@@ -261,7 +275,7 @@ export default function AgentPipeline() {
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
           <button
             type="button"
-            onClick={reduced ? showFinalState : runCycle}
+            onClick={reduced ? showFinalState : startLoop}
             className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-200 border border-indigo-500/25 bg-slate-900/60 hover:border-indigo-400/50 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
           >
             ↻ Replay
