@@ -1,6 +1,34 @@
 // src/test/setup.js — global test setup
 import '@testing-library/jest-dom/vitest';
 
+// jsdom implements neither matchMedia nor IntersectionObserver. Components
+// that read prefers-reduced-motion (e.g. AgentPipeline) or gate animation
+// on visibility need these to exist as no-ops so mounting them in tests
+// doesn't throw. Real behavior is exercised manually in the browser per
+// the task-4 brief; these stubs just let the render tree mount cleanly.
+if (typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  });
+}
+
+if (typeof globalThis.IntersectionObserver !== 'function') {
+  class MockIntersectionObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.IntersectionObserver = MockIntersectionObserver;
+  window.IntersectionObserver = MockIntersectionObserver;
+}
+
 // Node >=22 defines its own global `localStorage` accessor (a no-op stub
 // unless the process is started with --localstorage-file). Vitest's jsdom
 // environment sees that the host already provides `localStorage` and, by
