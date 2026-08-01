@@ -976,6 +976,19 @@ Create `vite-app/src/components/landing/AgentPipeline.jsx`.
 
 Design notes that matter for correctness:
 - One `setTimeout` chain driven by a step index, cleared on unmount — no interval leaks, no stacked timers when scrolling in and out.
+
+> **Correction — the `runCycle` code in this task is buggy; do not copy it.**
+> Its nested `after()` calls pass *absolute* offsets to `setTimeout`, which is
+> relative to when it is scheduled, so each nesting level compounds: the CRM
+> stage advanced before the reply finished typing, and the score count-up
+> landed ~17s in rather than ~9s. Separately, once `clearTimers()` ran on
+> scroll-out, only an intersection *crossing* could restart the cycle — so the
+> section froze mid-animation at score 0/100, which is what shipped to
+> production before it was caught. The `threshold: 0.25` compounds it: a
+> single-column layout makes this section taller than the viewport, where that
+> ratio may never be reached. The shipped component derives every value from
+> elapsed time in one `requestAnimationFrame` loop and observes at
+> `threshold: 0`. See `vite-app/src/components/landing/AgentPipeline.jsx`.
 - An `IntersectionObserver` pauses the loop off-screen so it costs nothing while the rest of the page is read.
 - Every stage container has a **fixed min-height** so populating content causes no layout shift.
 - Under `prefers-reduced-motion: reduce` the animation never starts and the final state renders immediately — nothing is conveyed by motion alone.
