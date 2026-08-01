@@ -16,6 +16,9 @@ import HowItWorks from '@components/landing/HowItWorks';
 import Features from '@components/landing/Features';
 import AgentPipeline from '@components/landing/AgentPipeline';
 import Pricing from '@components/landing/Pricing';
+import Faq from '@components/landing/Faq';
+import FinalCta from '@components/landing/FinalCta';
+import LandingFooter from '@components/landing/LandingFooter';
 
 export default function Landing() {
   return (
@@ -28,7 +31,10 @@ export default function Landing() {
         <Features />
         <AgentPipeline />
         <Pricing />
+        <Faq />
+        <FinalCta />
       </main>
+      <LandingFooter />
     </div>
   );
 }
