@@ -12,6 +12,8 @@ import React from 'react';
 import LandingNav from '@components/landing/LandingNav';
 import Hero from '@components/landing/Hero';
 import StatsBar from '@components/landing/StatsBar';
+import HowItWorks from '@components/landing/HowItWorks';
+import Features from '@components/landing/Features';
 
 export default function Landing() {
   return (
@@ -20,6 +22,8 @@ export default function Landing() {
       <main>
         <Hero />
         <StatsBar />
+        <HowItWorks />
+        <Features />
       </main>
     </div>
   );
