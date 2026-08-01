@@ -186,7 +186,7 @@ export const SALES_EMAIL = import.meta.env.VITE_SALES_EMAIL || 'info@digitalserv
 export const NAV_LINKS = [
   { href: '#how',      label: 'How it works' },
   { href: '#features', label: 'Features' },
-  { href: '#demo',     label: 'Live demo' },
+  { href: '#demo',     label: 'See it work' },
   { href: '#pricing',  label: 'Pricing' },
   { href: '#faq',      label: 'FAQ' },
 ];
@@ -1191,7 +1191,7 @@ export default function AgentPipeline() {
                   the finished sentence once, not one character at a time. */}
               <p
                 aria-live="off"
-                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm text-slate-100 leading-relaxed min-h-[76px]"
+                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm text-slate-100 leading-relaxed min-h-[124px] md:min-h-[76px]"
                 style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)' }}
               >
                 <span aria-hidden="true">{typed}</span>
