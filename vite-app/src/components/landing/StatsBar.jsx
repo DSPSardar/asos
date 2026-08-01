@@ -1,15 +1,23 @@
-// src/components/landing/StatsBar.jsx — headline performance numbers.
 import React from 'react';
 
+// src/components/landing/StatsBar.jsx — headline capability claims.
+//
+// These are statements about how the system works, not measured customer
+// outcomes. The previous values (78% / 11.1% / 5.68x) were demo fixtures
+// copied from frontend/src/lib/api.js — the 78% was a forecast-confidence
+// field relabelled as an AI handling rate. Publishing unsubstantiated
+// performance numbers on a page that receives paid traffic is a liability,
+// so they are gone. Replace this block with real aggregates only when you
+// can source them from production and state the sample and period.
 const STATS = [
-  { value: '78%',   label: 'AI handling rate' },
-  { value: '11.1%', label: 'Conversion rate' },
-  { value: '5.68x', label: 'Average ROAS' },
+  { value: '24/7',   label: 'Replies day and night' },
+  { value: '2',      label: 'Agents per lead — one qualifies, one closes' },
+  { value: 'CAPI',   label: 'Server-side ad attribution' },
 ];
 
 export default function StatsBar() {
   return (
-    <section aria-label="Performance highlights" className="relative">
+    <section aria-label="How it works at a glance" className="relative">
       <div className="max-w-6xl mx-auto px-6 pb-16 md:pb-20">
         <dl className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {STATS.map((stat) => (

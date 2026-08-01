@@ -63,12 +63,16 @@ WhatsApp Cloud → POST /webhooks/whatsapp (HMAC-verified, raw body)
 The API server **never** calls Claude directly for inbound messages — everything goes through the queue. Synchronous Claude calls only happen for `/conversations/:id/summary` and `/ai/config/test`.
 
 ### Dual-agent AI (`backend/src/services/claude.service.js`)
-This is **v1.5** and is the load-bearing piece — read it before changing AI behavior:
-- **Qualifier** (default `claude-haiku-4-5`, `temperature: 0`) — analyzes message + history, returns strict JSON `{lead_status, score 1-10, intent, problem_summary, next_action}`. Pure analysis, no copy.
-- **Closer** (default `env.CLOSER_MODEL || claude-3-5-sonnet-20241022`) — generates the WhatsApp reply given Qualifier output. Returns `{reply_message, closing_type, urgency_trigger}`.
-- Pipeline is sequential. If Qualifier fails → handoff with no Closer call. If Qualifier says `next_action === "handoff_human"` → skip Closer, route to human. If Closer fails → handoff but keep Qualifier output for stage update.
+This is **v1.5** and is the load-bearing piece — read it before changing AI behavior.
+
+**The filename is misleading: this service runs on the OpenAI SDK, not Anthropic.** It does `new OpenAI({ apiKey: env.OPENAI_API_KEY })` and selects models via `OPENAI_QUALIFIER_MODEL` / `OPENAI_CLOSER_MODEL`, falling back to `OPENAI_MODEL` (default `gpt-5.4-mini` in `config/env.js`). `ANTHROPIC_API_KEY` is optional and used only by `modules/content-studio/content-studio.service.js` for ad copy. Do not describe the sales agents as Claude-powered in code, docs, or user-facing copy.
+
+- **Qualifier** (fast/cheap analytic model, `temperature: 0`) — analyzes message + history, returns strict JSON `{lead_status, score 1-10, intent, problem_summary, next_action}`. Pure analysis, no copy.
+- **Closer** (better-copy model) — generates the WhatsApp reply given Qualifier output. Returns `{reply_message, closing_type, urgency_trigger}`.
+- Pipeline is sequential. If Qualifier fails → handoff with no Closer call. If Closer fails → handoff but keep Qualifier output for stage update.
+- **`next_action` has no `handoff_human` value** — the schema comment in `claude.service.js` says so explicitly. Valid values are `continue_qualifying`, `send_proposal`, `nurture`, `close_deal`; handoff is triggered only by `is_enrollment_confirmed=true`.
 - Both outputs land in `AiAgentLog` (audit trail for the future Analyst AI v2). Token usage is incremented on `Subscription.aiTokensUsed`.
-- **Strict fact rule (in the Closer prompt):** the Closer is forbidden from inventing facts not present in `aiConfig.systemPrompt`. When editing prompts, preserve this — fabricated dividend %, certifications, scarcity, etc. is the explicit thing being prevented.
+- **Strict fact rule (in the Closer prompt):** the Closer is instructed not to invent facts absent from `aiConfig.systemPrompt`, and a post-generation check vetoes some violations. It is a mitigation, not a guarantee — do not describe it in marketing copy as though fabrication is impossible.
 - `processMessage()` returns a v1-compatible shape so the worker's contract is preserved; v1.5 fields (`humanFollowupRequired`, `intent`, `qualifierOutput`, `closerOutput`) are additive.
 
 ### Stage progression
@@ -112,3 +116,21 @@ Run on the server inside the deploy dir (default `/opt/asos`):
 - `bootstrap-git.sh` — one-time conversion of an rsync'd dir into a git checkout, so `update.sh` can pull from origin.
 - `update.sh` — pull `origin/main`, rebuild only what changed (api/worker images, vite-app SPA), run pending migrations, reload nginx, health-check. Requires a clean working tree.
 - `rollback.sh <commit-ish> [--force]` — `git reset --hard` to the target SHA, rebuild + restart. Refuses to roll back across new Prisma migrations unless `--force`.
+
+## Marketing copy accuracy (non-negotiable)
+
+The top-level `*.html` files and `vite-app/src/pages/Landing.jsx` are public
+marketing surfaces that receive paid traffic. Before writing any claim there:
+
+- **Never name an AI vendor.** The pipeline runs on OpenAI models behind a file
+  called `claude.service.js`; earlier copy claimed Claude and was wrong. Use
+  "AI agents" / "dual-agent AI engine".
+- **Never publish a performance metric you cannot source.** The figures
+  78% / 11.1% / 5.68x that circulated in older copy are demo fixtures from
+  `frontend/src/lib/api.js` — the 78% is a forecast-confidence value, not an AI
+  handling rate. Any statistic needs a real query, a sample size and a period.
+- **Never claim database-layer tenant isolation.** Isolation is enforced by
+  `tenantId` in application-level Prisma queries; there is no row-level security
+  (see the multi-tenancy section above).
+- **Never add compliance claims** (SOC 2, ISO 27001, HIPAA, GDPR certification)
+  or uptime guarantees unless someone can produce the certificate or the SLA.

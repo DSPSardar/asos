@@ -365,13 +365,13 @@ export default function Auth() {
             <span className="gradient-text">you sleep.</span>
           </h1>
           <p className="text-slate-400 text-lg leading-relaxed mb-10 max-w-md">
-            Claude AI qualifies every lead, diagnoses their problem, and sends the perfect WhatsApp message — automatically.
+            AI agents qualify every lead, diagnose their problem, and send the perfect WhatsApp message — automatically.
           </p>
 
           {/* Features */}
           <div className="space-y-3 mb-10">
             {[
-              { icon: '◎', title: 'Claude AI Engine', desc: 'Qualifies, diagnoses & closes leads via WhatsApp' },
+              { icon: '◎', title: 'Dual-Agent AI Engine', desc: 'Qualifies, diagnoses & closes leads via WhatsApp' },
               { icon: '◈', title: 'Multi-tenant CRM',  desc: 'Full pipeline, contacts & activity tracking' },
               { icon: '⬗', title: 'Meta Ads Attribution', desc: 'Server-side CAPI for pixel-perfect ROI' },
             ].map((f) => (
@@ -389,11 +389,15 @@ export default function Auth() {
 
           {/* Stats */}
           <div className="flex gap-4">
-            {[['78%', 'AI handling rate'], ['11.1%', 'Conversion rate'], ['5.68x', 'Avg ROAS']].map(([val, label]) => (
+            {/* Capability claims, not measured outcomes. The previous
+                78% / 11.1% / 5.68x were demo fixtures from
+                frontend/src/lib/api.js — see the marketing-copy rules in
+                CLAUDE.md before putting a metric here. */}
+            {[['24/7', 'Replies day and night'], ['2', 'Agents per lead'], ['CAPI', 'Server-side attribution']].map(([val, label]) => (
               <div key={label} className="flex flex-col items-center p-4 rounded-2xl text-center"
                    style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)' }}>
                 <div className="text-2xl font-bold gradient-text font-mono">{val}</div>
-                <div className="text-xs text-slate-500 mt-1">{label}</div>
+                <div className="text-xs text-slate-400 mt-1">{label}</div>
               </div>
             ))}
           </div>
@@ -405,7 +409,7 @@ export default function Auth() {
           <div className="flex items-center gap-2 mb-3">
             <div className="w-6 h-6 rounded-lg flex items-center justify-center text-sm"
                  style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>◎</div>
-            <span className="text-xs font-semibold text-indigo-300">Claude AI · Active</span>
+            <span className="text-xs font-semibold text-indigo-300">AI agent · Active</span>
             <span className="ml-auto relative flex w-2 h-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full w-2 h-2 bg-emerald-500" />
