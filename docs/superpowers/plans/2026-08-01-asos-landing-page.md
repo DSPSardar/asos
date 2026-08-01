@@ -1880,7 +1880,7 @@ Create `vite-app/scripts/make-og-cover.py`:
 Run from vite-app/:  python3 scripts/make-og-cover.py
 Requires Pillow:     python3 -m pip install --user Pillow
 """
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import os
 
 W, H = 1200, 630
@@ -1916,10 +1916,13 @@ for x in range(0, W, 48):
 for y in range(0, H, 48):
     draw.line([(0, y), (W, y)], fill=(10, 16, 34), width=1)
 
-# Accent glow, top-left.
+# Accent glow, top-left. Drawn oversized and heavily blurred so it reads as
+# a soft light source — an unblurred ellipse leaves a hard arc across the
+# image that looks like a rendering artifact in a link preview.
 glow = Image.new("RGB", (W, H), BG)
 gdraw = ImageDraw.Draw(glow)
-gdraw.ellipse([-260, -320, 640, 420], fill=(28, 28, 82))
+gdraw.ellipse([-320, -380, 700, 480], fill=(30, 30, 88))
+glow = glow.filter(ImageFilter.GaussianBlur(160))
 img = Image.blend(img, glow, 0.55)
 draw = ImageDraw.Draw(img)
 
@@ -2027,7 +2030,7 @@ Replace the `<head>` block of `vite-app/index.html` with the following, and chan
 npm run build && ls -la dist/og-cover.png && grep -c "og:image" dist/index.html
 ```
 
-Expected: `dist/og-cover.png` exists at roughly 40–90 KB, and `grep` reports `1`.
+Expected: `dist/og-cover.png` exists at roughly 40–90 KB. The `grep` reports `4`, not 1 — the head block above legitimately contains `og:image`, `og:image:width`, `og:image:height` and `og:image:alt`.
 
 - [ ] **Step 6: Final full-page audit**
 
