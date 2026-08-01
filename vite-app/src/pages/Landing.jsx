@@ -15,6 +15,7 @@ import StatsBar from '@components/landing/StatsBar';
 import HowItWorks from '@components/landing/HowItWorks';
 import Features from '@components/landing/Features';
 import AgentPipeline from '@components/landing/AgentPipeline';
+import Pricing from '@components/landing/Pricing';
 
 export default function Landing() {
   return (
@@ -26,6 +27,7 @@ export default function Landing() {
         <HowItWorks />
         <Features />
         <AgentPipeline />
+        <Pricing />
       </main>
     </div>
   );
