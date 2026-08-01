@@ -1698,7 +1698,7 @@ Create `vite-app/src/components/landing/LandingFooter.jsx`:
 // src/components/landing/LandingFooter.jsx — footer nav and trust badges.
 import React from 'react';
 import LogoMark from './LogoMark';
-import { LOGIN_HREF, NAV_LINKS, SALES_EMAIL, SIGNUP_HREF } from './links';
+import { BRAND_NAME, LOGIN_HREF, NAV_LINKS, SALES_EMAIL, SIGNUP_HREF } from './links';
 
 export default function LandingFooter() {
   return (
@@ -1745,7 +1745,7 @@ export default function LandingFooter() {
               </li>
               <li>
                 <a
-                  href={`mailto:${SALES_EMAIL}?subject=ASOS%20Demo%20Request`}
+                  href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent(`${BRAND_NAME} Demo Request`)}`}
                   className="text-sm text-slate-400 hover:text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded"
                 >
                   Contact sales
