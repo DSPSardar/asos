@@ -41,7 +41,11 @@ export default function AgentPipeline() {
   const [typed, setTyped]         = useState('');
   const [stageIdx, setStageIdx]   = useState(0);
   const [score, setScore]         = useState(0);
-  const [reduced, setReduced]     = useState(false);
+  const [reduced, setReduced]     = useState(
+    () => typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
 
   const sectionRef = useRef(null);
   const timers     = useRef([]);
@@ -207,7 +211,7 @@ export default function AgentPipeline() {
                   the finished sentence once, not one character at a time. */}
               <p
                 aria-live="off"
-                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm text-slate-100 leading-relaxed min-h-[76px]"
+                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm text-slate-100 leading-relaxed min-h-[124px] md:min-h-[76px]"
                 style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)' }}
               >
                 <span aria-hidden="true">{typed}</span>

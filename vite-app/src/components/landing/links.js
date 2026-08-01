@@ -13,7 +13,7 @@ export const SALES_EMAIL = import.meta.env.VITE_SALES_EMAIL || 'info@digitalserv
 export const NAV_LINKS = [
   { href: '#how',      label: 'How it works' },
   { href: '#features', label: 'Features' },
-  { href: '#demo',     label: 'Live demo' },
+  { href: '#demo',     label: 'See it work' },
   { href: '#pricing',  label: 'Pricing' },
   { href: '#faq',      label: 'FAQ' },
 ];
