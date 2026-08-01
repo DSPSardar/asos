@@ -29,8 +29,9 @@ These apply to **every** task. Do not restate them per task; they are always in 
 | Page background | `#030712` — Tailwind class `bg-bg` |
 | Card surface | `rgba(15,23,42,0.6)` via `.glass-card`, or `.glass` for stronger panels |
 | Accent / accent2 | `#6366f1` / `#8b5cf6` — classes `accent` / `accent2` |
-| Primary button | `background: linear-gradient(135deg,#6366f1,#8b5cf6)` + `boxShadow: '0 4px 24px rgba(99,102,241,0.3)'` |
-| Eyebrow label | `text-xs font-semibold text-indigo-400 uppercase tracking-widest` |
+| Primary button | Use `<CtaButton>` (Task 2). It owns `linear-gradient(135deg,#6366f1,#8b5cf6)` + `boxShadow: '0 4px 24px rgba(99,102,241,0.3)'` — never re-declare these elsewhere. |
+| Eyebrow label | Use `<Eyebrow>` (Task 2). It owns `text-xs font-semibold text-indigo-400 uppercase tracking-widest font-mono`. |
+| Logo mark | Use `<LogoMark>` (Task 2). |
 | Gradient headline text | class `.gradient-text` |
 | Fonts | `font-sans` (Space Grotesk), `font-mono` (JetBrains Mono) — already loaded |
 | Radii | `rounded-xl` controls, `rounded-2xl` cards, `rounded-3xl` large panels |
@@ -49,11 +50,15 @@ These apply to **every** task. Do not restate them per task; they are always in 
 
 | File | Responsibility |
 |---|---|
+| `vite-app/src/AppRoutes.jsx` | The route tree as a pure, side-effect-free module |
 | `vite-app/vitest.config.js` | Test runner config (jsdom, aliases mirroring `vite.config.js`) |
 | `vite-app/src/test/setup.js` | Test setup — jest-dom matchers |
 | `vite-app/src/routes.test.jsx` | Router tests: public `/`, redirects, all 13 dashboard paths |
 | `vite-app/src/pages/Landing.jsx` | Page shell — landmarks, composes sections |
 | `vite-app/src/components/landing/links.js` | CTA targets + brand constants |
+| `vite-app/src/components/landing/CtaButton.jsx` | The one call-to-action button (primary + secondary variants) |
+| `vite-app/src/components/landing/Eyebrow.jsx` | The small mono uppercase section label |
+| `vite-app/src/components/landing/LogoMark.jsx` | Gradient logo square + brand name |
 | `vite-app/src/components/landing/LandingNav.jsx` | Sticky nav |
 | `vite-app/src/components/landing/Hero.jsx` | Headline, subhead, dual CTA |
 | `vite-app/src/components/landing/StatsBar.jsx` | 78% / 11.1% / 5.68x |
@@ -72,7 +77,7 @@ These apply to **every** task. Do not restate them per task; they are always in 
 | File | Change |
 |---|---|
 | `vite-app/package.json` | Add `test` script + 4 devDependencies |
-| `vite-app/src/main.jsx` | `PublicHome`, pathless layout route, auth-aware `*` |
+| `vite-app/src/main.jsx` | Slimmed to the entry point; route tree moves to `AppRoutes.jsx` |
 | `vite-app/index.html` | SEO/OG tags, `lang="en"` |
 
 **Task order rationale:** Task 1 lands the risky routing change behind tests first, with a stub `Landing`. Tasks 2–6 fill in sections top-to-bottom, each independently viewable in the browser. Task 7 finishes with SEO and the OG asset.
@@ -90,10 +95,13 @@ The highest-risk change in this plan. Making `/` public means restructuring the 
 - Create: `vite-app/src/routes.test.jsx`
 - Create: `vite-app/src/pages/Landing.jsx` (stub — filled in by Tasks 2–6)
 - Create: `vite-app/src/components/landing/links.js`
+- Create: `vite-app/src/AppRoutes.jsx`
 - Modify: `vite-app/src/main.jsx`
 
 **Interfaces:**
-- Produces: `<AppRoutes />` — named export from `src/main.jsx`, the `<Routes>` tree with no `BrowserRouter` around it, so tests can wrap it in `MemoryRouter`. `main.jsx` keeps its default side-effect of mounting the app.
+- Produces: `AppRoutes` — **named** export from `src/AppRoutes.jsx`, the `<Routes>` tree with no `BrowserRouter` around it, so tests can wrap it in `MemoryRouter`.
+
+  The route tree lives in its own module rather than in `main.jsx` because `main.jsx` calls `ReactDOM.createRoot(...)` at module scope. Importing it from a test would execute that call — either crashing on a missing `#root`, or (if the test supplies one) mounting the entire real app into the document so that every `screen` query matches both the mounted app and the test's own render. `AppRoutes.jsx` must therefore stay free of top-level side effects: no `ReactDOM`, no `./index.css`.
 - Produces: `Landing` — default export from `src/pages/Landing.jsx`.
 - Produces: from `src/components/landing/links.js` — `SIGNUP_HREF: string`, `LOGIN_HREF: string`, `BRAND_NAME: string`, `SALES_EMAIL: string`, `NAV_LINKS: Array<{href: string, label: string}>`.
 
@@ -178,7 +186,7 @@ export const SALES_EMAIL = import.meta.env.VITE_SALES_EMAIL || 'info@digitalserv
 export const NAV_LINKS = [
   { href: '#how',      label: 'How it works' },
   { href: '#features', label: 'Features' },
-  { href: '#demo',     label: 'Live demo' },
+  { href: '#demo',     label: 'See it work' },
   { href: '#pricing',  label: 'Pricing' },
   { href: '#faq',      label: 'FAQ' },
 ];
@@ -215,7 +223,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { AppRoutes } from './main';
+import { AppRoutes } from './AppRoutes';
 import { useAuthStore } from '@stores/auth.store';
 
 // Replace the dashboard shell with a bare marker. Deliberately NO
@@ -307,13 +315,19 @@ Note on the last block: a logged-out visitor hitting a dashboard path is redirec
 npm test
 ```
 
-Expected: FAIL. `AppRoutes` is not exported from `./main`, so every test errors with something like `SyntaxError: The requested module './main' does not provide an export named 'AppRoutes'`.
+Expected: FAIL. `src/AppRoutes.jsx` does not exist yet, so every test errors with `Failed to resolve import "./AppRoutes"`.
 
 - [ ] **Step 9: Restructure the router**
 
-In `vite-app/src/main.jsx`:
+The route tree moves out of `main.jsx` into a new `src/AppRoutes.jsx`, leaving `main.jsx` as a thin entry point that owns the side effects (CSS import, `createRoot`). See the Interfaces note above for why.
 
-**9a.** Add the `Landing` import alongside the eager `AdminPanel` import (around line 10). It is eager, not lazy — this is the paid-traffic entry point and a lazy chunk costs a round trip before LCP.
+**Move into `vite-app/src/AppRoutes.jsx`, unchanged:** the eager `AdminPanelPage` import, every `React.lazy(...)` page constant, and the `PrivateRoute`, `DefaultRedirect`, `SuperAdminRoute` and `TenantRoute` guards. That file imports only `React`, `{ Routes, Route, Navigate }` from `react-router-dom`, and `{ useAuthStore }` from `@stores/auth.store`.
+
+**`vite-app/src/main.jsx` keeps:** `ErrorBoundary`, `AuthInitializer`, the `Suspense` wrapper, `GOOGLE_CLIENT_ID` / `AppWithAuth`, `import './index.css'`, and the `createRoot` call. Add `import { AppRoutes } from './AppRoutes';` and reduce its `react-router-dom` import to just `BrowserRouter`.
+
+Then, in `AppRoutes.jsx`:
+
+**9a.** Add the eager `Landing` import alongside the eager `AdminPanel` import. It is eager, not lazy — this is the paid-traffic entry point and a lazy chunk costs a round trip before LCP.
 
 ```jsx
 // AdminPanel is imported eagerly — no lazy chunk to fail
@@ -343,7 +357,7 @@ const NotFoundRedirect = () => {
 };
 ```
 
-**9c.** Extract the route tree into an exported `AppRoutes` component and convert the dashboard shell to a **pathless layout route** with absolute child paths. Replace the whole `<Routes>…</Routes>` block with this, and export the component:
+**9c.** Define the exported `AppRoutes` component, converting the dashboard shell to a **pathless layout route** with absolute child paths:
 
 ```jsx
 // Exported without a Router around it so tests can mount it inside a
@@ -383,7 +397,7 @@ export function AppRoutes() {
 }
 ```
 
-**9d.** Update the render call to use it — replace the `<Routes>…</Routes>` block inside `<Suspense>` with `<AppRoutes />`:
+**9d.** In `main.jsx`, the render call now uses the imported component:
 
 ```jsx
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -414,7 +428,7 @@ npm test
 
 Expected: PASS — 30 tests (4 standalone + 13 + 13 from the two `it.each` blocks).
 
-- [ ] **Step 11: Verify the build**
+- [ ] **Step 11: Verify the build and the running app**
 
 ```bash
 npm run build
@@ -422,13 +436,21 @@ npm run build
 
 Expected: build succeeds, no unresolved-import errors.
 
+This step split the app's entry point, so also confirm the refactor is behaviour-neutral at runtime:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3001/auth` and confirm the auth page still renders.
+
 - [ ] **Step 12: Commit**
 
 ```bash
 git add vite-app/package.json vite-app/package-lock.json vite-app/vitest.config.js \
         vite-app/src/test/setup.js vite-app/src/routes.test.jsx \
         vite-app/src/pages/Landing.jsx vite-app/src/components/landing/links.js \
-        vite-app/src/main.jsx
+        vite-app/src/AppRoutes.jsx vite-app/src/main.jsx
 git commit -m "feat(landing): make / public and add routing tests
 
 Converts the dashboard shell to a pathless layout route so every
@@ -439,11 +461,14 @@ paths against regression."
 
 ---
 
-## Task 2: Nav, hero and stats bar
+## Task 2: Shared primitives, nav, hero and stats bar
 
-Everything above the fold. After this task the page is worth looking at in a browser.
+Everything above the fold, plus the three shared primitives every later task builds on. After this task the page is worth looking at in a browser.
 
 **Files:**
+- Create: `vite-app/src/components/landing/CtaButton.jsx`
+- Create: `vite-app/src/components/landing/Eyebrow.jsx`
+- Create: `vite-app/src/components/landing/LogoMark.jsx`
 - Create: `vite-app/src/components/landing/LandingNav.jsx`
 - Create: `vite-app/src/components/landing/Hero.jsx`
 - Create: `vite-app/src/components/landing/StatsBar.jsx`
@@ -451,16 +476,115 @@ Everything above the fold. After this task the page is worth looking at in a bro
 
 **Interfaces:**
 - Consumes: `SIGNUP_HREF`, `LOGIN_HREF`, `BRAND_NAME`, `NAV_LINKS` from `@components/landing/links` (Task 1).
+- Produces, and **every later task must use these rather than re-declaring their styles**:
+  - `CtaButton({ href, variant, size, className, children })` — default export. `variant`: `'primary'` (default, gradient + glow) | `'secondary'` (outlined). `size`: `'sm'` | `'md'` (default) | `'lg'`. Renders an `<a>`.
+  - `Eyebrow({ as, className, children })` — default export. `as` defaults to `'p'`; pass `'div'` when the label needs to contain inline elements.
+  - `LogoMark({ withName, glow })` — default export. Both props default to `false`/`true` as declared below.
 - Produces: `LandingNav`, `Hero`, `StatsBar` — default exports, no props.
 
-- [ ] **Step 1: Create the nav**
+- [ ] **Step 1: Create the three shared primitives**
+
+These exist so the brand's button, label and logo are defined once. Later tasks import them; no other component may re-declare the gradient, the eyebrow class string, or the logo square.
+
+Create `vite-app/src/components/landing/CtaButton.jsx`:
+
+```jsx
+// src/components/landing/CtaButton.jsx — the landing page's call-to-action
+// button. Defined once so a brand change is a one-file edit.
+import React from 'react';
+
+const SIZES = {
+  sm: 'px-4 py-2 text-sm',
+  md: 'px-5 py-3 text-sm',
+  lg: 'px-8 py-4 text-base',
+};
+
+const BASE =
+  'inline-block text-center rounded-xl font-semibold transition-all hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2';
+
+const PRIMARY_STYLE = {
+  background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+  boxShadow: '0 4px 24px rgba(99,102,241,0.3)',
+};
+
+export default function CtaButton({
+  href,
+  variant = 'primary',
+  size = 'md',
+  className = '',
+  children,
+}) {
+  const isPrimary = variant === 'primary';
+  const variantClasses = isPrimary
+    ? 'text-white focus-visible:ring-indigo-300'
+    : 'text-slate-200 border border-indigo-500/25 bg-slate-900/60 hover:border-indigo-400/50 hover:text-white focus-visible:ring-indigo-400';
+
+  return (
+    <a
+      href={href}
+      className={`${BASE} ${SIZES[size]} ${variantClasses} ${className}`}
+      style={isPrimary ? PRIMARY_STYLE : undefined}
+    >
+      {children}
+    </a>
+  );
+}
+```
+
+Create `vite-app/src/components/landing/Eyebrow.jsx`:
+
+```jsx
+// src/components/landing/Eyebrow.jsx — small mono uppercase section label.
+// Mirrors the treatment used on the auth page (src/pages/Auth.jsx:362).
+import React from 'react';
+
+export default function Eyebrow({ as: Tag = 'p', className = '', children }) {
+  return (
+    <Tag
+      className={`text-xs font-semibold text-indigo-400 uppercase tracking-widest font-mono ${className}`}
+    >
+      {children}
+    </Tag>
+  );
+}
+```
+
+Create `vite-app/src/components/landing/LogoMark.jsx`:
+
+```jsx
+// src/components/landing/LogoMark.jsx — gradient logo square, optionally
+// followed by the brand name.
+import React from 'react';
+import { BRAND_NAME } from './links';
+
+export default function LogoMark({ withName = true, glow = false }) {
+  return (
+    <span className="flex items-center gap-3">
+      <span
+        aria-hidden="true"
+        className={`w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold ${glow ? 'glow-accent' : ''}`}
+        style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}
+      >
+        A
+      </span>
+      {withName && (
+        <span className="text-base font-bold text-white tracking-tight">{BRAND_NAME}</span>
+      )}
+    </span>
+  );
+}
+```
+
+- [ ] **Step 2: Create the nav**
 
 Create `vite-app/src/components/landing/LandingNav.jsx`:
 
 ```jsx
 // src/components/landing/LandingNav.jsx — sticky top navigation.
 import React from 'react';
-import { BRAND_NAME, LOGIN_HREF, NAV_LINKS, SIGNUP_HREF } from './links';
+import CtaButton from './CtaButton';
+import LogoMark from './LogoMark';
+import { LOGIN_HREF, NAV_LINKS, SIGNUP_HREF } from './links';
 
 export default function LandingNav() {
   return (
@@ -472,15 +596,8 @@ export default function LandingNav() {
         aria-label="Main"
         className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-6"
       >
-        <a href="/" className="flex items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
-          <span
-            aria-hidden="true"
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold glow-accent"
-            style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}
-          >
-            A
-          </span>
-          <span className="text-base font-bold text-white tracking-tight">{BRAND_NAME}</span>
+        <a href="/" className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
+          <LogoMark glow />
         </a>
 
         <ul className="hidden md:flex items-center gap-1 ml-auto">
@@ -503,16 +620,9 @@ export default function LandingNav() {
           >
             Sign in
           </a>
-          <a
-            href={SIGNUP_HREF}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-white whitespace-nowrap transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
-            style={{
-              background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-              boxShadow: '0 4px 24px rgba(99,102,241,0.3)',
-            }}
-          >
+          <CtaButton href={SIGNUP_HREF} size="sm" className="whitespace-nowrap">
             Start free trial
-          </a>
+          </CtaButton>
         </div>
       </nav>
     </header>
@@ -520,13 +630,15 @@ export default function LandingNav() {
 }
 ```
 
-- [ ] **Step 2: Create the hero**
+- [ ] **Step 3: Create the hero**
 
 Create `vite-app/src/components/landing/Hero.jsx`. Note the subheadline is vendor-neutral per the global constraints.
 
 ```jsx
 // src/components/landing/Hero.jsx — above-the-fold pitch.
 import React from 'react';
+import CtaButton from './CtaButton';
+import Eyebrow from './Eyebrow';
 import { SIGNUP_HREF } from './links';
 
 export default function Hero() {
@@ -545,9 +657,7 @@ export default function Hero() {
       />
 
       <div className="relative max-w-6xl mx-auto px-6 pt-20 pb-16 md:pt-28 md:pb-20 text-center">
-        <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest font-mono mb-5">
-          The Future of Sales
-        </p>
+        <Eyebrow className="mb-5">The Future of Sales</Eyebrow>
 
         <h1
           id="hero-heading"
@@ -564,22 +674,12 @@ export default function Hero() {
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-6">
-          <a
-            href={SIGNUP_HREF}
-            className="w-full sm:w-auto px-8 py-4 rounded-xl text-base font-semibold text-white transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
-            style={{
-              background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-              boxShadow: '0 4px 24px rgba(99,102,241,0.3)',
-            }}
-          >
+          <CtaButton href={SIGNUP_HREF} size="lg" className="w-full sm:w-auto">
             Start free trial →
-          </a>
-          <a
-            href="#demo"
-            className="w-full sm:w-auto px-8 py-4 rounded-xl text-base font-semibold text-slate-200 border border-indigo-500/25 bg-slate-900/60 hover:border-indigo-400/50 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
-          >
+          </CtaButton>
+          <CtaButton href="#demo" variant="secondary" size="lg" className="w-full sm:w-auto">
             Watch the agents work
-          </a>
+          </CtaButton>
         </div>
 
         <p className="text-sm text-slate-400">
@@ -591,7 +691,7 @@ export default function Hero() {
 }
 ```
 
-- [ ] **Step 3: Create the stats bar**
+- [ ] **Step 4: Create the stats bar**
 
 Create `vite-app/src/components/landing/StatsBar.jsx`:
 
@@ -631,7 +731,7 @@ export default function StatsBar() {
 }
 ```
 
-- [ ] **Step 4: Wire them into the page**
+- [ ] **Step 5: Wire them into the page**
 
 Replace the whole body of `vite-app/src/pages/Landing.jsx`:
 
@@ -648,7 +748,7 @@ import StatsBar from '@components/landing/StatsBar';
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-bg text-slate-100 font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-bg text-slate-100 font-sans overflow-x-clip">
       <LandingNav />
       <main>
         <Hero />
@@ -659,7 +759,7 @@ export default function Landing() {
 }
 ```
 
-- [ ] **Step 5: Confirm routing tests still pass**
+- [ ] **Step 6: Confirm routing tests still pass**
 
 ```bash
 npm test
@@ -667,7 +767,7 @@ npm test
 
 Expected: PASS, 30 tests. The `<h1>` assertion still matches because `Hero` renders "Close deals while you sleep."
 
-- [ ] **Step 6: Look at it**
+- [ ] **Step 7: Look at it**
 
 ```bash
 npm run dev
@@ -675,11 +775,11 @@ npm run dev
 
 Open `http://localhost:3001/`. Confirm: no login form anywhere, the nav sticks on scroll, both CTAs are visible without scrolling on a 1280×800 viewport, and "Start free trial" navigates to `/auth` with the **Get Started** tab active.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add vite-app/src/components/landing vite-app/src/pages/Landing.jsx
-git commit -m "feat(landing): add nav, hero and stats bar"
+git commit -m "feat(landing): add shared primitives, nav, hero and stats bar"
 ```
 
 ---
@@ -701,6 +801,7 @@ Create `vite-app/src/components/landing/HowItWorks.jsx`:
 ```jsx
 // src/components/landing/HowItWorks.jsx — the four-step mechanism.
 import React from 'react';
+import Eyebrow from './Eyebrow';
 
 const STEPS = [
   {
@@ -735,9 +836,7 @@ export default function HowItWorks() {
     >
       <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
         <div className="text-center mb-14">
-          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest font-mono mb-4">
-            How it works
-          </p>
+          <Eyebrow className="mb-4">How it works</Eyebrow>
           <h2 id="how-heading" className="text-3xl md:text-4xl font-bold tracking-tight text-white">
             From ad click to <span className="gradient-text">closed deal</span>
           </h2>
@@ -767,17 +866,18 @@ Create `vite-app/src/components/landing/Features.jsx`:
 ```jsx
 // src/components/landing/Features.jsx — three-column capability breakdown.
 import React from 'react';
+import Eyebrow from './Eyebrow';
 
 const FEATURES = [
   {
     icon: '◎',
     title: 'Dual-Agent AI Engine',
-    body: 'A Qualifier agent scores and diagnoses every lead. A Closer agent writes the reply. Two specialists instead of one generalist — and the Closer is hard-blocked from inventing facts you never gave it.',
+    body: 'A Qualifier agent scores and diagnoses every lead. A Closer agent writes the reply — working only from the facts you configure, with unauthorised discounts and out-of-scope offers blocked before they send.',
   },
   {
     icon: '◈',
     title: 'Multi-tenant CRM',
-    body: 'A full pipeline, contacts, and an activity trail on every lead. Each workspace is isolated at the database layer, so agencies can run many clients side by side.',
+    body: 'A full pipeline, contacts, and an activity trail on every lead. Every record is scoped to your workspace, so agencies can run many clients side by side.',
   },
   {
     icon: '⬗',
@@ -791,9 +891,7 @@ export default function Features() {
     <section id="features" aria-labelledby="features-heading">
       <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
         <div className="text-center mb-14">
-          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest font-mono mb-4">
-            What you get
-          </p>
+          <Eyebrow className="mb-4">What you get</Eyebrow>
           <h2 id="features-heading" className="text-3xl md:text-4xl font-bold tracking-tight text-white">
             Everything your sales team <span className="gradient-text">forgets to do</span>
           </h2>
@@ -895,6 +993,7 @@ Design notes that matter for correctness:
 //   Qualifier -> backend/src/services/claude.service.js:50  (QUALIFIER_SCHEMA)
 //   Closer    -> backend/src/services/claude.service.js:228 (CLOSER_SCHEMA)
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Eyebrow from './Eyebrow';
 
 const INBOUND_MESSAGE =
   "We get maybe 200 enquiries a month but my team only calls back about 30 of them. The rest just go cold.";
@@ -1036,9 +1135,7 @@ export default function AgentPipeline() {
     >
       <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
         <div className="text-center mb-12">
-          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest font-mono mb-4">
-            Simulated demo
-          </p>
+          <Eyebrow className="mb-4">Simulated demo</Eyebrow>
           <h2 id="demo-heading" className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-4">
             Watch the agents <span className="gradient-text">work a lead</span>
           </h2>
@@ -1094,7 +1191,7 @@ export default function AgentPipeline() {
                   the finished sentence once, not one character at a time. */}
               <p
                 aria-live="off"
-                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm text-slate-100 leading-relaxed min-h-[76px]"
+                className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm text-slate-100 leading-relaxed min-h-[124px] md:min-h-[76px]"
                 style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)' }}
               >
                 <span aria-hidden="true">{typed}</span>
@@ -1160,9 +1257,9 @@ export default function AgentPipeline() {
 
 function Label({ children }) {
   return (
-    <div className="flex items-center gap-2 text-xs font-semibold text-indigo-400 uppercase tracking-widest font-mono">
+    <Eyebrow as="div" className="flex items-center gap-2">
       {children}
-    </div>
+    </Eyebrow>
   );
 }
 
@@ -1265,6 +1362,8 @@ Create `vite-app/src/components/landing/Pricing.jsx`:
 // too — a landing page that contradicts the billing screen loses trust
 // at exactly the wrong moment.
 import React, { useState } from 'react';
+import CtaButton from './CtaButton';
+import Eyebrow from './Eyebrow';
 import { SIGNUP_HREF } from './links';
 
 const PLANS = [
@@ -1314,9 +1413,7 @@ export default function Pricing() {
     <section id="pricing" aria-labelledby="pricing-heading">
       <div className="max-w-6xl mx-auto px-6 py-20 md:py-28">
         <div className="text-center mb-10">
-          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest font-mono mb-4">
-            Pricing
-          </p>
+          <Eyebrow className="mb-4">Pricing</Eyebrow>
           <h2 id="pricing-heading" className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-4">
             Plans that pay for <span className="gradient-text">themselves</span>
           </h2>
@@ -1347,8 +1444,14 @@ export default function Pricing() {
                 style={cycle === value ? { background: 'linear-gradient(135deg,rgba(99,102,241,0.25),rgba(139,92,246,0.2))' } : undefined}
               >
                 {label}
+                {/* Explicit space: JSX drops whitespace between two expression
+                    children, so without it the accessible name of this button
+                    reads "Yearlysave 20%". */}
                 {value === 'yearly' && (
-                  <span className="ml-2 text-[10px] font-mono text-emerald-400">save 20%</span>
+                  <>
+                    {' '}
+                    <span className="ml-2 text-[10px] font-mono text-emerald-400">save 20%</span>
+                  </>
                 )}
               </button>
             ))}
@@ -1393,19 +1496,13 @@ export default function Pricing() {
                 ))}
               </ul>
 
-              <a
+              <CtaButton
                 href={SIGNUP_HREF}
-                className={`mt-7 block text-center px-5 py-3 rounded-xl text-sm font-semibold transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
-                  plan.featured ? 'text-white' : 'text-slate-200 border border-indigo-500/25'
-                }`}
-                style={
-                  plan.featured
-                    ? { background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 24px rgba(99,102,241,0.3)' }
-                    : { background: 'rgba(15,23,42,0.6)' }
-                }
+                variant={plan.featured ? 'primary' : 'secondary'}
+                className="mt-7 block w-full"
               >
                 Start free trial
-              </a>
+              </CtaButton>
             </article>
           ))}
         </div>
@@ -1488,11 +1585,12 @@ Answers are deliberately conservative placeholders. They are written to be edite
 // they have been verified — an unverified compliance claim on a page
 // aimed at paid traffic is a liability, not a conversion lever.
 import React from 'react';
+import Eyebrow from './Eyebrow';
 
 const FAQS = [
   {
     q: 'Is my data secure?',
-    a: 'Every workspace is isolated at the database layer, so no tenant can read another\'s data. WhatsApp and Meta credentials are encrypted at rest, and traffic is served over TLS. If you need a security review before signing up, contact sales and we will walk you through the setup.',
+    a: 'Every record is scoped to your own workspace, and your WhatsApp and Meta credentials are encrypted at rest with AES-256-GCM. Traffic is served over TLS. If you need a security review before signing up, contact sales and we will walk you through exactly how the setup works.',
   },
   {
     q: 'How long does setup take?',
@@ -1521,9 +1619,7 @@ export default function Faq() {
     <section id="faq" aria-labelledby="faq-heading" className="border-y border-indigo-500/10">
       <div className="max-w-3xl mx-auto px-6 py-20 md:py-28">
         <div className="text-center mb-12">
-          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest font-mono mb-4">
-            Questions
-          </p>
+          <Eyebrow className="mb-4">Questions</Eyebrow>
           <h2 id="faq-heading" className="text-3xl md:text-4xl font-bold tracking-tight text-white">
             Before you <span className="gradient-text">sign up</span>
           </h2>
@@ -1563,6 +1659,7 @@ Create `vite-app/src/components/landing/FinalCta.jsx`:
 //
 // Low-friction framing only: no countdown timers, no invented scarcity.
 import React from 'react';
+import CtaButton from './CtaButton';
 import { SIGNUP_HREF } from './links';
 
 export default function FinalCta() {
@@ -1581,16 +1678,9 @@ export default function FinalCta() {
           Connect your WhatsApp number and let the agents work your enquiries tonight.
           Set-up takes minutes.
         </p>
-        <a
-          href={SIGNUP_HREF}
-          className="inline-block px-9 py-4 rounded-xl text-base font-semibold text-white transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
-          style={{
-            background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-            boxShadow: '0 4px 24px rgba(99,102,241,0.3)',
-          }}
-        >
+        <CtaButton href={SIGNUP_HREF} size="lg">
           Start free trial →
-        </a>
+        </CtaButton>
         <p className="mt-5 text-sm text-slate-400">
           14-day free trial · No credit card required · Cancel anytime
         </p>
@@ -1607,6 +1697,7 @@ Create `vite-app/src/components/landing/LandingFooter.jsx`:
 ```jsx
 // src/components/landing/LandingFooter.jsx — footer nav and trust badges.
 import React from 'react';
+import LogoMark from './LogoMark';
 import { BRAND_NAME, LOGIN_HREF, NAV_LINKS, SALES_EMAIL, SIGNUP_HREF } from './links';
 
 export default function LandingFooter() {
@@ -1615,15 +1706,8 @@ export default function LandingFooter() {
       <div className="max-w-6xl mx-auto px-6 py-14">
         <div className="flex flex-col md:flex-row md:items-start gap-10 md:gap-6">
           <div className="md:flex-1">
-            <div className="flex items-center gap-3 mb-3">
-              <span
-                aria-hidden="true"
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold"
-                style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}
-              >
-                A
-              </span>
-              <span className="text-base font-bold text-white tracking-tight">{BRAND_NAME}</span>
+            <div className="mb-3">
+              <LogoMark />
             </div>
             <p className="text-sm text-slate-400 max-w-xs leading-relaxed">
               The AI Sales Operating System. Close deals while you sleep.
@@ -1631,9 +1715,7 @@ export default function LandingFooter() {
           </div>
 
           <nav aria-label="Footer" className="md:flex-1">
-            <h2 className="text-xs font-semibold text-slate-300 uppercase tracking-widest font-mono mb-4">
-              Product
-            </h2>
+            <FooterHeading>Product</FooterHeading>
             <ul className="space-y-2.5">
               {NAV_LINKS.map((link) => (
                 <li key={link.href}>
@@ -1649,9 +1731,7 @@ export default function LandingFooter() {
           </nav>
 
           <div className="md:flex-1">
-            <h2 className="text-xs font-semibold text-slate-300 uppercase tracking-widest font-mono mb-4">
-              Get started
-            </h2>
+            <FooterHeading>Get started</FooterHeading>
             <ul className="space-y-2.5">
               <li>
                 <a href={SIGNUP_HREF} className="text-sm text-slate-400 hover:text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded">
@@ -1665,7 +1745,7 @@ export default function LandingFooter() {
               </li>
               <li>
                 <a
-                  href={`mailto:${SALES_EMAIL}?subject=ASOS%20Demo%20Request`}
+                  href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent(`${BRAND_NAME} Demo Request`)}`}
                   className="text-sm text-slate-400 hover:text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded"
                 >
                   Contact sales
@@ -1692,6 +1772,16 @@ export default function LandingFooter() {
     </footer>
   );
 }
+
+// Footer column heading. Deliberately not <Eyebrow>: these are real <h2>
+// landmarks in a lighter shade, not the indigo section label.
+function FooterHeading({ children }) {
+  return (
+    <h2 className="text-xs font-semibold text-slate-300 uppercase tracking-widest font-mono mb-4">
+      {children}
+    </h2>
+  );
+}
 ```
 
 - [ ] **Step 4: Complete the page**
@@ -1704,6 +1794,11 @@ export default function LandingFooter() {
 // Composed of focused section components. Sections are ordered as a
 // sales argument: promise -> proof -> mechanism -> demonstration ->
 // price -> objections -> ask.
+//
+// overflow-x-clip, NOT overflow-x-hidden: `hidden` forces overflow-y to
+// compute as `auto`, which makes this element the scroll container and
+// silently breaks the sticky nav. `clip` leaves overflow-y visible while
+// still containing the decorative orbs each section renders.
 import React from 'react';
 import LandingNav from '@components/landing/LandingNav';
 import Hero from '@components/landing/Hero';
@@ -1718,7 +1813,7 @@ import LandingFooter from '@components/landing/LandingFooter';
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-bg text-slate-100 font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-bg text-slate-100 font-sans overflow-x-clip">
       <LandingNav />
       <main>
         <Hero />
@@ -1785,7 +1880,7 @@ Create `vite-app/scripts/make-og-cover.py`:
 Run from vite-app/:  python3 scripts/make-og-cover.py
 Requires Pillow:     python3 -m pip install --user Pillow
 """
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import os
 
 W, H = 1200, 630
@@ -1821,10 +1916,13 @@ for x in range(0, W, 48):
 for y in range(0, H, 48):
     draw.line([(0, y), (W, y)], fill=(10, 16, 34), width=1)
 
-# Accent glow, top-left.
+# Accent glow, top-left. Drawn oversized and heavily blurred so it reads as
+# a soft light source — an unblurred ellipse leaves a hard arc across the
+# image that looks like a rendering artifact in a link preview.
 glow = Image.new("RGB", (W, H), BG)
 gdraw = ImageDraw.Draw(glow)
-gdraw.ellipse([-260, -320, 640, 420], fill=(28, 28, 82))
+gdraw.ellipse([-320, -380, 700, 480], fill=(30, 30, 88))
+glow = glow.filter(ImageFilter.GaussianBlur(160))
 img = Image.blend(img, glow, 0.55)
 draw = ImageDraw.Draw(img)
 
@@ -1932,7 +2030,7 @@ Replace the `<head>` block of `vite-app/index.html` with the following, and chan
 npm run build && ls -la dist/og-cover.png && grep -c "og:image" dist/index.html
 ```
 
-Expected: `dist/og-cover.png` exists at roughly 40–90 KB, and `grep` reports `1`.
+Expected: `dist/og-cover.png` exists at roughly 40–90 KB. The `grep` reports `4`, not 1 — the head block above legitimately contains `og:image`, `og:image:width`, `og:image:height` and `og:image:alt`.
 
 - [ ] **Step 6: Final full-page audit**
 

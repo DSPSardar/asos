@@ -1,0 +1,40 @@
+// src/pages/Landing.jsx — public marketing landing page.
+//
+// Composed of focused section components. Sections are ordered as a
+// sales argument: promise -> proof -> mechanism -> demonstration ->
+// price -> objections -> ask.
+//
+// overflow-x-clip, NOT overflow-x-hidden: `hidden` forces overflow-y to
+// compute as `auto`, which makes this element the scroll container and
+// silently breaks the sticky nav. `clip` leaves overflow-y visible while
+// still containing the decorative orbs each section renders.
+import React from 'react';
+import LandingNav from '@components/landing/LandingNav';
+import Hero from '@components/landing/Hero';
+import StatsBar from '@components/landing/StatsBar';
+import HowItWorks from '@components/landing/HowItWorks';
+import Features from '@components/landing/Features';
+import AgentPipeline from '@components/landing/AgentPipeline';
+import Pricing from '@components/landing/Pricing';
+import Faq from '@components/landing/Faq';
+import FinalCta from '@components/landing/FinalCta';
+import LandingFooter from '@components/landing/LandingFooter';
+
+export default function Landing() {
+  return (
+    <div className="min-h-screen bg-bg text-slate-100 font-sans overflow-x-clip">
+      <LandingNav />
+      <main>
+        <Hero />
+        <StatsBar />
+        <HowItWorks />
+        <Features />
+        <AgentPipeline />
+        <Pricing />
+        <Faq />
+        <FinalCta />
+      </main>
+      <LandingFooter />
+    </div>
+  );
+}
