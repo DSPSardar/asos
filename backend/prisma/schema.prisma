@@ -53,6 +53,10 @@ enum ConversationStatus {
   ACTIVE
   AI_HANDLING
   HUMAN_TAKEOVER
+  // Lead has sent payment proof; a human must verify it before the seat is
+  // confirmed. Distinct from HUMAN_TAKEOVER so the inbox can surface "money
+  // is waiting on you" separately from ordinary escalations.
+  PENDING_VERIFICATION
   CLOSED
 }
 
@@ -310,6 +314,15 @@ model Conversation {
   handoffReason     String?              @map("handoff_reason")
   lastMessageAt     DateTime?            @map("last_message_at")
 
+  // ── Payment proof tracking ──
+  // paymentDetailsSentAt is what makes proof detection safe: an inbound image
+  // only counts as payment proof if we actually asked this lead to pay. Without
+  // it, any screenshot a lead sends — an ad, a meme, a CV — would mark them paid
+  // and pull a human in.
+  paymentDetailsSentAt DateTime?          @map("payment_details_sent_at")
+  paymentProofDetected Boolean            @default(false) @map("payment_proof_detected")
+  paymentProofAt       DateTime?          @map("payment_proof_at")
+
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
 
@@ -320,6 +333,7 @@ model Conversation {
 
   @@index([tenantId, status])
   @@index([tenantId, lastMessageAt])
+  @@index([tenantId, paymentProofDetected])
   @@map("conversations")
 }
 
@@ -609,6 +623,17 @@ model AiConfig {
   model                 String    @default("claude-3-5-sonnet-20241022")
   temperature           Float     @default(0.3)
   maxTokens             Int       @default(512) @map("max_tokens")
+
+  // Bank / payment instructions sent VERBATIM by the worker, never retyped by
+  // the AI. Account numbers and IBANs must survive character-for-character, and
+  // a generated reply is both length-capped and free to reword — neither is
+  // acceptable for the details a lead uses to transfer money.
+  paymentDetails        String?   @map("payment_details") @db.Text
+
+  // Confirmation sent the moment a payment screenshot arrives, before any human
+  // looks at it. Deterministic on purpose — the lead has just parted with money
+  // and needs an immediate, correct acknowledgement, not a generated one.
+  paymentProofMessage   String?   @map("payment_proof_message") @db.Text
 
   // ── v1.5 Settings UI fields ──
   tone                  String    @default("Professional")

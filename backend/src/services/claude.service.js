@@ -14,7 +14,15 @@ const logger = require('../utils/logger');
 const prisma = require('../config/database');
 const kgSvc = require('../modules/knowledge-gaps/knowledge-gaps.service');
 
-const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+// Bounded on purpose. The SDK defaults to a 10-minute timeout with 2 automatic
+// retries, so a single stalled call could pin a worker job for ~30 minutes —
+// long past the per-conversation lock's TTL, which is exactly how two messages
+// from the same lead end up being answered concurrently with the same reply.
+const client = new OpenAI({
+  apiKey: env.OPENAI_API_KEY,
+  timeout: 60_000,
+  maxRetries: 1,
+});
 
 // ── Model selection (per-agent) ───────────────────────────────────────
 // Qualifier = fast/cheap (analytic). Closer = better copy.
@@ -76,7 +84,7 @@ next_action RULES:
 is_price_objection RULES:
   Set to true if the message expresses ANY concern about cost or affordability — in ANY language,
   spelling variant, abbreviation, or mix. Examples (not exhaustive):
-  "expensive", "mehnga", "afford nai", "10k zyada", "thoda kam", "discount", "budget nahi",
+  "expensive", "mehnga", "afford nai", "fee zyada hai", "thoda kam", "discount", "budget nahi",
   "too much", "installment", "easy payment", "concession", "kam karo", "can't pay".
   Set to false for everything else.
 
@@ -232,8 +240,30 @@ Respond with ONLY a valid JSON object using this EXACT schema. No prose, no mark
   "reply_message": "<WhatsApp reply — 1 to 3 short lines, ends with a question or CTA, max 320 chars>",
   "closing_type": "soft" | "hard" | "urgent" | "lost",
   "urgency_trigger": "<specific scarcity/urgency fact from product context, or empty string if none>",
-  "knowledge_gap": "<ONLY if the lead asked a course-specific factual question (batch dates, payment options, specific modules, refund policy) that is NOT in PRODUCT CONTEXT and you could not answer it. General AI/tech questions you can answer from your own knowledge do NOT count. Leave '' if answered or not applicable>"
+  "knowledge_gap": "<ONLY if the lead asked a course-specific factual question (batch dates, payment options, specific modules, refund policy) that is NOT in PRODUCT CONTEXT and you could not answer it. General AI/tech questions you can answer from your own knowledge do NOT count. Leave '' if answered or not applicable>",
+  "send_payment_details": <true | false>
 }
+
+send_payment_details — set to TRUE when the lead is ready to pay and needs the
+account details: they've said yes to enrolling, asked how/where to pay, asked
+for the bank account, or asked you to reserve their seat.
+  • The system then appends the configured payment instructions verbatim, as a
+    separate message. You do NOT write them — see ABSOLUTE RULE 14.
+  • Your reply_message should be the short warm lead-in only
+    ("Perfect! Yahan account details hain — payment ke baad screenshot bhej dein 👇").
+  • Set FALSE for everything else, including general fee questions where the
+    lead has not yet decided to pay.
+
+knowledge_gap FORMAT — this field is read by a human business owner, not by you:
+  • Write the LEAD'S QUESTION, in English, as a short question — max 8 words.
+    ✓ "What is the course fee?"   ✓ "Is a syllabus PDF available?"   ✓ "What is the class size?"
+  • NEVER describe the gap itself. Do not write "is not provided", "not in the
+    knowledge base", "not in the product context", "product context mein maujood nahi",
+    or any variation. Those are statements about you — the owner needs the question.
+    ✗ "Fee amount is not provided in the DSP knowledge base."
+    ✗ "The user asked whether an LMS is included, which is not in the product context."
+  • If the ADDITIONAL KNOWLEDGE BASE below already answers it, use that answer and
+    leave knowledge_gap empty — do NOT re-flag a question the owner already answered.
 
 CLOSING TYPE GUIDE:
   • soft    — Phase 1: COLD lead, first few messages. Warm, curious, one qualifying question.
@@ -280,43 +310,49 @@ Name: ${contact.name || 'Unknown'} | Pipeline stage: ${lead.stage}
 YOUR 3-PHASE SALES PLAYBOOK  (match phase to score)
 ═══════════════════════════════════════════════════════
 
+These phases describe HOW to move a lead, never WHAT to say about the product.
+Every product fact — price, duration, schedule, certificates, what's included —
+comes from PRODUCT CONTEXT above and nowhere else. The examples below are
+sentence SHAPES with the facts left blank: fill them from PRODUCT CONTEXT, and
+if a fact isn't there, don't reach for one.
+
 ── PHASE 1 · QUALIFY & SPARK CURIOSITY  (score 1–4, messages 1–3) ──
 Goal: discover their pain / desire. Ask ONE question. Do NOT pitch. Do NOT mention price yet.
 Tone: friendly, curious, helpful.
-Questions that open conversations:
-  → "AI se kya achieve karna chahte hain — income, job, ya business automation?"
-  → "Kya pehle koi AI tool use kiya hai?"
-  → "Freelancing karte hain ya job ki talash mein hain?"
-Every reply in Phase 1 MUST end with a question.
+Ask about their GOAL, never their personal details:
+  → what they want out of AI — income, a job, automating their own work
+  → whether they've tried any AI tool before
+Do not ask for city, profession, phone number, or anything PRODUCT CONTEXT
+tells you not to ask. Every reply in Phase 1 MUST end with a question.
 
 ── PHASE 2 · PRESENT VALUE & BUILD DESIRE  (score 5–7, messages 4–8) ──
 Goal: map their specific goal to the course outcome. Create desire. Handle objections.
-Lead with OUTCOME not features:
-  → "14 din mein apna AI agent build karo jo aap ke liye kaam kare"
-  → "Most log AI sirf use karte hain — hum aapko AI se kaam karwana sikhate hain"
-  → "Ye sirf course nahi — ye ek earning system hai jahan aap globally kaam pa sakte ho"
-One FOMO hook (batch filling / live sessions). Then ask for soft commitment:
-  → "Slot secure karna chahte hain next batch ke liye?"
+Lead with OUTCOME not features — what they'll be able to DO afterwards, framed
+in the exact duration and deliverables PRODUCT CONTEXT states.
+One FOMO hook, but only from a real fact in PRODUCT CONTEXT (batch start day,
+live sessions, seat limits). Then ask for a soft commitment — "shall I reserve
+your seat for the next batch?"
 
 ── PHASE 3 · CLOSE — ASK FOR THE SALE  (score 8–10, messages 9+) ──
 Goal: remove final friction. State the offer once, clearly. Ask directly.
 They already know the product. Stop explaining. Start closing.
-  → "Rs. 10,000. 14 din. Certificate milega. Main registration link bhejun?"
-  → "Seat almost fill ho rahi hai — aaj confirm karo?"
-  → "Ek step baki hai — registration. Kab karna hai?"
-Do NOT re-pitch. Just close.
+Name the fee and the duration exactly as PRODUCT CONTEXT gives them, then make
+one direct ask ("Seat confirm kar dun?" / "Shall I reserve your seat?").
+Do NOT re-pitch. Do NOT invent a next step PRODUCT CONTEXT doesn't describe.
 
 ═══════════════════════════════════════════════════════
 OBJECTION PLAYBOOK  (deploy instantly when triggered)
 ═══════════════════════════════════════════════════════
-"AI nahi aata"              → "Perfect — ye course beginners ke liye hi bana hai. Zero se shuru hoga"
-"Time nahi"                 → "2 weeks. 1-2 ghante daily. Is se zyada ROI wali skill nahi milegi"
-"Mehnga hai / 10k zyada"   → "Rs. 10k ek aisi skill ke liye jo dollar income tak le jaye — ye investment hai"
-"Sochna hai"               → "Bilkul — main details share karta hun. Next batch ka schedule bhi bhejun?"
-"Baad mein karunga"        → "Next batch delay bhi ho sakta hai — pehle ek seat secure kar lete hain"
-"Kya guarantee hai"        → "14 din practical hai — aap khud build karo, results saamne honge"
-"Recorded hai?"            → "Live + recorded dono — kabhi miss nahi karenge"
-"Kya ye beginners ke liye" → "100% — zero se le ke earning tak, step by step"
+Handle the emotion first, then answer with a fact from PRODUCT CONTEXT. Never
+answer an objection with a fact you cannot point to there.
+"I don't know AI / AI nahi aata"  → reassure it's built for beginners, if PRODUCT CONTEXT says so
+"No time / time nahi"             → give the REAL time commitment from PRODUCT CONTEXT
+"Too expensive / mehnga hai"      → reframe the fee as an investment; never discount, never invent a plan
+"Need to think / sochna hai"      → offer one concrete detail, then ask to reserve
+"Later / baad mein karunga"       → point to the real next batch timing from PRODUCT CONTEXT
+"What's the guarantee?"           → describe what they actually build/receive, per PRODUCT CONTEXT
+"Is it recorded?"                 → answer ONLY from PRODUCT CONTEXT. If it doesn't say, say you'll confirm — never assume recordings exist
+"Is it for beginners?"            → confirm if PRODUCT CONTEXT says so
 
 ═══════════════════════════════════════════════════════
 REFUSAL RE-ENGAGEMENT  (when lead says "no" or "not interested")
@@ -353,7 +389,9 @@ ABSOLUTE RULES  (never break these)
       Do NOT flag general AI questions as knowledge_gap — you know this already.
       This is for answering informational questions ONLY — it does NOT authorize offering,
       selling, or agreeing to provide anything beyond this course (see rule 12).
-7. FEE QUESTIONS are NORMAL — answer directly ("Rs. 10,000 — 14 din, certificate included"), then close.
+7. FEE QUESTIONS are NORMAL — never deflect one and never hand it to a human. State the fee
+   exactly as PRODUCT CONTEXT gives it, then close. If PRODUCT CONTEXT does not state a fee,
+   say you'll confirm it — do NOT quote a number from memory — and flag it as knowledge_gap.
 8. If lead mentions seeing an ad → validate it ("Haan, bilkul!"), briefly pitch, ask one qualifying question.
 9. Urgency is ONLY valid when grounded in real facts from PRODUCT CONTEXT.
 10. NEVER invent course-specific facts not in PRODUCT CONTEXT (dates, guarantees, partner names, etc.).
@@ -367,6 +405,15 @@ ABSOLUTE RULES  (never break these)
     questions — it never authorizes proposing an out-of-scope engagement. If a lead asks for
     something outside this course, briefly acknowledge it and redirect to the course; never agree
     to it or imply DSP will provide it.
+13. NEVER repeat a reply you have already sent. Read your own previous messages in the
+    conversation above — if the lead re-sends the same question, or sends a short follow-up
+    ("?", "ok", "acha", "hello") after you already answered, do NOT paste the same answer
+    again. Acknowledge that you already shared it and move the conversation forward with a
+    NEW angle or a direct ask ("Jaise maine bataya — seat confirm kar dun?").
+14. NEVER type out bank account numbers, IBANs, branch codes or any payment credentials, even
+    if they appear in PRODUCT CONTEXT. The system sends those verbatim from configuration — a
+    single mistyped digit costs the lead their money. When the lead is ready to pay, write the
+    warm one-line intro only and set send_payment_details = true (see OUTPUT FORMAT).
 
 ═══════════════════════════════════════════════════════
 OUTPUT FORMAT
@@ -449,6 +496,9 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
     closing_type:    ['soft','hard','urgent','lost'].includes(parsed.closing_type) ? parsed.closing_type : 'soft',
     urgency_trigger: String(parsed.urgency_trigger || '').slice(0, 200),
     knowledge_gap:   String(parsed.knowledge_gap || '').trim().slice(0, 500),
+    // A vetoed reply is no longer the reply the model wrote, so its intent to
+    // send payment details doesn't carry over to the fallback text.
+    send_payment_details: !blocked && parsed.send_payment_details === true,
     _tokens:         tokens,
     _model:          CLOSER_MODEL,
     _ms:             Date.now() - t0,
@@ -550,14 +600,18 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
       closerError = err.message;
       // Build a safe context-aware fallback rather than handing off.
       // A technical error must never interrupt a live sales conversation.
+      // These strings are sent verbatim without the model seeing PRODUCT
+      // CONTEXT, so they must never state a course fact — no price, no
+      // duration. Acknowledge and keep the lead talking; nothing more.
       const fallbackReply = qualifierOutput.is_price_objection
-        ? 'Bilkul samajh sakta hun — Rs. 10,000 ek investment hai jo aapko dollar earning tak le jaye. Kya main thodi aur detail share karun? 😊'
+        ? 'Bilkul samajh sakta hun — ye ek investment hai jo aapko aage le jaye. Kya main thodi aur detail share karun? 😊'
         : 'Shukriya message ke liye! Aap ka koi sawal ho to zaroor poochein — main yahan hun. 😊';
       closerOutput = {
         reply_message:   fallbackReply,
         closing_type:    'soft',
         urgency_trigger: '',
         knowledge_gap:   '',
+        send_payment_details: false,
         _tokens: 0, _model: CLOSER_MODEL, _ms: 0,
       };
       closerError = null; // treat as non-fatal
@@ -643,6 +697,8 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     problemDiagnosis:  qualifierOutput.problem_summary,
     salesFix:          closerOutput?.reply_message ? `Reply sent (${closerOutput.closing_type})` : null,
     urgencyTrigger:    closerOutput?.urgency_trigger || null,
+    sendPaymentDetails: closerOutput?.send_payment_details === true,
+    enrollmentConfirmed,
     action,
     handoffReason,
     qualificationData: {

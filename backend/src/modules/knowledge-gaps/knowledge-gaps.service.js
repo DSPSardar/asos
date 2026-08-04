@@ -1,6 +1,11 @@
 // src/modules/knowledge-gaps/knowledge-gaps.service.js
 
 const prisma = require('../../config/database');
+const { cleanQuestion, isSameQuestion } = require('./question-key');
+
+// How many recent gaps to compare a new one against. Fuzzy matching can't be
+// pushed into SQL, so it runs in JS over a bounded candidate set.
+const DEDUP_CANDIDATE_LIMIT = 300;
 
 // ── List all gaps for a tenant (unanswered first) ────────────────────────────
 const listGaps = async (tenantId, { resolved } = {}) => {
@@ -16,18 +21,29 @@ const listGaps = async (tenantId, { resolved } = {}) => {
 };
 
 // ── Log a new gap (or increment timesAsked if same question already exists) ──
+// The Closer writes `knowledge_gap` in free prose, so the same missing fact
+// arrives worded differently every time ("fee amount", "Fee structure is not
+// provided in the DSP knowledge base."). Matching on the exact string turned
+// every rewording into its own row, which is why the same question kept
+// reappearing even after the owner had answered it. Store the boilerplate-free
+// question and match on meaning — see ./question-key.js.
 const logGap = async (tenantId, { question, exampleLead } = {}) => {
   if (!question?.trim()) return null;
 
-  const q = question.trim().slice(0, 500);
+  const q = cleanQuestion(question).slice(0, 500);
+  if (!q) return null;
 
-  // Fuzzy dedup: if the same question (case-insensitive) already exists, just bump the counter
-  const existing = await prisma.knowledgeGap.findFirst({
-    where: {
-      tenantId,
-      question: { equals: q, mode: 'insensitive' },
-    },
+  const candidates = await prisma.knowledgeGap.findMany({
+    where: { tenantId },
+    orderBy: { updatedAt: 'desc' },
+    take: DEDUP_CANDIDATE_LIMIT,
   });
+
+  // Prefer an unanswered match so the counter lands on the row the owner still
+  // needs to act on; fall back to an answered one — a question the AI already
+  // has an answer for must never come back as a fresh unanswered card.
+  const matches = candidates.filter((gap) => isSameQuestion(gap.question, q));
+  const existing = matches.find((gap) => !gap.resolved) || matches[0];
 
   if (existing) {
     return prisma.knowledgeGap.update({
@@ -70,7 +86,12 @@ const getResolvedQAs = async (tenantId) => {
     orderBy: { updatedAt: 'desc' },
     take: 50, // cap at 50 to avoid bloating prompt
   });
-  return gaps;
+
+  // Rows logged before question cleaning still read "X is not provided in the
+  // DSP knowledge base." Feeding that phrasing back to the Closer as a Q&A is
+  // actively confusing — it reads as confirmation that the fact is missing.
+  // Normalize on the way out so old and new rows look the same in the prompt.
+  return gaps.map((gap) => ({ ...gap, question: cleanQuestion(gap.question) }));
 };
 
 module.exports = { listGaps, logGap, answerGap, deleteGap, getResolvedQAs };

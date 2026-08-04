@@ -78,6 +78,7 @@ function mapMessage(msg) {
     id:   msg.id,
     from,
     text: msg.content || '',
+    type: msg.type || 'TEXT',
     ts:   formatTime(msg.sentAt),
     raw:  msg,
   };
@@ -731,6 +732,22 @@ function ConvMenu({ onClearMessages, onDeleteConversation }) {
 function MessageBubble({ m }) {
   const incoming = m.from === 'contact';
   const ai       = m.from === 'ai';
+
+  // The voice-note follow-up stores the SAME content as the text reply it
+  // accompanies, so rendering it as another text bubble made every AI reply
+  // look like it had been sent twice. Show it as a compact voice-note chip —
+  // the words are already in the bubble directly above.
+  if (!incoming && m.type === 'AUDIO') {
+    return (
+      <div className="flex w-full justify-end">
+        <div className="flex items-center gap-1.5 rounded-full bg-surface2/60 px-2.5 py-1 text-[10px] text-slate-400 ring-1 ring-white/5">
+          <span aria-hidden="true">🎤</span>
+          <span>Voice note sent</span>
+          <span className="tabular-nums text-slate-500">{m.ts}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex w-full ${incoming ? 'justify-start' : 'justify-end'}`}>

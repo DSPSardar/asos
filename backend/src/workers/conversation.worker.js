@@ -28,7 +28,9 @@ const env = require('../config/env');
 // addressing the new one. This serializes per (tenant, phone) without
 // touching cross-lead throughput.
 
-const acquireConversationLock = async (lockKey, token, { ttlMs = 30000, maxWaitMs = 20000, pollMs = 250 } = {}) => {
+const LOCK_TTL_MS = 30000;
+
+const acquireConversationLock = async (lockKey, token, { ttlMs = LOCK_TTL_MS, maxWaitMs = 20000, pollMs = 250 } = {}) => {
   const deadline = Date.now() + maxWaitMs;
   while (Date.now() < deadline) {
     const acquired = await redis.set(lockKey, token, 'PX', ttlMs, 'NX');
@@ -36,6 +38,27 @@ const acquireConversationLock = async (lockKey, token, { ttlMs = 30000, maxWaitM
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
   return false;
+};
+
+// The TTL is a crash safety net, but a healthy job can legitimately outrun it:
+// a voice note means media download + transcription before the two LLM calls
+// even start. When the TTL expired mid-flight the next message for the same
+// lead took the lock and read a history that didn't contain the in-flight
+// reply yet — both jobs then answered the same pending question, which is the
+// lead receiving the same reply twice. Extend the lock while we still hold it
+// so it only ever expires when the worker has actually died.
+const startLockHeartbeat = (lockKey, token, ttlMs = LOCK_TTL_MS) => {
+  const script = `
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+      return redis.call("pexpire", KEYS[1], ARGV[2])
+    end
+    return 0
+  `;
+  const timer = setInterval(() => {
+    redis.eval(script, 1, lockKey, token, String(ttlMs)).catch(() => {});
+  }, Math.floor(ttlMs / 3));
+  timer.unref?.();
+  return () => clearInterval(timer);
 };
 
 const releaseConversationLock = async (lockKey, token) => {
@@ -66,16 +89,19 @@ const processInboundMessage = async (job) => {
     throw new Error(`Could not acquire conversation lock for ${lockKey} — retrying`);
   }
 
+  const stopHeartbeat = startLockHeartbeat(lockKey, lockToken);
+
   try {
     await handleInboundMessage(job);
   } finally {
+    stopHeartbeat();
     await releaseConversationLock(lockKey, lockToken);
   }
 };
 
 const handleInboundMessage = async (job) => {
   let { tenantId, phone, contactName, content, waMessageId, messageType,
-        referral, mediaId, timestamp } = job.data;
+        referral, mediaId, timestamp, replay } = job.data;
 
   logger.info({ jobId: job.id, tenantId, phone, waMessageId }, '▶ Processing inbound message');
 
@@ -217,8 +243,44 @@ const handleInboundMessage = async (job) => {
     });
   }
 
-  // ── 6. Persist inbound message to DB ─────────────────────────────
-  const inboundMessage = await prisma.message.create({
+  // ── 6. Persist inbound message to DB (idempotent per waMessageId) ─
+  // Everything below this point talks to the lead, so the pipeline must run
+  // at most once per inbound message. waMessageId is unique, so an existing
+  // row means we have already been here: a BullMQ retry, a webhook redelivery
+  // that outlived the 24h Redis dedup key, or a handback re-queue. Re-running
+  // would send the lead a second copy of the same answer.
+  const existingInbound = waMessageId
+    ? await prisma.message.findFirst({ where: { waMessageId, tenantId } })
+    : null;
+
+  if (existingInbound) {
+    // Already stored. The only question that matters is whether it was also
+    // already answered — if something went out after it, replying again means
+    // the lead reads the same message twice. If nothing did, the earlier run
+    // died before it could reply and finishing the job is the right call.
+    const outboundSince = await prisma.message.count({
+      where: {
+        conversationId: existingInbound.conversationId,
+        tenantId,
+        direction: 'OUTBOUND',
+        sentAt: { gte: existingInbound.sentAt },
+      },
+    });
+
+    if (outboundSince > 0) {
+      logger.info({ waMessageId, conversationId: conversation.id, replay: !!replay },
+        '⏭  Message already answered — skipping to avoid a duplicate reply');
+      return;
+    }
+
+    logger.info({ waMessageId, conversationId: conversation.id, replay: !!replay },
+      '↻ Re-processing a stored message that never got a reply');
+  }
+
+  // Reuse the stored row on replay: inserting a second copy would duplicate
+  // the lead's question in the transcript, and the AI would then read a
+  // conversation where it was asked the same thing twice.
+  const inboundMessage = existingInbound || await prisma.message.create({
     data: {
       tenantId,
       conversationId: conversation.id,
@@ -231,6 +293,62 @@ const handleInboundMessage = async (job) => {
       sentAt: timestamp ? new Date(parseInt(timestamp) * 1000) : new Date(),
     },
   });
+
+  // ── 6b. Payment proof ─────────────────────────────────────────────
+  // A payment screenshot reaches the AI as the literal string "[Image]" —
+  // there is nothing in it for a model to reason about, so this is decided in
+  // code, not by the Closer. Guarded by paymentDetailsSentAt: an image only
+  // counts as proof if we actually asked this lead to pay, otherwise any photo
+  // (an ad screenshot, a CV, a meme) would mark them as paid.
+  const PROOF_MESSAGE_TYPES = ['image', 'document'];
+  const isPaymentProof =
+    PROOF_MESSAGE_TYPES.includes((messageType || '').toLowerCase()) &&
+    !!conversation.paymentDetailsSentAt &&
+    !conversation.paymentProofDetected;
+
+  if (isPaymentProof) {
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: {
+        paymentProofDetected: true,
+        paymentProofAt: new Date(),
+        status: 'PENDING_VERIFICATION',
+        aiEnabled: false,
+        handoffReason: 'Payment proof received — awaiting human verification',
+      },
+    });
+
+    const ackMessage = tenant.aiConfig?.paymentProofMessage?.trim()
+      || 'Thank you! We have received your payment confirmation. Our team will verify it and confirm your seat shortly. 🙏';
+
+    await sendAndSaveReply({
+      tenant, conversation, tenantId,
+      phone: normalizedPhone,
+      content: ackMessage,
+      tokensUsed: 0,
+      rawResponse: null,
+    });
+
+    await prisma.activity.create({
+      data: {
+        tenantId,
+        leadId: lead.id,
+        type: 'AI_ACTION',
+        content: '💳 Payment proof received — conversation moved to verification queue',
+        metadata: { flag: 'payment_proof_detected', messageType, waMessageId },
+      },
+    });
+
+    notificationService.notifyAdmin(tenant, 'needsHuman', {
+      contactName: contact.name,
+      phone: normalizedPhone,
+      reason: 'Payment proof received — verify and confirm the seat',
+    });
+
+    logger.info({ leadId: lead.id, conversationId: conversation.id },
+      '💳 Payment proof detected — AI paused, awaiting human verification');
+    return;
+  }
 
   // ── 7. Check if AI is enabled for this conversation ───────────────
   // aiEnabled is the single source of truth — do NOT check status here.
@@ -384,6 +502,15 @@ const handleInboundMessage = async (job) => {
         content: aiResult.reply, tokensUsed: aiResult.tokensUsed, rawResponse: aiResult });
     }
 
+    // A lead reaches this branch by confirming enrollment — they said yes and
+    // are waiting to pay. The Closer is skipped on handoff, so nobody would
+    // otherwise give them the account details, and they'd get a "we'll be in
+    // touch" farewell with no way to actually pay. Send the configured block
+    // before handing over.
+    if (aiResult.enrollmentConfirmed) {
+      await sendPaymentInstructions({ tenant, conversation, tenantId, phone: normalizedPhone });
+    }
+
     // Farewell message — customizable via aiConfig.handoffMessage
     const farewellMsg = tenant.aiConfig?.handoffMessage ||
       '🙏 Shukriya apna waqt dene ka! Hamari team bohat jald aap se rabta karegi. Please available rahein. ✨';
@@ -457,6 +584,14 @@ const handleInboundMessage = async (job) => {
     rawResponse: aiResult,
   });
 
+  // D) Payment instructions, sent verbatim from config as their own message.
+  // The AI writes the lead-in and raises the flag, but never the account
+  // numbers themselves: a generated reply is length-capped and free to reword,
+  // and a mistyped IBAN sends the lead's money to nobody.
+  if (aiResult.sendPaymentDetails) {
+    await sendPaymentInstructions({ tenant, conversation, tenantId, phone: normalizedPhone });
+  }
+
   logger.info({ leadId: lead.id, action: aiResult.action, stage: aiResult.stage }, '✅ Message processed');
 };
 
@@ -464,8 +599,66 @@ const handleInboundMessage = async (job) => {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────
 
+// Two identical outbound texts this close together are never intentional —
+// they mean something re-ran, or the Closer regenerated a reply the lead
+// already has (common when a lead re-sends the same question). The guards
+// upstream stop the known causes; this is the last line of defence, right at
+// the boundary where the lead would actually receive the message.
+const DUPLICATE_REPLY_WINDOW_MS = 5 * 60 * 1000;
+
+const isRepeatOfLastReply = async ({ conversation, tenantId, content }) => {
+  const lastOutbound = await prisma.message.findFirst({
+    where: { conversationId: conversation.id, tenantId, direction: 'OUTBOUND', type: 'TEXT' },
+    orderBy: { sentAt: 'desc' },
+    select: { content: true, sentAt: true },
+  });
+
+  if (!lastOutbound?.content) return false;
+  if (lastOutbound.content.trim() !== content.trim()) return false;
+
+  return Date.now() - new Date(lastOutbound.sentAt).getTime() < DUPLICATE_REPLY_WINDOW_MS;
+};
+
+// Sends the configured bank/payment block verbatim and records WHEN it went
+// out. That timestamp is what later lets an inbound image be read as payment
+// proof — without it we'd have no way to tell a receipt from any other photo.
+const sendPaymentInstructions = async ({ tenant, conversation, tenantId, phone }) => {
+  const details = tenant.aiConfig?.paymentDetails?.trim();
+  if (!details) {
+    logger.warn({ tenantId, conversationId: conversation.id },
+      '⚠️  Payment details requested but none configured — lead was told to pay with no account to pay into');
+    return false;
+  }
+
+  await sendAndSaveReply({
+    tenant, conversation, tenantId, phone,
+    content: details,
+    tokensUsed: 0,
+    rawResponse: null,
+  });
+
+  await prisma.conversation.update({
+    where: { id: conversation.id },
+    data: { paymentDetailsSentAt: new Date() },
+  });
+
+  logger.info({ conversationId: conversation.id }, '🏦 Payment details sent from config');
+  return true;
+};
+
 const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content, tokensUsed, rawResponse }) => {
   let waMessageId = null;
+
+  if (!content?.trim()) {
+    logger.warn({ tenantId, conversationId: conversation.id }, 'Empty reply — nothing sent');
+    return;
+  }
+
+  if (await isRepeatOfLastReply({ conversation, tenantId, content })) {
+    logger.warn({ tenantId, conversationId: conversation.id, preview: content.slice(0, 80) },
+      '🚫 Suppressed duplicate reply — identical text already sent to this lead');
+    return;
+  }
 
   try {
     waMessageId = await whatsappService.sendText(tenant, phone, content);

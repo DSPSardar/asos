@@ -743,6 +743,8 @@ function AITab({ showToast }) {
   const [language, setLanguage] = useState('Urdu+English');
   const [budget,   setBudget]   = useState(200);
   const [rules,    setRules]    = useState(DEFAULT_RULES);
+  const [payment,  setPayment]  = useState('');
+  const [proofMsg, setProofMsg] = useState('');
 
   // Live usage from subscription
   const [usageUsd,  setUsageUsd]  = useState(null);   // computed from tokens
@@ -759,6 +761,8 @@ function AITab({ showToast }) {
       if (cfg) {
         if (cfg.model)          setModel(cfg.model);
         if (cfg.systemPrompt)   setPrompt(cfg.systemPrompt);
+        if (cfg.paymentDetails) setPayment(cfg.paymentDetails);
+        if (cfg.paymentProofMessage) setProofMsg(cfg.paymentProofMessage);
         if (cfg.tone)           setTone(cfg.tone);
         if (cfg.language)       setLanguage(cfg.language);
         if (cfg.monthlyBudget != null) setBudget(Number(cfg.monthlyBudget));
@@ -783,6 +787,8 @@ function AITab({ showToast }) {
       await aiConfigAPI.update({
         model,
         systemPrompt:  prompt,
+        paymentDetails: payment,
+        paymentProofMessage: proofMsg,
         tone,
         language,
         monthlyBudget: budget,
@@ -843,6 +849,42 @@ function AITab({ showToast }) {
             rows={14}
             className="input-dark w-full resize-y rounded-lg px-3 py-2 font-mono text-[12px] leading-relaxed text-slate-200"
           />
+        </Field>
+
+        <Field
+          label="Payment Instructions"
+          hint="sent word-for-word — the AI never retypes it"
+        >
+          <textarea
+            value={payment}
+            onChange={(e) => setPayment(e.target.value)}
+            rows={8}
+            placeholder={'Account Title:\nYour Company Pvt Ltd\n\nBank:\nMeezan Bank\n\nAccount Number:\n0000000000\n\nIBAN:\nPK00XXXX0000000000000000'}
+            className="input-dark w-full resize-y rounded-lg px-3 py-2 font-mono text-[12px] leading-relaxed text-slate-200"
+          />
+          <span className="mt-1.5 block text-[11px] text-slate-500">
+            Sent as its own message when a lead is ready to pay, exactly as typed here. Keep the bank
+            details out of the System Prompt above — anything the AI writes itself is length-capped and
+            can be reworded, and a single wrong digit in an IBAN sends the money nowhere.
+          </span>
+        </Field>
+
+        <Field
+          label="Payment Received Message"
+          hint="sent the moment a screenshot arrives"
+        >
+          <textarea
+            value={proofMsg}
+            onChange={(e) => setProofMsg(e.target.value)}
+            rows={3}
+            placeholder="Thank you! We have received your payment confirmation. Our team will verify it and confirm your seat shortly. 🙏"
+            className="input-dark w-full resize-y rounded-lg px-3 py-2 text-sm leading-relaxed text-slate-200"
+          />
+          <span className="mt-1.5 block text-[11px] text-slate-500">
+            When a lead sends an image after receiving the payment instructions, the AI pauses, this
+            exact message is sent, and the conversation moves to your verification queue. Leave blank
+            to use the default.
+          </span>
         </Field>
 
         <div>

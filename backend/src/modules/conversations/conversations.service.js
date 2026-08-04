@@ -164,35 +164,36 @@ const handback = async (tenantId, conversationId, userId) => {
 
   // ── Re-queue last unanswered message from contact ─────────────────
   // If the last message in the conversation is from the contact and has
-  // no AI reply after it, trigger Claude to respond immediately.
+  // no AI reply after it, trigger the AI to respond immediately.
+  //
+  // This used to publish under a fabricated `requeue_<id>` message id, which
+  // defeated every dedup layer we have: the queue's per-message jobId, the
+  // worker's unique waMessageId, and the "already answered" check. Handing
+  // back twice therefore answered the same message twice — the same reply,
+  // sent again — and inserted a phantom copy of the lead's question into the
+  // transcript. Publish the real message id with an explicit `replay` flag
+  // instead, and let the worker decide whether it still needs answering: it
+  // is the only place that sees the conversation state at execution time.
   try {
-    const lastMessages = await prisma.message.findMany({
+    const lastMsg = await prisma.message.findFirst({
       where: { conversationId, tenantId },
       orderBy: { sentAt: 'desc' },
-      take: 2,
       select: { direction: true, sender: true, content: true, waMessageId: true, sentAt: true },
     });
 
-    const lastMsg = lastMessages[0];
-    const secondMsg = lastMessages[1];
-
-    // Re-queue if last message is inbound (from contact) and not already replied to
-    if (lastMsg?.direction === 'INBOUND' && lastMsg?.sender === 'CONTACT') {
-      // Make sure there's no outbound reply already after it
-      const hasReply = secondMsg?.direction === 'OUTBOUND';
-      if (!hasReply) {
-        const contact = await prisma.contact.findFirst({ where: { tenantId, conversations: { some: { id: conversationId } } } });
-        await publishInboundMessage({
-          tenantId,
-          phone: contact?.phone || conv.lead?.contact?.phone || '',
-          contactName: contact?.name || null,
-          content: lastMsg.content || '',
-          waMessageId: `requeue_${lastMsg.waMessageId || Date.now()}`,
-          messageType: 'text',
-          timestamp: Math.floor(new Date(lastMsg.sentAt).getTime() / 1000).toString(),
-        });
-        logger.info({ conversationId, tenantId }, '♻️ Re-queued last unanswered message after handback to AI');
-      }
+    if (lastMsg?.direction === 'INBOUND' && lastMsg?.sender === 'CONTACT' && lastMsg?.waMessageId) {
+      const contact = await prisma.contact.findFirst({ where: { tenantId, conversations: { some: { id: conversationId } } } });
+      await publishInboundMessage({
+        tenantId,
+        phone: contact?.phone || conv.lead?.contact?.phone || '',
+        contactName: contact?.name || null,
+        content: lastMsg.content || '',
+        waMessageId: lastMsg.waMessageId,
+        messageType: 'text',
+        timestamp: Math.floor(new Date(lastMsg.sentAt).getTime() / 1000).toString(),
+        replay: true,
+      });
+      logger.info({ conversationId, tenantId }, '♻️ Re-queued last unanswered message after handback to AI');
     }
   } catch (err) {
     logger.warn({ err, conversationId }, 'Failed to re-queue last message after handback — non-fatal');
