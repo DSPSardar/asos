@@ -66,6 +66,10 @@ function mapThread(conv) {
     needsHuman,
     aiEnabled:   conv.aiEnabled,
     status:      conv.status,
+    // Durable fact, unlike status: taking over rewrites status to
+    // HUMAN_TAKEOVER and would otherwise erase every trace that this lead has
+    // paid and is waiting on you.
+    paymentProofDetected: conv.paymentProofDetected || false,
     leadId:      conv.leadId,
   };
 }
@@ -622,11 +626,12 @@ function ConversationView({ thread, messages, msgLoading, mobileView, onBack, on
       </div>
 
       {/* Status bar above composer */}
-      {/* Payment verification queue. PENDING_VERIFICATION is deliberately kept
-          distinct from HUMAN_TAKEOVER so "money is waiting on you" doesn't look
-          like an ordinary escalation — until this is confirmed, the lead has
-          paid and is sitting unacknowledged. */}
-      {thread.status === 'PENDING_VERIFICATION' && (
+      {/* Payment verification queue. Keyed on paymentProofDetected rather than
+          status === 'PENDING_VERIFICATION': takeover rewrites status, so the
+          status version vanished the moment an agent opened the thread to
+          check the screenshot — which is exactly when it is needed. It clears
+          on CLOSED_WON, when the seat is actually booked. */}
+      {thread.paymentProofDetected && thread.stage !== 'CLOSED_WON' && (
         <div className="flex items-center justify-between gap-3 border-t border-emerald-400/25 bg-emerald-400/10 px-4 py-2.5 text-xs text-emerald-300 md:px-6">
           <div className="flex items-center gap-2">
             <span aria-hidden="true">💳</span>
