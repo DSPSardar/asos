@@ -681,10 +681,15 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
 
   // ── 8. Update token usage for billing ───────────────────────
   const totalTokens = (qualifierOutput._tokens || 0) + (closerOutput?._tokens || 0);
-  await prisma.subscription.update({
-    where: { tenantId },
-    data: { aiTokensUsed: { increment: totalTokens } },
-  }).catch(() => {});
+  // upsert, not update: a tenant with no Subscription row made this throw on
+  // every message, and the empty catch swallowed it — so AI spend silently
+  // stopped being recorded and the monthly budget cap stopped being
+  // enforceable. Every other column has a default, so tenantId is enough.
+  await prisma.subscription.upsert({
+    where:  { tenantId },
+    update: { aiTokensUsed: { increment: totalTokens } },
+    create: { tenantId, aiTokensUsed: BigInt(totalTokens) },
+  }).catch(err => logger.warn({ err, tenantId }, 'Token usage update failed (non-blocking)'));
 
   // ── 9. Return v1-compatible shape (+ v1.5 extras) ───────────
   return {
