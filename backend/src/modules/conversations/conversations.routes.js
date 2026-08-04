@@ -16,6 +16,7 @@ router.patch('/:id/ai',             ctrl.toggleAI);
 router.post('/:id/takeover',        ctrl.takeover);
 router.post('/:id/handback',        ctrl.handback);
 router.post('/:id/close',           ctrl.close);
+router.post('/:id/confirm-payment', ctrl.confirmPayment);
 router.get('/:id/summary',          ctrl.summary);
 router.get('/:id/suggestion',       ctrl.suggestion);
 router.delete('/:id/messages',      ctrl.clearMessages);

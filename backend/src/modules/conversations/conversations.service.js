@@ -212,6 +212,58 @@ const closeConversation = async (tenantId, conversationId, userId) => {
   });
 };
 
+// Resolves the PENDING_VERIFICATION queue. The worker parks a conversation
+// there when a payment screenshot arrives, but nothing could take it out again:
+// takeover/handback/close all move the conversation on without ever marking the
+// lead won, so a verified payment never reached CLOSED_WON and won revenue
+// undercounted every real enrollment.
+//
+// Idempotency key is the lead's own stage — deriveStage() is monotonic and
+// CLOSED_WON is terminal, so a double-click cannot double-count.
+const confirmPayment = async (tenantId, conversationId, userId) => {
+  const conv = await prisma.conversation.findFirst({
+    where: { id: conversationId, tenantId },
+    include: { lead: true },
+  });
+  if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404, expose: true });
+
+  // Guard against confirming a payment nobody ever sent proof for — booking
+  // revenue should not be one mis-click away on an unrelated thread.
+  if (!conv.paymentProofDetected) {
+    throw Object.assign(new Error('No payment proof has been received for this conversation'),
+      { statusCode: 409, expose: true });
+  }
+
+  if (conv.lead?.stage === 'CLOSED_WON') return conv;
+
+  const now = new Date();
+  const [updated] = await prisma.$transaction([
+    prisma.conversation.update({
+      where: { id: conversationId },
+      data: { status: 'CLOSED', aiEnabled: false, handoffReason: 'Payment verified — enrollment confirmed' },
+    }),
+    prisma.lead.update({
+      where: { id: conv.leadId },
+      data: { stage: 'CLOSED_WON', closedAt: now },
+    }),
+    // STAGE_CHANGE, not AI_ACTION: this is a lifecycle transition made by a
+    // human, and analytics separates the two by type.
+    prisma.activity.create({
+      data: {
+        tenantId,
+        leadId: conv.leadId,
+        userId,
+        type: 'STAGE_CHANGE',
+        content: '💳 Payment verified — enrollment confirmed',
+        metadata: { action: 'payment_confirmed', from: conv.lead?.stage || null, to: 'CLOSED_WON' },
+      },
+    }),
+  ]);
+
+  logger.info({ conversationId, leadId: conv.leadId, tenantId }, '💳 Payment confirmed — lead marked CLOSED_WON');
+  return updated;
+};
+
 const getSummary = async (tenantId, conversationId) => {
   const messages = await prisma.message.findMany({
     where: { conversationId, tenantId },
@@ -276,6 +328,6 @@ const deleteConversation = async (tenantId, conversationId) => {
 
 module.exports = {
   listConversations, getConversation, sendMessage,
-  toggleAI, takeover, handback, closeConversation, getSummary, getSuggestedReply, listByClient,
+  toggleAI, takeover, handback, closeConversation, confirmPayment, getSummary, getSuggestedReply, listByClient,
   clearMessages, deleteConversation,
 };

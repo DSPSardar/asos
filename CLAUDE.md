@@ -109,13 +109,38 @@ Each `src/modules/<name>/` has `<name>.routes.js` + `<name>.controller.js` + `<n
 - **Encrypted-at-rest WA tokens.** `utils/crypto.js` does AES-256-GCM. Settings routes that update WA creds must encrypt before write and decrypt before passing to `whatsappService`.
 - **Prisma migrations.** Schema lives in `backend/prisma/schema.prisma`; only `0_init` is checked in. After editing the schema, run `npx prisma migrate dev --name <change>` locally — don't hand-edit migration SQL.
 
-## Deploy scripts (`deploy/`)
+## Deployment — Railway (this is the live path)
 
-Run on the server inside the deploy dir (default `/opt/asos`):
-- `setup.sh` — one-time provisioning. Installs Docker, configures UFW/fail2ban, gets SSL certs, builds the SPA, starts containers.
-- `bootstrap-git.sh` — one-time conversion of an rsync'd dir into a git checkout, so `update.sh` can pull from origin.
-- `update.sh` — pull `origin/main`, rebuild only what changed (api/worker images, vite-app SPA), run pending migrations, reload nginx, health-check. Requires a clean working tree.
-- `rollback.sh <commit-ish> [--force]` — `git reset --hard` to the target SHA, rebuild + restart. Refuses to roll back across new Prisma migrations unless `--force`.
+**Production runs on Railway, not on a VPS.** `git push origin main` is the
+entire deploy: Railway watches `main` and rebuilds automatically. There is no
+server to SSH into, no `/opt/asos`, and no nginx to reload.
+
+Project `accomplished-growth` / environment `production`, five services:
+
+| Service | What it is |
+|---|---|
+| `asos` | API (`backend/`) — runs `prisma migrate deploy` on boot, then `src/server.js` |
+| `asos-worker` | BullMQ conversation worker (`src/workers/conversation.worker.js`) |
+| `asos-dashboard` | the built `vite-app` SPA, served at dspagenthub.com |
+| `Postgres` | managed PG (12+; `ALTER TYPE … ADD VALUE` migrations are safe) |
+| `Redis` | managed Redis for BullMQ |
+
+Migrations run automatically as part of the `asos` service start — you do not
+run them by hand. Verify a deploy from the Railway MCP tools (`get-status`,
+`list-deployments`, `get-logs`) or the dashboard; `list-deployments` reports the
+`commitHash` each service actually built, which is the fastest way to tell a
+stale bundle from a failed deploy.
+
+To roll back, revert the commit and push — there is no `rollback.sh` path.
+
+### `deploy/` and `docker-compose` are legacy — do not follow them
+
+`deploy/setup.sh`, `bootstrap-git.sh`, `update.sh`, `rollback.sh`,
+`nginx/nginx.conf` and the Docker Compose stack describe a single-VPS
+deployment at `/opt/asos` that **this project no longer uses**. They are kept
+for reference only. Telling someone to run `update.sh` sends them hunting for a
+server that does not exist — this has already cost real debugging time. If you
+are reasoning about how production updates, it is the Railway path above.
 
 ## Marketing copy accuracy (non-negotiable)
 

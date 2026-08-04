@@ -277,6 +277,21 @@ export default function Conversations() {
     }
   };
 
+  const handleConfirmPayment = async (id) => {
+    // Books revenue and is terminal for the lead, so it asks first. The backend
+    // rejects a conversation with no proof on file (409) — this is the second
+    // line, not the only one.
+    if (!window.confirm('Confirm this payment? The lead will be marked CLOSED_WON and the conversation closed.')) return;
+    try {
+      await conversationsAPI.confirmPayment(id);
+      setThreads((prev) => prev.map((t) =>
+        t.id === id ? { ...t, status: 'CLOSED', stage: 'CLOSED_WON', handler: 'Human', aiEnabled: false } : t));
+    } catch (e) {
+      console.error('[Conversations] confirmPayment error', e);
+      alert(e.message);
+    }
+  };
+
   const handleSend = async (id, content) => {
     if (!content?.trim()) return;
     try {
@@ -320,6 +335,7 @@ export default function Conversations() {
             onToggleAI={(enabled) => handleToggleAI(activeThread.id, enabled)}
             onTakeover={() => handleTakeover(activeThread.id)}
             onHandback={() => handleHandback(activeThread.id)}
+            onConfirmPayment={() => handleConfirmPayment(activeThread.id)}
             onSend={(content) => handleSend(activeThread.id, content)}
             onClearMessages={() => handleClearMessages(activeThread.id)}
             onDeleteConversation={() => handleDeleteConversation(activeThread.id)}
@@ -514,7 +530,7 @@ class ConvErrorBoundary extends React.Component {
 // ─────────────────────────────────────────────────────────────
 // RIGHT — Conversation view
 // ─────────────────────────────────────────────────────────────
-function ConversationView({ thread, messages, msgLoading, mobileView, onBack, onToggleAI, onTakeover, onHandback, onSend, onClearMessages, onDeleteConversation }) {
+function ConversationView({ thread, messages, msgLoading, mobileView, onBack, onToggleAI, onTakeover, onHandback, onConfirmPayment, onSend, onClearMessages, onDeleteConversation }) {
   const [aiOn,  setAiOn]  = useState(thread.aiEnabled !== false);
   const [draft, setDraft] = useState('');
   const scrollRef = useRef(null);
@@ -606,6 +622,25 @@ function ConversationView({ thread, messages, msgLoading, mobileView, onBack, on
       </div>
 
       {/* Status bar above composer */}
+      {/* Payment verification queue. PENDING_VERIFICATION is deliberately kept
+          distinct from HUMAN_TAKEOVER so "money is waiting on you" doesn't look
+          like an ordinary escalation — until this is confirmed, the lead has
+          paid and is sitting unacknowledged. */}
+      {thread.status === 'PENDING_VERIFICATION' && (
+        <div className="flex items-center justify-between gap-3 border-t border-emerald-400/25 bg-emerald-400/10 px-4 py-2.5 text-xs text-emerald-300 md:px-6">
+          <div className="flex items-center gap-2">
+            <span aria-hidden="true">💳</span>
+            Payment proof received. Verify it against your bank, then confirm to book the seat.
+          </div>
+          <button
+            onClick={onConfirmPayment}
+            className="rounded-md bg-emerald-400/20 px-2.5 py-1 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-400/30"
+          >
+            Confirm payment →
+          </button>
+        </div>
+      )}
+
       <div className={`flex items-center justify-between gap-3 border-t px-4 py-2.5 text-xs md:px-6 ${
         aiOn
           ? 'border-accent/20 bg-accent/5 text-accent'

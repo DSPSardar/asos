@@ -56,6 +56,13 @@ const close = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const confirmPayment = async (req, res, next) => {
+  try {
+    const conv = await svc.confirmPayment(req.tenantId, req.params.id, req.user.id);
+    return success(res, conv, 'Payment confirmed — seat booked');
+  } catch (err) { next(err); }
+};
+
 const summary = async (req, res, next) => {
   try {
     const text = await svc.getSummary(req.tenantId, req.params.id);
@@ -91,4 +98,4 @@ const deleteConversation = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { list, getOne, sendMessage, toggleAI, takeover, handback, close, summary, suggestion, byClient, clearMessages, deleteConversation };
+module.exports = { list, getOne, sendMessage, toggleAI, takeover, handback, close, confirmPayment, summary, suggestion, byClient, clearMessages, deleteConversation };

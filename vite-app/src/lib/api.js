@@ -179,6 +179,7 @@ export const conversationsAPI = {
   takeover:   (id) => api.post(`/conversations/${id}/takeover`),
   handback:   (id) => api.post(`/conversations/${id}/handback`),
   close:      (id) => api.post(`/conversations/${id}/close`),
+  confirmPayment: (id) => api.post(`/conversations/${id}/confirm-payment`),
   summary:    (id) => api.get(`/conversations/${id}/summary`),
   clearMessages:      (id) => api.delete(`/conversations/${id}/messages`),
   deleteConversation: (id) => api.delete(`/conversations/${id}`),
