@@ -518,7 +518,14 @@ const deriveStage = (currentStage, qualifierOutput) => {
   const currentIdx = order.indexOf(currentStage);
 
   let target = currentStage;
-  if (qualifierOutput.next_action === 'close_deal')      target = 'CLOSED_WON';
+  // close_deal stops at PROPOSED, not CLOSED_WON. The Qualifier setting
+  // close_deal means the lead SAID yes — it is an intention, not money in the
+  // account, and nobody has looked at a bank statement yet. Marking it won here
+  // made won revenue count intentions, and (until the worker's awaiting-proof
+  // lookup) it also closed the lead out from under the screenshot that was
+  // still on its way. CLOSED_WON is now reachable only through
+  // confirmPayment() — a human verifying the transfer.
+  if (qualifierOutput.next_action === 'close_deal')      target = 'PROPOSED';
   else if (qualifierOutput.next_action === 'send_proposal') target = 'PROPOSED';
   else if (qualifierOutput.lead_status === 'HOT')        target = 'DIAGNOSED';
   else if (qualifierOutput.lead_status === 'WARM' && currentStage === 'NEW') target = 'QUALIFYING';

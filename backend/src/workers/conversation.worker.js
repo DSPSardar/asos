@@ -558,23 +558,22 @@ const handleInboundMessage = async (job) => {
   }
 
   if (aiResult.action === 'close') {
-    // B) Closing — update lead, fire Purchase event
-    await prisma.lead.update({
-      where: { id: lead.id },
-      data: { stage: 'CLOSED_WON', closedAt: new Date() },
-    });
-
+    // B) The lead said yes. That is an intention, not a payment — nobody has
+    // checked a bank statement. The lead stays at PROPOSED and is booked only
+    // by confirmPayment(), when a human has verified the transfer.
+    //
+    // The Meta Purchase event moves with it, for the same reason: firing it
+    // here reported a conversion for every lead who merely agreed, training
+    // Meta's optimiser on people who never paid.
     await prisma.activity.create({
       data: {
         tenantId,
         leadId: lead.id,
-        type: 'STAGE_CHANGE',
-        content: 'AI detected closing signal — lead marked as CLOSED_WON',
-        metadata: { closedBy: 'AI', urgencyTrigger: aiResult.urgencyTrigger },
+        type: 'AI_ACTION',
+        content: 'AI detected closing signal — awaiting payment verification',
+        metadata: { closedBy: 'AI', urgencyTrigger: aiResult.urgencyTrigger, awaitingVerification: true },
       },
     });
-
-    metaService.trackPurchase(tenant, normalizedPhone, lead.id, lead.dealValue, lead.currency).catch(() => {});
   }
 
   if (aiResult.action === 'close_lost') {

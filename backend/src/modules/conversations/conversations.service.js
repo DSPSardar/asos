@@ -3,6 +3,7 @@
 const prisma = require('../../config/database');
 const whatsappService = require('../../services/whatsapp.service');
 const claudeService = require('../../services/claude.service');
+const metaService = require('../../services/meta.service');
 const logger = require('../../utils/logger');
 const redis = require('../../config/redis');
 const { publishInboundMessage } = require('../../queues/message.queue');
@@ -223,7 +224,7 @@ const closeConversation = async (tenantId, conversationId, userId) => {
 const confirmPayment = async (tenantId, conversationId, userId) => {
   const conv = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
-    include: { lead: true },
+    include: { lead: true, contact: true, tenant: true },
   });
   if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404, expose: true });
 
@@ -259,6 +260,14 @@ const confirmPayment = async (tenantId, conversationId, userId) => {
       },
     }),
   ]);
+
+  // Purchase fires here rather than when the AI hears "yes": this is the first
+  // point at which money has actually been verified, so it is the only honest
+  // signal to hand Meta's optimiser.
+  if (conv.tenant && conv.contact?.phone) {
+    metaService.trackPurchase(conv.tenant, conv.contact.phone, conv.leadId, conv.lead?.dealValue, conv.lead?.currency)
+      .catch(() => {});
+  }
 
   logger.info({ conversationId, leadId: conv.leadId, tenantId }, '💳 Payment confirmed — lead marked CLOSED_WON');
   return updated;
