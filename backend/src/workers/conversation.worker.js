@@ -535,15 +535,27 @@ const handleInboundMessage = async (job) => {
     // otherwise give them the account details, and they'd get a "we'll be in
     // touch" farewell with no way to actually pay. Send the configured block
     // before handing over.
+    let paymentDetailsJustSent = false;
     if (aiResult.enrollmentConfirmed) {
-      await sendPaymentInstructions({ tenant, conversation, tenantId, phone: normalizedPhone });
+      paymentDetailsJustSent = await sendPaymentInstructions({ tenant, conversation, tenantId, phone: normalizedPhone });
     }
 
-    // Farewell message — customizable via aiConfig.handoffMessage
-    const farewellMsg = tenant.aiConfig?.handoffMessage ||
-      '🙏 Shukriya apna waqt dene ka! Hamari team bohat jald aap se rabta karegi. Please available rahein. ✨';
-    await sendAndSaveReply({ tenant, conversation, tenantId, phone: normalizedPhone,
-      content: farewellMsg, tokensUsed: 0, rawResponse: null });
+    // The farewell is a goodbye — "thanks for your time, our team will be in
+    // touch, stay available". Sent straight after the account details it
+    // contradicts them: the lead has just been asked to transfer money and send
+    // a screenshot, and is then told to sit and wait. Observed live — a lead
+    // said "I want to join Monday's batch", got the bank block, and was waved
+    // off one minute later.
+    //
+    // When the details went out they already end with the instruction, so the
+    // farewell is skipped. It still sends for every other handoff reason, where
+    // "a human will contact you" is the right and only thing to say.
+    if (!paymentDetailsJustSent) {
+      const farewellMsg = tenant.aiConfig?.handoffMessage ||
+        '🙏 Shukriya apna waqt dene ka! Hamari team bohat jald aap se rabta karegi. Please available rahein. ✨';
+      await sendAndSaveReply({ tenant, conversation, tenantId, phone: normalizedPhone,
+        content: farewellMsg, tokensUsed: 0, rawResponse: null });
+    }
 
     await handleHandoff(tenant, conversation, lead, aiResult.handoffReason);
 
