@@ -171,6 +171,34 @@ const handleInboundMessage = async (job) => {
     orderBy: { createdAt: 'desc' },
   });
 
+  // A lead we are still waiting on payment proof for is not finished, whatever
+  // its stage says. The enrollment handoff marks a lead CLOSED_WON the moment
+  // it confirms — seconds before the screenshot actually arrives — so the
+  // filter above excluded exactly the lead the payment belongs to. The image
+  // then opened a second lead on the same contact, with a second conversation
+  // whose paymentDetailsSentAt was null, so proof detection could not fire: the
+  // screenshot fell through to the Qualifier, which sees the literal "[Image]",
+  // scored it COLD and asked a fresh Phase-1 question. Observed in production —
+  // contact 76400f6c got leads b6cb9051 and ac8ab365 forty seconds apart.
+  if (!lead) {
+    const awaitingProof = await prisma.conversation.findFirst({
+      where: {
+        tenantId,
+        contactId: contact.id,
+        paymentDetailsSentAt: { not: null },
+        paymentProofDetected: false,
+      },
+      orderBy: { paymentDetailsSentAt: 'desc' },
+      include: { lead: true },
+    });
+
+    if (awaitingProof?.lead) {
+      lead = awaitingProof.lead;
+      logger.info({ leadId: lead.id, contactId: contact.id, conversationId: awaitingProof.id },
+        '🏦 Reusing lead still awaiting payment proof instead of opening a new one');
+    }
+  }
+
   const isNewLead = !lead;
 
   if (!lead) {
