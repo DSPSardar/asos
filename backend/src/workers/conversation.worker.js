@@ -337,33 +337,43 @@ const handleInboundMessage = async (job) => {
     });
 
     if (claimed.count === 1) {
-      let welcomeWaMessageId = null;
+      // The sentWelcomeVoice flag is already committed at this point, so this
+      // contact gets exactly one shot at the voice note — if anything below
+      // throws uncaught, the job retries, sees the flag already true, skips
+      // this whole branch, and falls straight into a normal AI reply on what
+      // was supposed to be the intro-only turn. Catch everything so a failure
+      // here degrades to "no voice note, still no AI reply this turn" instead.
       try {
-        welcomeWaMessageId = await welcomeVoiceService.sendWelcomeVoice(tenant, tenant.aiConfig, normalizedPhone);
+        let welcomeWaMessageId = null;
+        try {
+          welcomeWaMessageId = await welcomeVoiceService.sendWelcomeVoice(tenant, tenant.aiConfig, normalizedPhone);
+        } catch (err) {
+          logger.error({ err, contactId: contact.id }, 'Welcome voice note send failed');
+        }
+
+        await prisma.message.create({
+          data: {
+            tenantId,
+            conversationId: conversation.id,
+            waMessageId: welcomeWaMessageId,
+            direction: 'OUTBOUND',
+            sender: 'AI',
+            type: 'AUDIO',
+            content: '[Welcome voice note]',
+            status: welcomeWaMessageId ? 'SENT' : 'FAILED',
+          },
+        });
+
+        await prisma.conversation.update({
+          where: { id: conversation.id },
+          data: { lastMessageAt: new Date() },
+        });
+
+        logger.info({ contactId: contact.id, conversationId: conversation.id, sent: !!welcomeWaMessageId },
+          '🎙️ Welcome voice note sent — skipping Qualifier/Closer for this turn');
       } catch (err) {
-        logger.error({ err, contactId: contact.id }, 'Welcome voice note send failed');
+        logger.error({ err, contactId: contact.id }, 'Welcome voice note bookkeeping failed after claiming the flag — skipping AI this turn anyway');
       }
-
-      await prisma.message.create({
-        data: {
-          tenantId,
-          conversationId: conversation.id,
-          waMessageId: welcomeWaMessageId,
-          direction: 'OUTBOUND',
-          sender: 'AI',
-          type: 'AUDIO',
-          content: '[Welcome voice note]',
-          status: welcomeWaMessageId ? 'SENT' : 'FAILED',
-        },
-      });
-
-      await prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { lastMessageAt: new Date() },
-      });
-
-      logger.info({ contactId: contact.id, conversationId: conversation.id, sent: !!welcomeWaMessageId },
-        '🎙️ Welcome voice note sent — skipping Qualifier/Closer for this turn');
       return;
     }
   }
