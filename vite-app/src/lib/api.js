@@ -241,6 +241,9 @@ export const aiConfigAPI = {
   update: (data) => api.put('/ai/config', data),
   test:   (message) => api.post('/ai/config/test', { message }),
   usage:  () => api.get('/ai/usage'),
+  uploadWelcomeVoice: (formData) => api.post('/ai/config/welcome-voice', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 export const knowledgeGapsAPI = {

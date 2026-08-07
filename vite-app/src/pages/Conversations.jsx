@@ -773,10 +773,30 @@ function MessageBubble({ m }) {
   const incoming = m.from === 'contact';
   const ai       = m.from === 'ai';
 
-  // The voice-note follow-up stores the SAME content as the text reply it
-  // accompanies, so rendering it as another text bubble made every AI reply
-  // look like it had been sent twice. Show it as a compact voice-note chip —
-  // the words are already in the bubble directly above.
+  // The ElevenLabs voice-note follow-up stores the SAME content as the text
+  // reply it accompanies, so rendering it as another text bubble made every
+  // AI reply look like it had been sent twice — show it as a compact chip
+  // instead, since the words are already in the bubble directly above. The
+  // welcome voice note is different: it's the ONLY message sent that turn
+  // (no text bubble above it), so collapsing it the same way looked like no
+  // reply had been sent at all. Give it its own full, visible bubble.
+  if (!incoming && m.type === 'AUDIO' && m.text === '[Welcome voice note]') {
+    return (
+      <div className="flex w-full justify-end">
+        <div className="flex max-w-[78%] flex-col items-end">
+          <div className="flex items-center gap-2 rounded-2xl rounded-tr-sm bg-gradient-to-br from-accent to-accent2 px-3.5 py-2 text-[13.5px] text-white shadow-sm shadow-accent/20">
+            <span aria-hidden="true">🎙️</span>
+            <span>Welcome voice note</span>
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 px-1 text-[10px] text-slate-500">
+            <span className="rounded bg-accent/15 px-1 py-px font-semibold text-accent">AI</span>
+            <span className="tabular-nums">{m.ts}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!incoming && m.type === 'AUDIO') {
     return (
       <div className="flex w-full justify-end">

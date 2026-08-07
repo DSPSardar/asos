@@ -1,6 +1,6 @@
 // src/pages/Settings.jsx — Settings (route: /settings).
 // Left tab nav + right content panel. 6 tabs.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@pages/Layout';
 import { settingsAPI, aiConfigAPI, knowledgeGapsAPI, authAPI, resolveWhatsAppWebhookUrl } from '@lib/api';
@@ -746,6 +746,12 @@ function AITab({ showToast }) {
   const [payment,  setPayment]  = useState('');
   const [proofMsg, setProofMsg] = useState('');
 
+  const [welcomeVoiceEnabled,    setWelcomeVoiceEnabled]    = useState(false);
+  const [welcomeVoiceMediaId,    setWelcomeVoiceMediaId]    = useState(null);
+  const [welcomeVoiceUploadedAt, setWelcomeVoiceUploadedAt] = useState(null);
+  const [uploadingVoice,         setUploadingVoice]         = useState(false);
+  const voiceFileInputRef = useRef(null);
+
   // Live usage from subscription
   const [usageUsd,  setUsageUsd]  = useState(null);   // computed from tokens
   const [usagePct,  setUsagePct]  = useState(0);
@@ -769,6 +775,9 @@ function AITab({ showToast }) {
         if (cfg.handoffRules && typeof cfg.handoffRules === 'object') {
           setRules({ ...DEFAULT_RULES, ...cfg.handoffRules });
         }
+        setWelcomeVoiceEnabled(!!cfg.welcomeVoiceEnabled);
+        setWelcomeVoiceMediaId(cfg.welcomeVoiceMediaId || null);
+        setWelcomeVoiceUploadedAt(cfg.welcomeVoiceUploadedAt || null);
       }
 
       if (usage) {
@@ -793,12 +802,34 @@ function AITab({ showToast }) {
         language,
         monthlyBudget: budget,
         handoffRules:  rules,
+        welcomeVoiceEnabled,
       });
       showToast('AI configuration saved ✓');
     } catch (err) {
       showToast(`Save failed: ${err.message}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleVoiceFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setUploadingVoice(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await aiConfigAPI.uploadWelcomeVoice(formData);
+      const cfg = res?.data ?? res;
+      setWelcomeVoiceMediaId(cfg.welcomeVoiceMediaId || null);
+      setWelcomeVoiceUploadedAt(cfg.welcomeVoiceUploadedAt || null);
+      showToast('Welcome voice note uploaded ✓');
+    } catch (err) {
+      showToast(`Upload failed: ${err.message}`);
+    } finally {
+      setUploadingVoice(false);
     }
   };
 
@@ -900,6 +931,42 @@ function AITab({ showToast }) {
           </div>
           <p className="mt-1.5 text-[10px] text-slate-600">Estimated at $0.000003/token blended rate</p>
         </div>
+      </Section>
+
+      <Section
+        title="Welcome Voice Note"
+        description="Sent as the very first reply to a brand-new contact, before the AI ever responds. Not re-sent to leads who already received it."
+        footer={<PrimaryButton onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</PrimaryButton>}
+      >
+        <Toggle on={welcomeVoiceEnabled} onChange={setWelcomeVoiceEnabled}
+          label="Send welcome voice note to new contacts"
+          description="Skips the AI entirely on message #1 — sends only the voice note, then the Qualifier/Closer take over from message #2." />
+
+        <div className="mt-3 flex items-center gap-3">
+          <input
+            ref={voiceFileInputRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={handleVoiceFileSelected}
+          />
+          <button
+            type="button"
+            onClick={() => voiceFileInputRef.current?.click()}
+            disabled={uploadingVoice}
+            className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {uploadingVoice ? 'Converting & uploading…' : welcomeVoiceMediaId ? 'Replace Voice Note' : 'Upload Voice Note'}
+          </button>
+          <span className="text-[11px] text-slate-500">
+            {welcomeVoiceUploadedAt
+              ? `Uploaded ${new Date(welcomeVoiceUploadedAt).toLocaleString()}`
+              : 'No voice note uploaded yet'}
+          </span>
+        </div>
+        <span className="mt-1.5 block text-[11px] text-slate-500">
+          Any audio format works — it's converted to WhatsApp's voice-note format (OGG/Opus) automatically.
+        </span>
       </Section>
 
       <Section

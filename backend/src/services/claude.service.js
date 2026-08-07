@@ -146,12 +146,12 @@ const buildEffectiveTriggers = (aiConfig) => {
   return [...triggers];
 };
 
-const buildQualifierPrompt = (aiConfig, lead, contact) => `
+const buildQualifierPrompt = (aiConfig, lead, contact, welcomeVoiceAlreadySent = false) => `
 You are the QUALIFIER AGENT for a sales AI system.
 
 Your ONLY job: analyze the lead's latest message + conversation history and output structured JSON.
 You do NOT write replies — the Closer AI handles all responses.
-
+${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}
 ## BUSINESS CONTEXT
 ${aiConfig.systemPrompt}
 
@@ -174,9 +174,9 @@ You NEVER decide to hand off. That is controlled by is_enrollment_confirmed only
 ${QUALIFIER_SCHEMA}
 `;
 
-const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessage }) => {
+const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessage, welcomeVoiceAlreadySent = false }) => {
   const t0 = Date.now();
-  const system = buildQualifierPrompt(aiConfig, lead, contact);
+  const system = buildQualifierPrompt(aiConfig, lead, contact, welcomeVoiceAlreadySent);
 
   const history = (messageHistory || []).slice(-15).map(m => ({
     role: m.sender === 'CONTACT' ? 'user' : 'assistant',
@@ -277,7 +277,7 @@ CLOSING TYPE GUIDE:
               reply_message must be a graceful goodbye, NOT another sales pitch.
 `;
 
-const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs = []) => `
+const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs = [], welcomeVoiceAlreadySent = false) => `
 You are an elite AI Sales Closer specializing in converting WhatsApp leads into paid course enrollments.
 
 Your ONLY job: generate ONE perfectly-calibrated reply that moves this specific lead one step closer to enrolling.
@@ -305,6 +305,7 @@ ${qualifierOutput.is_price_objection ? '⚠️  PRICE OBJECTION DETECTED — dep
 
 CONTACT
 Name: ${contact.name || 'Unknown'} | Pipeline stage: ${lead.stage}
+${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}
 
 ═══════════════════════════════════════════════════════
 YOUR 3-PHASE SALES PLAYBOOK  (match phase to score)
@@ -448,10 +449,10 @@ const SAFE_FALLBACK_REPLY =
   'DSP AI Agents Bootcamp ka fee fixed hai — koi discount ya kisi aur service ka option available nahi. ' +
   'Kya main aapko seat confirm karne mein madad karun?';
 
-const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [] }) => {
+const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [], welcomeVoiceAlreadySent = false }) => {
   const t0 = Date.now();
   const messageCount = (messageHistory || []).length;
-  const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs);
+  const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs, welcomeVoiceAlreadySent);
 
   const history = (messageHistory || []).slice(-20).map(m => ({
     role: m.sender === 'CONTACT' ? 'user' : 'assistant',
@@ -540,14 +541,14 @@ const deriveStage = (currentStage, qualifierOutput) => {
 // Returns the same shape as v1 processMessage() so the worker doesn't break.
 // Adds: qualifierOutput, closerOutput, humanFollowupRequired
 
-const processMessage = async ({ tenantId, lead, contact, conversation, newMessage, messageHistory, handedBackToAI = false }) => {
+const processMessage = async ({ tenantId, lead, contact, conversation, newMessage, messageHistory, handedBackToAI = false, welcomeVoiceAlreadySent = false }) => {
   const aiConfig = await prisma.aiConfig.findUnique({ where: { tenantId } });
   if (!aiConfig) throw new Error(`No AI config found for tenant ${tenantId}`);
 
   // ── 1. QUALIFIER ────────────────────────────────────────────
   let qualifierOutput;
   try {
-    qualifierOutput = await runQualifier({ aiConfig, lead, contact, messageHistory, newMessage });
+    qualifierOutput = await runQualifier({ aiConfig, lead, contact, messageHistory, newMessage, welcomeVoiceAlreadySent });
   } catch (err) {
     // Qualifier failed — use safe defaults and let the Closer keep selling.
     // A Qualifier error must NEVER cause a handoff; the lead deserves a reply.
@@ -601,7 +602,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   let closerError = null;
   if (!forceHandoff) {
     try {
-      closerOutput = await runCloser({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs });
+      closerOutput = await runCloser({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs, welcomeVoiceAlreadySent });
     } catch (err) {
       logger.error({ err, leadId: lead.id }, 'Closer failed — using safe fallback reply');
       closerError = err.message;

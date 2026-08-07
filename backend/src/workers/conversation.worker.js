@@ -8,6 +8,7 @@ const redis = require('../config/redis');
 const prisma = require('../config/database');
 const claudeService = require('../services/claude.service');
 const whatsappService = require('../services/whatsapp.service');
+const welcomeVoiceService = require('../modules/ai-config/welcomeVoice.service');
 const elevenlabsService = require('../services/elevenlabs.service');
 const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
@@ -322,7 +323,52 @@ const handleInboundMessage = async (job) => {
     },
   });
 
-  // ── 6b. Payment proof ─────────────────────────────────────────────
+  // ── 6b. Welcome voice note — bypass the AI entirely on this contact's
+  // first ever inbound message. contact.sentWelcomeVoice is flipped true
+  // via a conditional update BEFORE the send is awaited, so the update
+  // itself is the idempotency lock against webhook retries: only one
+  // concurrent run can win the false→true flip. Trade-off, accepted on
+  // purpose — if the send then fails, the contact won't get a retry of
+  // the voice note on their next message rather than risking a double-send.
+  if (tenant.aiConfig?.welcomeVoiceEnabled && tenant.aiConfig?.welcomeVoiceMediaId && !contact.sentWelcomeVoice) {
+    const claimed = await prisma.contact.updateMany({
+      where: { id: contact.id, sentWelcomeVoice: false },
+      data: { sentWelcomeVoice: true },
+    });
+
+    if (claimed.count === 1) {
+      let welcomeWaMessageId = null;
+      try {
+        welcomeWaMessageId = await welcomeVoiceService.sendWelcomeVoice(tenant, tenant.aiConfig, normalizedPhone);
+      } catch (err) {
+        logger.error({ err, contactId: contact.id }, 'Welcome voice note send failed');
+      }
+
+      await prisma.message.create({
+        data: {
+          tenantId,
+          conversationId: conversation.id,
+          waMessageId: welcomeWaMessageId,
+          direction: 'OUTBOUND',
+          sender: 'AI',
+          type: 'AUDIO',
+          content: '[Welcome voice note]',
+          status: welcomeWaMessageId ? 'SENT' : 'FAILED',
+        },
+      });
+
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: new Date() },
+      });
+
+      logger.info({ contactId: contact.id, conversationId: conversation.id, sent: !!welcomeWaMessageId },
+        '🎙️ Welcome voice note sent — skipping Qualifier/Closer for this turn');
+      return;
+    }
+  }
+
+  // ── 6c. Payment proof ─────────────────────────────────────────────
   // A payment screenshot reaches the AI as the literal string "[Image]" —
   // there is nothing in it for a model to reason about, so this is decided in
   // code, not by the Closer. Guarded by paymentDetailsSentAt: an image only
@@ -418,6 +464,7 @@ const handleInboundMessage = async (job) => {
       // answered.
       messageHistory: messageHistory.filter((m) => m.id !== inboundMessage.id),
       handedBackToAI,
+      welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact.sentWelcomeVoice),
     });
   } catch (aiErr) {
     logger.error({ aiErr, leadId: lead.id }, 'Claude processing failed — handing off to agent');

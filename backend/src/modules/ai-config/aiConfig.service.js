@@ -10,7 +10,7 @@ const getConfig = async (tenantId) => {
 };
 
 const updateConfig = async (tenantId, data) => {
-  const allowed = ['systemPrompt','qualificationCriteria','closingScript','handoffTriggers','language','model','temperature','maxTokens','tone','closerModel','monthlyBudget','handoffRules','paymentDetails','paymentProofMessage'];
+  const allowed = ['systemPrompt','qualificationCriteria','closingScript','handoffTriggers','language','model','temperature','maxTokens','tone','closerModel','monthlyBudget','handoffRules','paymentDetails','paymentProofMessage','welcomeVoiceEnabled'];
   const update = {};
   allowed.forEach(k => { if (data[k] !== undefined) update[k] = data[k]; });
 

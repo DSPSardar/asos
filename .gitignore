@@ -25,3 +25,9 @@ npm-debug.log*
 
 # DSP marketing pipeline output (generated content, not source)
 marketing/output/
+
+# Runtime file uploads (served from a Docker volume in production, never committed)
+backend/uploads/
+
+# Local Redis persistence dumps
+*.rdb
