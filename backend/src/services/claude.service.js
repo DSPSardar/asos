@@ -146,12 +146,12 @@ const buildEffectiveTriggers = (aiConfig) => {
   return [...triggers];
 };
 
-const buildQualifierPrompt = (aiConfig, lead, contact, welcomeVoiceAlreadySent = false) => `
+const buildQualifierPrompt = (aiConfig, lead, contact, welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false) => `
 You are the QUALIFIER AGENT for a sales AI system.
 
 Your ONLY job: analyze the lead's latest message + conversation history and output structured JSON.
 You do NOT write replies — the Closer AI handles all responses.
-${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}
+${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? '\nNOTE: This is the lead\'s first real exchange with you, right after their welcome voice note — they have not had an actual qualifying conversation yet. Set is_enrollment_confirmed = false on this turn no matter how ready or eager they sound (e.g. "reserve my seat", "I want to pay"). Let the Closer have a real exchange first.\n' : ''}
 ## BUSINESS CONTEXT
 ${aiConfig.systemPrompt}
 
@@ -174,9 +174,9 @@ You NEVER decide to hand off. That is controlled by is_enrollment_confirmed only
 ${QUALIFIER_SCHEMA}
 `;
 
-const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessage, welcomeVoiceAlreadySent = false }) => {
+const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessage, welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false }) => {
   const t0 = Date.now();
-  const system = buildQualifierPrompt(aiConfig, lead, contact, welcomeVoiceAlreadySent);
+  const system = buildQualifierPrompt(aiConfig, lead, contact, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice);
 
   const history = (messageHistory || []).slice(-15).map(m => ({
     role: m.sender === 'CONTACT' ? 'user' : 'assistant',
@@ -277,7 +277,7 @@ CLOSING TYPE GUIDE:
               reply_message must be a graceful goodbye, NOT another sales pitch.
 `;
 
-const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs = [], welcomeVoiceAlreadySent = false) => `
+const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false) => `
 You are an elite AI Sales Closer specializing in converting WhatsApp leads into paid course enrollments.
 
 Your ONLY job: generate ONE perfectly-calibrated reply that moves this specific lead one step closer to enrolling.
@@ -305,7 +305,15 @@ ${qualifierOutput.is_price_objection ? '⚠️  PRICE OBJECTION DETECTED — dep
 
 CONTACT
 Name: ${contact.name || 'Unknown'} | Pipeline stage: ${lead.stage}
-${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}
+${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? `
+⚠️  FIRST REAL EXCHANGE — set send_payment_details = false on this reply, no exceptions.
+This lead has only received the welcome voice note — you have not actually talked to them
+yet. Even if they say "reserve my seat", "I want to pay", or sound fully ready, treat this
+as Phase 1: have a genuine qualifying exchange first (ask about their goal/background per
+the playbook below). If they still want to proceed, payment details can go out starting
+from their NEXT message. This is a hard rule for this turn only, not the rest of the
+conversation.
+` : ''}
 
 ═══════════════════════════════════════════════════════
 YOUR 3-PHASE SALES PLAYBOOK  (match phase to score)
@@ -449,10 +457,10 @@ const SAFE_FALLBACK_REPLY =
   'DSP AI Agents Bootcamp ka fee fixed hai — koi discount ya kisi aur service ka option available nahi. ' +
   'Kya main aapko seat confirm karne mein madad karun?';
 
-const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [], welcomeVoiceAlreadySent = false }) => {
+const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false }) => {
   const t0 = Date.now();
   const messageCount = (messageHistory || []).length;
-  const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs, welcomeVoiceAlreadySent);
+  const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice);
 
   const history = (messageHistory || []).slice(-20).map(m => ({
     role: m.sender === 'CONTACT' ? 'user' : 'assistant',
@@ -499,7 +507,10 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
     knowledge_gap:   String(parsed.knowledge_gap || '').trim().slice(0, 500),
     // A vetoed reply is no longer the reply the model wrote, so its intent to
     // send payment details doesn't carry over to the fallback text.
-    send_payment_details: !blocked && parsed.send_payment_details === true,
+    // Deterministic override, not just a prompt instruction: right after the
+    // welcome voice note, payment details can never fire — the lead hasn't
+    // had a real qualifying exchange yet, even if their message sounds ready.
+    send_payment_details: !blocked && !isFirstReplyAfterWelcomeVoice && parsed.send_payment_details === true,
     _tokens:         tokens,
     _model:          CLOSER_MODEL,
     _ms:             Date.now() - t0,
@@ -545,10 +556,18 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   const aiConfig = await prisma.aiConfig.findUnique({ where: { tenantId } });
   if (!aiConfig) throw new Error(`No AI config found for tenant ${tenantId}`);
 
+  // The turn right after the welcome voice note (message history so far is
+  // just [their first text, the outbound voice note]) — the lead hasn't had
+  // an actual conversation yet, so even a "reserve my seat" here shouldn't
+  // skip straight to payment/handoff. Scoped to this one turn only, not
+  // welcomeVoiceAlreadySent's full remaining lifetime, so real conversions
+  // later in the conversation are never blocked.
+  const isFirstReplyAfterWelcomeVoice = welcomeVoiceAlreadySent && (messageHistory || []).length <= 2;
+
   // ── 1. QUALIFIER ────────────────────────────────────────────
   let qualifierOutput;
   try {
-    qualifierOutput = await runQualifier({ aiConfig, lead, contact, messageHistory, newMessage, welcomeVoiceAlreadySent });
+    qualifierOutput = await runQualifier({ aiConfig, lead, contact, messageHistory, newMessage, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice });
   } catch (err) {
     // Qualifier failed — use safe defaults and let the Closer keep selling.
     // A Qualifier error must NEVER cause a handoff; the lead deserves a reply.
@@ -586,7 +605,10 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
 
   // Primary gate: Qualifier (claude-sonnet-4-6) decides when enrollment is confirmed.
   // No hardcoded rules — the model reads the conversation and makes the call.
-  const enrollmentConfirmed = !handedBackToAI && qualifierOutput.is_enrollment_confirmed === true;
+  // Deterministic override, not just a prompt instruction: on the turn right
+  // after the welcome voice note, enrollment can never auto-confirm — the
+  // lead hasn't had an actual qualifying conversation yet.
+  const enrollmentConfirmed = !handedBackToAI && !isFirstReplyAfterWelcomeVoice && qualifierOutput.is_enrollment_confirmed === true;
   const forceHandoff = enrollmentConfirmed || rulesHandoff;
 
   const humanFollowupRequired = qualifierOutput.score >= 8 || qualifierOutput.lead_status === 'HOT';
@@ -602,7 +624,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   let closerError = null;
   if (!forceHandoff) {
     try {
-      closerOutput = await runCloser({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs, welcomeVoiceAlreadySent });
+      closerOutput = await runCloser({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice });
     } catch (err) {
       logger.error({ err, leadId: lead.id }, 'Closer failed — using safe fallback reply');
       closerError = err.message;
