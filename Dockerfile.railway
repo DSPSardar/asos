@@ -20,6 +20,8 @@ ENV PORT=3000
 RUN apk add --no-cache openssl openssl-dev su-exec && \
     addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 asos
+# ffmpeg: converts admin-uploaded welcome-voice-note audio to OGG/Opus for WhatsApp.
+RUN apk add --no-cache ffmpeg
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=prisma /app/node_modules/.prisma ./node_modules/.prisma
 COPY backend/src ./src
