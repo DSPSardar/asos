@@ -75,40 +75,70 @@ const sendAudio = async (tenant, to, audioBuffer, mimeType) => {
   }
 
   try {
-    const token = decrypt(tenant.waAccessToken) || tenant.waAccessToken;
-    const baseURL = `${env.WHATSAPP_API_URL}/${tenant.waPhoneId}`;
     const extension = mimeType.includes('ogg') ? 'ogg' : 'mp3';
-
-    const form = new FormData();
-    form.append('messaging_product', 'whatsapp');
-    form.append('type', mimeType);
-    form.append('file', new Blob([audioBuffer], { type: mimeType }), `voice-note.${extension}`);
-
-    const uploadRes = await axios.post(`${baseURL}/media`, form, {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 20000,
-    });
-
-    const mediaId = uploadRes.data?.id;
-    if (!mediaId) throw new Error('Media upload returned no id');
-
-    const client = getClient(tenant);
-    const res = await client.post('/messages', {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: normalizePhone(to),
-      type: 'audio',
-      audio: { id: mediaId },
-    });
-
-    logger.info({ to, tenantId: tenant.id, waMessageId: res.data?.messages?.[0]?.id, mediaId }, 'WA audio message sent');
-    return res.data?.messages?.[0]?.id;
-
+    const mediaId = await uploadMedia(tenant, audioBuffer, mimeType, `voice-note.${extension}`);
+    return await sendAudioByMediaId(tenant, to, mediaId);
   } catch (err) {
     const apiError = err.response?.data?.error;
     logger.error({ err: apiError || err.message, to, tenantId: tenant.id }, 'Failed to send WA audio message');
     return null;
   }
+};
+
+// ── Upload a media buffer to Meta, returning the media id ─────────────
+// Standalone half of the sendAudio() flow above — used by callers that
+// need to upload once and reference the media id across many sends (e.g.
+// the welcome voice note, which reuses one mediaId for every new lead).
+
+const uploadMedia = async (tenant, buffer, mimeType, filename) => {
+  if (isMockMode(tenant)) {
+    const mockId = `mock_media_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const reason = env.WHATSAPP_MOCK === 'true' ? 'global mock env' : 'no credentials saved';
+    logger.info({ tenantId: tenant.id, mockId, reason, filename }, '[MOCK] WA media upload suppressed — would have been uploaded');
+    return mockId;
+  }
+
+  const token = decrypt(tenant.waAccessToken) || tenant.waAccessToken;
+  const baseURL = `${env.WHATSAPP_API_URL}/${tenant.waPhoneId}`;
+
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', mimeType);
+  form.append('file', new Blob([buffer], { type: mimeType }), filename);
+
+  const res = await axios.post(`${baseURL}/media`, form, {
+    headers: { Authorization: `Bearer ${token}` },
+    timeout: 20000,
+  });
+
+  const mediaId = res.data?.id;
+  if (!mediaId) throw new Error('Media upload returned no id');
+  return mediaId;
+};
+
+// ── Send an audio message referencing an already-uploaded media id ────
+// Throws on failure (unlike sendAudio/sendText) so callers that need to
+// detect an expired/invalid media id and retry after a re-upload can do so.
+
+const sendAudioByMediaId = async (tenant, to, mediaId) => {
+  if (isMockMode(tenant)) {
+    const mockId = `mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const reason = env.WHATSAPP_MOCK === 'true' ? 'global mock env' : 'no credentials saved';
+    logger.info({ to, tenantId: tenant.id, mockId, reason, mediaId }, '[MOCK] WA audio message suppressed — would have been sent');
+    return mockId;
+  }
+
+  const client = getClient(tenant);
+  const res = await client.post('/messages', {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: normalizePhone(to),
+    type: 'audio',
+    audio: { id: mediaId },
+  });
+
+  logger.info({ to, tenantId: tenant.id, waMessageId: res.data?.messages?.[0]?.id, mediaId }, 'WA audio message sent');
+  return res.data?.messages?.[0]?.id;
 };
 
 // ── Send template message ─────────────────────────────────────────────
@@ -352,6 +382,8 @@ const normalizePhone = (phone) => {
 module.exports = {
   sendText,
   sendAudio,
+  uploadMedia,
+  sendAudioByMediaId,
   sendTemplate,
   sendButtons,
   markAsRead,

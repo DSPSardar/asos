@@ -7,6 +7,13 @@
       "runtimeArgs": ["dev-server.js"],
       "cwd": "marketing",
       "port": 4100
+    },
+    {
+      "name": "vite-app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "vite-app",
+      "port": 3001
     }
   ]
 }

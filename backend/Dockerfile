@@ -32,8 +32,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Install OpenSSL for Prisma + create non-root user
-RUN apk add --no-cache openssl openssl-dev && \
+# Install OpenSSL for Prisma + ffmpeg (welcome voice note conversion) + create non-root user
+RUN apk add --no-cache openssl openssl-dev ffmpeg && \
     addgroup --system --gid 1001 nodejs && \
     adduser  --system --uid 1001 asos
 

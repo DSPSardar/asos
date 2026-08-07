@@ -226,6 +226,7 @@ model Contact {
   tags          String[]  @default([])
   customFields  Json      @default("{}") @map("custom_fields")
   optIn         Boolean   @default(false) @map("opt_in")
+  sentWelcomeVoice Boolean @default(false) @map("sent_welcome_voice")
 
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
@@ -640,6 +641,15 @@ model AiConfig {
   closerModel           String?   @map("closer_model")
   monthlyBudget         Decimal?  @db.Decimal(10,2) @map("monthly_budget")
   handoffRules          Json      @default("{}") @map("handoff_rules")
+
+  // Personal voice-note greeting sent as the very first reply to a brand-new
+  // contact, bypassing the Qualifier/Closer for that turn. welcomeVoiceFilePath
+  // holds the converted .ogg used to silently re-upload a fresh media id when
+  // the WhatsApp-issued one expires (~30 days) or a send rejects it.
+  welcomeVoiceEnabled    Boolean   @default(false) @map("welcome_voice_enabled")
+  welcomeVoiceMediaId    String?   @map("welcome_voice_media_id")
+  welcomeVoiceFilePath   String?   @map("welcome_voice_file_path")
+  welcomeVoiceUploadedAt DateTime? @map("welcome_voice_uploaded_at")
 
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
