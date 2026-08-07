@@ -32,10 +32,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Install OpenSSL for Prisma + ffmpeg (welcome voice note conversion) + create non-root user
-RUN apk add --no-cache openssl openssl-dev ffmpeg && \
+# Install OpenSSL for Prisma + create non-root user
+RUN apk add --no-cache openssl openssl-dev && \
     addgroup --system --gid 1001 nodejs && \
     adduser  --system --uid 1001 asos
+
+# ffmpeg: converts admin-uploaded welcome-voice-note audio to OGG/Opus for WhatsApp.
+# Kept as its own RUN step (rather than merged into the line above) so its cache
+# key can never collide with a stale cached layer from before this was added.
+RUN apk add --no-cache ffmpeg
 
 # Copy production deps + prisma client
 COPY --from=deps    /app/node_modules ./node_modules
