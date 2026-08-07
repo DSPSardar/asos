@@ -330,6 +330,13 @@ const handleInboundMessage = async (job) => {
   // concurrent run can win the false→true flip. Trade-off, accepted on
   // purpose — if the send then fails, the contact won't get a retry of
   // the voice note on their next message rather than risking a double-send.
+  logger.info({
+    contactId: contact.id,
+    welcomeVoiceEnabled: tenant.aiConfig?.welcomeVoiceEnabled ?? null,
+    hasWelcomeVoiceMediaId: !!tenant.aiConfig?.welcomeVoiceMediaId,
+    sentWelcomeVoice: contact.sentWelcomeVoice,
+  }, '🔍 Welcome voice gate check');
+
   if (tenant.aiConfig?.welcomeVoiceEnabled && tenant.aiConfig?.welcomeVoiceMediaId && !contact.sentWelcomeVoice) {
     const claimed = await prisma.contact.updateMany({
       where: { id: contact.id, sentWelcomeVoice: false },
