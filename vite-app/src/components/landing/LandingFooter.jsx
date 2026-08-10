@@ -62,12 +62,19 @@ export default function LandingFooter() {
           <p className="text-xs text-slate-400">
             © {new Date().getFullYear()} dspagenthub.com · All rights reserved
           </p>
+          {/* Both badges here used to overclaim. "End-to-end encrypted" was
+              false: the dual-agent pipeline reads every inbound message in
+              plaintext to qualify it, which is the opposite of E2E. "99.9%
+              uptime" is an SLA nobody has signed. These two replacements are
+              the claims Faq.jsx and StatsBar.jsx already make and that the
+              code actually backs (AES-256-GCM in utils/crypto.js; the worker
+              drains the queue continuously). Do not restore the old copy. */}
           <div className="flex items-center gap-6 text-xs text-slate-400">
             <span className="flex items-center gap-1.5">
-              <span aria-hidden="true">🔒</span> End-to-end encrypted
+              <span aria-hidden="true">🔒</span> Credentials encrypted at rest
             </span>
             <span className="flex items-center gap-1.5">
-              <span aria-hidden="true">⚡</span> 99.9% uptime
+              <span aria-hidden="true">⚡</span> Replies day and night
             </span>
           </div>
         </div>
