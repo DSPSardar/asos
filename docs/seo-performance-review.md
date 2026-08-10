@@ -241,48 +241,65 @@ the two disagree, **PSI is the number to quote** — it is the public,
 reproducible one. Desktop reads 100 against 88 locally, the same kind of
 environment difference in the other direction.
 
-### Correction: the CDN is not actually in front of the site
+### Cloudflare: confirmed live, and the edge is caching
 
-An earlier revision of this section stated Cloudflare was live and
-attributed the desktop improvement to it. **That was wrong.** Cloudflare
-was configured in its dashboard, including SSL/TLS at Full (strict), but
-the zone was never activated, because the registrar's nameservers were
-never changed:
+The nameserver change at the registrar has propagated and the zone is
+active. Verified against a Cloudflare edge IP directly, which sidesteps any
+stale local resolver cache:
 
 ```console
-$ dig +short NS dspagenthub.com
-ns3gnv.name.com.
-ns1kpv.name.com.
-ns2cvx.name.com.
-ns4fpy.name.com.
+$ dig @8.8.8.8 +short NS dspagenthub.com
+itzel.ns.cloudflare.com.
+bill.ns.cloudflare.com.
 
-$ curl -sD- -o/dev/null https://dspagenthub.com/ | grep -iE "cf-ray|server"
-server: railway-hikari
+$ dig @8.8.8.8 +short A dspagenthub.com
+104.21.41.134
+172.67.165.4
+
+$ curl -s --resolve dspagenthub.com:443:104.21.41.134 -D- -o/dev/null \
+    https://dspagenthub.com/ | grep -iE "server|cf-ray"
+server: cloudflare
+cf-ray: a291f41e6c666dd2-SIN
 ```
 
-Cloudflare nameservers look like `<name>.ns.cloudflare.com`, and a proxied
-response carries `cf-ray` and reports `server: cloudflare`. Neither is
-present, so no traffic reaches Cloudflare and none of its settings apply.
-Dashboard configuration alone does nothing — the nameserver change at the
-registrar is what activates a zone.
+SSL/TLS at Full (strict) is working — HTTP 200 with a clean certificate
+verification, not the 525/526 that a broken origin certificate produces.
+The pre-rendered hero and the Search Console tag both survive the edge.
 
-Two consequences:
+**Hashed assets are served from the edge, not the origin:**
 
-1. **The 91/100 figures above are the no-CDN baseline.** They were measured
-   with requests going straight to the single-region origin.
-2. **The largest measured lever from §2 is still entirely unrealised.**
-   TTFB was 35% of LCP against a `sin1`-only origin. That opportunity has
-   not been taken yet.
+```console
+$ curl -s --resolve dspagenthub.com:443:104.21.41.134 -D- -o/dev/null \
+    https://dspagenthub.com/assets/index-CSTH-zDe.js | grep -i cf-cache-status
+cf-cache-status: HIT
+```
 
-There is also no `www` record of any kind (`dig +short A www.dspagenthub.com`
-returns nothing), which is worth fixing at the same time.
+That `HIT` is the payoff for merging #14 first. While those files were
+served `no-cache`, Cloudflare would have revalidated every one of them
+against `sin1` on every request and never held a cached copy.
+`index.html` shows `DYNAMIC`, which is correct — Cloudflare does not cache
+HTML by default, and this one must stay `no-cache` so browsers pick up new
+hashed filenames after a deploy.
+
+Note that a local resolver can hold the previous `name.com` nameservers well
+after the change is live, which makes it look as though nothing happened.
+Query a public resolver (`dig @8.8.8.8`) before concluding anything from a
+plain `curl`.
+
+The **91/100 PSI figures above predate this**, so they are the no-CDN
+baseline. The TTFB component of LCP — 35%, against a single-region origin —
+should now be substantially lower for visitors far from `sin1`. Re-measure
+to find out.
+
+One gap remains: there is no `www` record of any kind
+(`dig +short A www.dspagenthub.com` returns nothing).
 
 ### Decision: hold the SSR/pre-render work
 
 Unchanged, and §2's reasoning still holds — TBT is 0 ms and render-blocking
-savings are 0 ms, so SSR has nothing to fix and would raise TTFB. Do the
-nameserver change first, since it addresses the one component that actually
-dominates.
+savings are 0 ms, so SSR has nothing to fix and would raise TTFB. The one
+component that actually dominated — TTFB against a single-region origin —
+has now been addressed by the CDN instead.
 
 After that, let real traffic accumulate and read **CrUX field data** —
 actual visitor experience — rather than chase the lab number. Field data
