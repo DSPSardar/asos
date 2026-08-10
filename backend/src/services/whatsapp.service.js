@@ -325,9 +325,18 @@ const verifySignature = (rawBody, signature, appSecret) => {
     .update(rawBody)
     .digest('hex');
   const received = signature?.replace('sha256=', '') || '';
+
+  // Reject anything that is not exactly a SHA-256 hex digest before comparing.
+  // The previous version padded `received` up to the expected length and went
+  // straight to timingSafeEqual, which throws RangeError on a buffer-length
+  // mismatch — a longer signature was never truncated by padEnd, and any
+  // non-hex character makes Buffer.from(..., 'hex') stop early and return a
+  // short buffer. Both threw instead of returning false.
+  if (!/^[0-9a-f]{64}$/i.test(received)) return false;
+
   return crypto.timingSafeEqual(
     Buffer.from(expected, 'hex'),
-    Buffer.from(received.padEnd(expected.length, '0'), 'hex')
+    Buffer.from(received, 'hex')
   );
 };
 

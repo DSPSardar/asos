@@ -66,14 +66,41 @@ router.post('/', async (req, res) => {
     if (tenant.status === 'SUSPENDED') return;
 
     // ── 2. Verify HMAC signature ──────────────────────────────────
+    // This MUST fail closed. It previously read `if (appSecret && signature)`,
+    // which skipped verification entirely whenever the signature header was
+    // absent — so anyone who knew a tenant's phone_number_id (it is not a
+    // secret; it appears in every webhook payload) could POST a forged message
+    // with no signature at all and have it processed: fabricated contacts and
+    // leads, OpenAI spend on the dual-agent pipeline, and outbound WhatsApp
+    // messages sent from the client's own business number.
+    //
+    // Note WHATSAPP_APP_SECRET defaults to 'mock-secret' in config/env.js, so
+    // `appSecret` is effectively always truthy and never guarded anything.
     const signature = req.headers['x-hub-signature-256'];
     const rawSecret = tenant.waAppSecret || env.WHATSAPP_APP_SECRET;
     const appSecret = rawSecret ? (() => { try { return decrypt(rawSecret) || rawSecret; } catch { return rawSecret; } })() : null;
 
-    if (appSecret && signature) {
-      const valid = whatsappService.verifySignature(rawBody, signature, appSecret);
-      if (!valid) {
-        logger.warn({ tenantId: tenant.id }, 'WA webhook HMAC verification failed');
+    // A placeholder secret cannot authenticate anything. Outside development
+    // that is a misconfiguration, not a reason to accept unsigned traffic.
+    const isPlaceholderSecret = !appSecret || appSecret === 'mock-secret';
+
+    if (isPlaceholderSecret) {
+      if (env.NODE_ENV === 'production') {
+        logger.error(
+          { tenantId: tenant.id },
+          'WA webhook rejected: no real app secret configured for this tenant. ' +
+          'Set the tenant waAppSecret or WHATSAPP_APP_SECRET — unsigned webhooks are never processed in production.'
+        );
+        return;
+      }
+      logger.warn({ tenantId: tenant.id }, 'WA webhook signature check skipped — placeholder secret (non-production only)');
+    } else {
+      if (!signature) {
+        logger.warn({ tenantId: tenant.id }, 'WA webhook rejected: missing x-hub-signature-256 header');
+        return;
+      }
+      if (!whatsappService.verifySignature(rawBody, signature, appSecret)) {
+        logger.warn({ tenantId: tenant.id }, 'WA webhook rejected: HMAC verification failed');
         return;
       }
     }

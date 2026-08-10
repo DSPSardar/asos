@@ -93,6 +93,24 @@ const createApp = () => {
     message: { success: false, message: 'Too many auth attempts, please try again later.' },
   }));
 
+  // ── Webhook rate limiter
+  // /webhooks is mounted outside /api, so the global limiter above never
+  // applied to it — these endpoints had no rate limiting at all. They are
+  // unauthenticated by design (Meta, Stripe and Twilio call them), and each
+  // request costs real work: HMAC computation, a tenant lookup, and for
+  // WhatsApp a queued job that spends OpenAI credits.
+  //
+  // The ceiling is high because Meta legitimately bursts and retries — this
+  // is a floodgate, not a throttle on normal traffic. Signature verification
+  // remains the actual authentication; see whatsapp.webhook.js.
+  app.use('/webhooks', rateLimit({
+    windowMs: 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many webhook requests.' },
+  }));
+
   // ── Serve uploaded files (content images, reports, etc.)
   // In production nginx serves /uploads/ directly from the shared Docker volume.
   // This static middleware covers dev and acts as a fallback.

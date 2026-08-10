@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '@stores/auth.store';
 import { authAPI } from '@lib/api';
+import { trackSignupCompleted, trackLoginCompleted, trackTrialStarted } from '@lib/analytics';
 
 const GOOGLE_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const BRAND_NAME = import.meta.env.VITE_BRAND_NAME || 'ASOS';
@@ -149,6 +150,7 @@ export default function Auth() {
       if (!accessToken) throw new Error('Server did not return a token.');
       localStorage.setItem('asos_token', accessToken);
       setAuth({ accessToken, refreshToken, user, tenant });
+      trackLoginCompleted('email');
       setSuccess('Login successful! Redirecting…');
       // SUPERADMIN has no tenant — send directly to admin panel
       const destination = user?.role === 'SUPERADMIN' ? '/admin' : '/dashboard';
@@ -198,6 +200,14 @@ export default function Auth() {
       if (!accessToken) throw new Error('Google login failed.');
       localStorage.setItem('asos_token', accessToken);
       setAuth({ accessToken, refreshToken, user, tenant });
+      // isNewUser is what separates a Google signup from a Google sign-in;
+      // without it both would report as the same event.
+      if (isNewUser) {
+        trackSignupCompleted('google');
+        trackTrialStarted(tenant?.plan || 'FREE');
+      } else {
+        trackLoginCompleted('google');
+      }
       if (isNewUser) {
         // New signup via Google — show phone modal before navigating to dashboard
         setShowPhoneModal(true);
@@ -273,6 +283,10 @@ export default function Auth() {
 
       // New registrations go into PENDING_APPROVAL — no token issued until admin approves
       if (pendingApproval) {
+        // The signup itself did happen, so it counts. No trial_started here:
+        // the account cannot be used until an admin approves it, and firing
+        // both would overstate activations in the funnel.
+        trackSignupCompleted('email');
         setSuccess('✅ Account registered! Your account is now pending admin approval. You will be able to login once approved.');
         return;
       }
@@ -280,6 +294,8 @@ export default function Auth() {
       if (!accessToken) throw new Error('Registration failed — no token returned.');
       localStorage.setItem('asos_token', accessToken);
       setAuth({ accessToken, refreshToken, user, tenant });
+      trackSignupCompleted('email');
+      trackTrialStarted(tenant?.plan || 'FREE');
       setSuccess('Account created! Setting up your workspace…');
       setTimeout(() => navigate('/dashboard', { replace: true }), 1200);
     } catch (err) {

@@ -6,9 +6,20 @@
 // into the test's jsdom document (which main.jsx's ReactDOM.createRoot(...)
 // call would do, since it targets document.getElementById('root') as a
 // module-scope side effect).
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@stores/auth.store';
+import { initAnalytics, trackPageView } from '@lib/analytics';
+
+// GA4 counts one page view per document load. React Router never reloads the
+// document, so without this the whole session collapses into a single view
+// and every funnel step after the landing page is invisible.
+function AnalyticsTracker() {
+  const { pathname } = useLocation();
+  useEffect(() => { initAnalytics(); }, []);
+  useEffect(() => { trackPageView(pathname); }, [pathname]);
+  return null;
+}
 
 // AdminPanel is imported eagerly — no lazy chunk to fail
 import AdminPanelPage from '@pages/AdminPanel';
@@ -32,6 +43,9 @@ const OnboardingPage    = React.lazy(() => import('@pages/Onboarding'));
 const StudentsPage      = React.lazy(() => import('@pages/Students'));
 const DSPReportsPage    = React.lazy(() => import('@pages/DSPReports'));
 const AutomationsPage   = React.lazy(() => import('@pages/Automations'));
+const PrivacyPage       = React.lazy(() => import('@pages/Privacy'));
+const TermsPage         = React.lazy(() => import('@pages/Terms'));
+const NotFoundPage      = React.lazy(() => import('@pages/NotFound'));
 
 // ── Route guards — all use Zustand user.role (server-confirmed) ─
 const PrivateRoute = ({ children }) => {
@@ -68,23 +82,28 @@ const PublicHome = () => {
   return <Navigate to={user?.role === 'SUPERADMIN' ? '/admin' : '/dashboard'} replace />;
 };
 
-// Unknown paths: signed-in users land in their workspace, everyone else
-// gets the marketing page rather than a bare login form.
-const NotFoundRedirect = () => {
-  const { token } = useAuthStore();
-  if (!token) return <Navigate to="/" replace />;
-  return <DefaultRedirect />;
-};
+// Unknown paths render a real 404 for everyone, signed in or not.
+//
+// This used to redirect: anonymous visitors to "/", signed-in users to their
+// workspace. Both answered a wrong URL with HTTP 200 and a valid page, which
+// is a soft 404 — Google indexes the bad URL and flags it in Search Console,
+// and a user who mistypes a path is silently moved without being told. The
+// matching HTTP 404 status is set by the preview server; see vite.config.js.
 
 // Exported without a Router around it so tests can mount it inside a
 // MemoryRouter. The app mounts it inside BrowserRouter in main.jsx.
 export function AppRoutes() {
   return (
+    <>
+    <AnalyticsTracker />
     <Routes>
       <Route path="/"         element={<PublicHome />} />
       <Route path="/landing"  element={<LandingPage />} />
       <Route path="/auth"     element={<AuthPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      {/* Public legal pages. Keep these in src/routes.manifest.js too. */}
+      <Route path="/privacy"  element={<PrivacyPage />} />
+      <Route path="/terms"    element={<TermsPage />} />
 
       {/* Pathless layout route: children keep their absolute URLs, so
           every dashboard path below is unchanged from before "/" became
@@ -107,7 +126,8 @@ export function AppRoutes() {
         <Route path="/admin" element={<SuperAdminRoute><AdminPanelPage /></SuperAdminRoute>} />
       </Route>
 
-      <Route path="*" element={<NotFoundRedirect />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </>
   );
 }

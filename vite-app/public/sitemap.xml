@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Only "/" is listed. Every other route in AppRoutes.jsx is either an
+  Indexable pages only. Every other route in AppRoutes.jsx is either an
   authenticated app surface or "/landing", which renders the same
   <Landing> component as "/" and would be a duplicate. Add a URL here
   only once it has its own indexable content.
@@ -11,5 +11,17 @@
     <lastmod>2026-08-11</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://dspagenthub.com/privacy</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://dspagenthub.com/terms</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
   </url>
 </urlset>
