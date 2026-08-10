@@ -14,6 +14,13 @@
       "runtimeArgs": ["run", "dev"],
       "cwd": "vite-app",
       "port": 3001
+    },
+    {
+      "name": "vite-app-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview"],
+      "cwd": "vite-app",
+      "port": 3001
     }
   ]
 }

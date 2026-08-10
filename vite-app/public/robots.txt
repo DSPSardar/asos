@@ -1,0 +1,24 @@
+User-agent: *
+Allow: /
+
+# Authenticated app surfaces — no public content, nothing to index.
+Disallow: /admin
+Disallow: /ads
+Disallow: /ai-insights
+Disallow: /analytics
+Disallow: /auth
+Disallow: /automations
+Disallow: /billing
+Disallow: /conversations
+Disallow: /dashboard
+Disallow: /dsp-reports
+Disallow: /leads
+Disallow: /onboarding
+Disallow: /reset-password
+Disallow: /settings
+Disallow: /students
+
+# Byte-for-byte duplicate of "/" (same React <Landing> component).
+Disallow: /landing
+
+Sitemap: https://dspagenthub.com/sitemap.xml
