@@ -1,1 +1,4 @@
 .vercel
+
+# Build-time prerender bundle (scripts/prerender.js consumes it, never shipped)
+dist-ssr/

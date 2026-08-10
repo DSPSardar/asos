@@ -8,6 +8,11 @@
   <meta name="description" content="AI agents qualify every lead, diagnose their problem, and send the perfect WhatsApp message — automatically. 14-day free trial, no credit card required.">
   <link rel="canonical" href="https://dspagenthub.com/">
 
+  <!-- Google Search Console domain verification. Must stay in the static
+       <head>: the verifier does not execute JavaScript, and removing this
+       tag un-verifies the property and silently stops Search Console data. -->
+  <meta name="google-site-verification" content="6wuC-FCh-C14COjK9u2_seIkFLCmgOEjnrqKZv0y3Kk">
+
   <!-- Open Graph / social previews. Static markup on purpose: link
        scrapers do not execute JavaScript, so runtime-injected tags
        would leave previews blank. -->
@@ -47,7 +52,25 @@
   </noscript>
 </head>
 <body class="bg-bg text-slate-100 font-sans">
+  <!-- scripts/prerender.js injects the static nav + hero into #root at build
+       time. It is a paint-only placeholder: React clears the container and
+       renders the real tree on boot, so this is not hydration. -->
   <div id="root"></div>
+
+  <!-- Inline and parser-blocking on purpose: it must run before the browser
+       paints. A signed-in visitor to "/" gets redirected to their workspace,
+       so the prerendered marketing hero would be a visible flash of the wrong
+       page for them. Dropping it here costs them nothing — they were never
+       going to see the landing page — and anonymous visitors, who are the
+       whole point of prerendering, keep the early paint. 'asos_auth' is the
+       zustand persist key from src/stores/auth.store.js. -->
+  <script>
+    try {
+      var s = JSON.parse(localStorage.getItem('asos_auth') || 'null');
+      if (s && s.state && s.state.token) document.getElementById('root').textContent = '';
+    } catch (e) { /* private mode / corrupt value: keep the prerendered shell */ }
+  </script>
+
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
