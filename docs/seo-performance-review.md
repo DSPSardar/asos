@@ -228,28 +228,64 @@ Everything in §2's recommendation was carried out.
 
 `vite preview` was sending `no-cache` on every response, including
 content-hashed files. That wasted a conditional round trip per asset on
-every repeat visit, and would have defeated the CDN — `no-cache` tells the
-edge to revalidate against the origin before serving. Merged before
-Cloudflare went in, deliberately, so the edge could actually cache.
+every repeat visit, and would have defeated a CDN — `no-cache` tells the
+edge to revalidate against the origin before serving. Merged first,
+deliberately, so that an edge would actually be able to cache.
 
-**Cloudflare is live** in front of the origin with SSL/TLS at Full (strict).
+**PageSpeed Insights: 91 mobile, 100 desktop.**
 
-**PageSpeed Insights, after Cloudflare: 91 mobile, 100 desktop.**
+Mobile reads 91 against the 98 measured locally in §1. Both are green
+(≥ 90) and the gap is the expected spread between a local Lighthouse run
+and PSI's own infrastructure and network shaping, not a regression. Where
+the two disagree, **PSI is the number to quote** — it is the public,
+reproducible one. Desktop reads 100 against 88 locally, the same kind of
+environment difference in the other direction.
 
-Desktop rose from the 88 measured in §1, which is consistent with the CDN
-removing origin latency — TTFB was 35% of LCP and the origin was
-single-region (`sin1`). Mobile reads 91 against the 98 measured locally in
-§1; both are in the green (≥ 90) and the gap is the expected spread between
-a local Lighthouse run and PSI's own infrastructure and network shaping,
-not a regression. Where the two disagree, **PSI is the number to quote** —
-it is the public, reproducible one.
+### Correction: the CDN is not actually in front of the site
+
+An earlier revision of this section stated Cloudflare was live and
+attributed the desktop improvement to it. **That was wrong.** Cloudflare
+was configured in its dashboard, including SSL/TLS at Full (strict), but
+the zone was never activated, because the registrar's nameservers were
+never changed:
+
+```console
+$ dig +short NS dspagenthub.com
+ns3gnv.name.com.
+ns1kpv.name.com.
+ns2cvx.name.com.
+ns4fpy.name.com.
+
+$ curl -sD- -o/dev/null https://dspagenthub.com/ | grep -iE "cf-ray|server"
+server: railway-hikari
+```
+
+Cloudflare nameservers look like `<name>.ns.cloudflare.com`, and a proxied
+response carries `cf-ray` and reports `server: cloudflare`. Neither is
+present, so no traffic reaches Cloudflare and none of its settings apply.
+Dashboard configuration alone does nothing — the nameserver change at the
+registrar is what activates a zone.
+
+Two consequences:
+
+1. **The 91/100 figures above are the no-CDN baseline.** They were measured
+   with requests going straight to the single-region origin.
+2. **The largest measured lever from §2 is still entirely unrealised.**
+   TTFB was 35% of LCP against a `sin1`-only origin. That opportunity has
+   not been taken yet.
+
+There is also no `www` record of any kind (`dig +short A www.dspagenthub.com`
+returns nothing), which is worth fixing at the same time.
 
 ### Decision: hold the SSR/pre-render work
 
-Consistent with §2's recommendation, and now also because the lab score has
-little headroom left. The next move is to let real traffic accumulate and
-read **CrUX field data** — actual visitor experience — rather than chase
-the lab number further. Field data was unavailable at the time of §1
-(the origin had no samples); Cloudflare plus live traffic should populate
-it. Re-read it at the top of the PSI page before reopening any performance
-work.
+Unchanged, and §2's reasoning still holds — TBT is 0 ms and render-blocking
+savings are 0 ms, so SSR has nothing to fix and would raise TTFB. Do the
+nameserver change first, since it addresses the one component that actually
+dominates.
+
+After that, let real traffic accumulate and read **CrUX field data** —
+actual visitor experience — rather than chase the lab number. Field data
+was unavailable at the time of §1 because the origin had no samples;
+live traffic should populate it. Re-read it at the top of the PSI page
+before reopening any performance work.
