@@ -23,6 +23,12 @@ vi.mock('@pages/Layout', async () => {
 });
 vi.mock('@pages/AdminPanel', () => ({ default: () => <div data-testid="admin-panel" /> }));
 vi.mock('@pages/Pipeline', () => ({ default: () => <div data-testid="leads-page" /> }));
+// /dashboard is where SuperAdminRoute sends a blocked TENANT_ADMIN. Left
+// unmocked it loads the real Dashboard page — a lazy chunk that suspends and
+// fires API calls in jsdom — so the assertion on the settled pathname raced
+// that resolution and failed roughly three runs in four. Mocking the redirect
+// *target*, not just the blocked route, is what makes this deterministic.
+vi.mock('@pages/Dashboard', () => ({ default: () => <div data-testid="dashboard-page" /> }));
 
 // Reports the location AFTER any redirect chain has settled. Without this,
 // a dropped guard could silently redirect to a different path and the

@@ -56,6 +56,22 @@ export default function LandingFooter() {
               </li>
             </ul>
           </div>
+
+          <div className="md:flex-1">
+            <FooterHeading>Legal</FooterHeading>
+            <ul className="space-y-2.5">
+              <li>
+                <a href="/privacy" className="text-sm text-slate-400 hover:text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded">
+                  Privacy Policy
+                </a>
+              </li>
+              <li>
+                <a href="/terms" className="text-sm text-slate-400 hover:text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded">
+                  Terms of Service
+                </a>
+              </li>
+            </ul>
+          </div>
         </div>
 
         <div className="mt-12 pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">

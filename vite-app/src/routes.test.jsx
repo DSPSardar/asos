@@ -83,12 +83,29 @@ describe('routing', () => {
     expect(screen.getByTestId('pathname').textContent).toBe('/dashboard');
   });
 
-  it('sends a logged-out visitor at an unknown path to the landing page', async () => {
+  // Unknown paths render a 404 and stay put. They used to redirect to "/",
+  // which answered a wrong URL with HTTP 200 and a valid page — a soft 404
+  // that Google indexes and flags. Staying on the path also matters for the
+  // preview server, which keys the real 404 status off the URL.
+  it('shows a 404 to a logged-out visitor at an unknown path', async () => {
     renderAt('/no-such-page');
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
-      /close deals while you sleep/i
-    );
-    expect(screen.getByTestId('pathname').textContent).toBe('/');
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/page not found/i);
+    expect(screen.getByTestId('pathname').textContent).toBe('/no-such-page');
+  });
+
+  it('shows a 404 to a signed-in visitor at an unknown path', async () => {
+    loginAs('TENANT_ADMIN');
+    renderAt('/no-such-page');
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/page not found/i);
+    expect(screen.getByTestId('pathname').textContent).toBe('/no-such-page');
+  });
+
+  it.each(['/privacy', '/terms'])('serves %s publicly without a session', async (path) => {
+    renderAt(path);
+    expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(screen.getByTestId('pathname').textContent).toBe(path);
+    // The draft banner must survive: these are unreviewed legal documents.
+    expect(screen.getByRole('note')).toHaveTextContent(/draft/i);
   });
 
   it.each(DASHBOARD_PATHS)('keeps %s behind the authenticated shell', async (path) => {
