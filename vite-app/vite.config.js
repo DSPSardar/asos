@@ -3,8 +3,43 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+// `vite preview` serves production (see vite-app/Dockerfile) and sends
+// `Cache-Control: no-cache` on everything, including the content-hashed
+// files under /assets/. Those filenames change whenever their contents do,
+// so revalidating them is pure waste: every repeat visitor pays a
+// conditional round trip per asset to an origin that lives in one region.
+//
+// It also blocks any CDN placed in front — `no-cache` instructs the edge to
+// revalidate against the origin before serving, so a CDN would still hit
+// Singapore for each asset. Fix this before adding a CDN, not after.
+//
+// index.html is deliberately left alone: it must stay `no-cache` so the
+// browser always picks up the new hashed filenames after a deploy.
+const immutableAssets = () => ({
+  name: 'immutable-asset-cache-headers',
+  configurePreviewServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.startsWith('/assets/')) {
+        // Setting the header here does not survive: sirv, which backs vite
+        // preview, calls res.setHeader('Cache-Control', 'no-cache') of its
+        // own accord further down the chain and wins by being last. It ends
+        // the response without ever calling writeHead, so patching that hook
+        // does not fire either (verified — the header stayed no-cache).
+        // Intercepting setHeader is what actually holds.
+        const setHeader = res.setHeader.bind(res);
+        res.setHeader = (name, value) => (
+          String(name).toLowerCase() === 'cache-control'
+            ? setHeader(name, 'public, max-age=31536000, immutable')
+            : setHeader(name, value)
+        );
+      }
+      next();
+    });
+  },
+});
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), immutableAssets()],
 
   resolve: {
     alias: {
