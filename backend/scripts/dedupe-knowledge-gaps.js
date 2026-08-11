@@ -22,6 +22,7 @@
 require('dotenv').config();
 
 const prisma = require('../src/config/database');
+const { runWithSystemScope } = require('../src/middleware/requestContext.middleware');
 const { cleanQuestion, isSameQuestion } = require('../src/modules/knowledge-gaps/question-key');
 
 const args = process.argv.slice(2);
@@ -100,7 +101,9 @@ const run = async () => {
   if (!APPLY) console.log('Dry run — re-run with --apply to write these changes.');
 };
 
-run()
+// system RLS scope: an ops script deduping rows across (or for a named)
+// tenant, run by an operator — the same audited policy SUPERADMIN uses.
+runWithSystemScope(run)
   .catch((err) => {
     console.error(err);
     process.exitCode = 1;

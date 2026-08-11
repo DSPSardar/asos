@@ -29,4 +29,40 @@ const requestContextMiddleware = (req, res, next) => {
 // (e.g. a script run via node directly), which pino merges as a no-op.
 const getRequestContext = () => requestContext.getStore() || {};
 
-module.exports = { requestContext, requestContextMiddleware, getRequestContext };
+// The same store now also carries the tenant identity used for Postgres
+// row-level security (see config/database.js). Written by exactly three
+// places, all of which derive it from something verified server-side:
+//   - auth.middleware.js, from the DB row of the JWT-verified user
+//   - conversation.worker.js, from job.data.tenantId (which originated from
+//     the HMAC-verified WhatsApp webhook's waPhoneId lookup)
+//   - runWithSystemScope below, for the explicit cross-tenant paths
+// Never populate it from a request header or body — that is exactly the
+// spoofable channel RLS exists to close.
+const setTenantContext = ({ tenantId, rlsScope }) => {
+  const store = requestContext.getStore();
+  if (!store) return;
+  if (tenantId !== undefined) store.tenantId = tenantId;
+  if (rlsScope !== undefined) store.rlsScope = rlsScope;
+};
+
+// Explicit, logged cross-tenant scope for the few paths that legitimately
+// operate across tenants: SUPERADMIN API requests, the Stripe webhook (tenant
+// resolved mid-flow from the signature-verified event), and ops scripts.
+// This is a named policy in Postgres ('system_scope'), not a superuser
+// connection — every use is visible in the logs via the pino mixin.
+const runWithSystemScope = (fn) => {
+  const current = requestContext.getStore();
+  if (current) {
+    current.rlsScope = 'system';
+    return fn();
+  }
+  return requestContext.run({ rlsScope: 'system' }, fn);
+};
+
+module.exports = {
+  requestContext,
+  requestContextMiddleware,
+  getRequestContext,
+  setTenantContext,
+  runWithSystemScope,
+};

@@ -291,8 +291,8 @@ const activatePlan = async (tenantId, plan, stripeSubId) => {
 
   const stripeSub = await getStripe().subscriptions.retrieve(stripeSubId);
 
-  await prisma.$transaction([
-    prisma.subscription.upsert({
+  await prisma.$transaction(async (tx) => {
+    await tx.subscription.upsert({
       where:  { tenantId },
       create: {
         tenantId,
@@ -317,12 +317,12 @@ const activatePlan = async (tenantId, plan, stripeSubId) => {
         aiTokensLimit:      planConfig.aiTokensLimit,
         messagesLimit:      planConfig.messagesLimit,
       },
-    }),
-    prisma.tenant.update({
+    });
+    await tx.tenant.update({
       where: { id: tenantId },
       data:  { plan: plan },
-    }),
-  ]);
+    });
+  });
 
   logger.info({ tenantId, plan, stripeSubId }, 'Plan activated successfully');
 };

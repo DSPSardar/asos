@@ -896,7 +896,7 @@ const extractAdAttribution = (referral) => {
 // ─────────────────────────────────────────────────────────────────────
 
 const processStatusUpdate = async (job) => {
-  const { waMessageId, status } = job.data;
+  const { waMessageId, status, tenantId } = job.data;
 
   const statusMap = {
     SENT: 'SENT', DELIVERED: 'DELIVERED', READ: 'READ', FAILED: 'FAILED',
@@ -904,8 +904,11 @@ const processStatusUpdate = async (job) => {
 
   const mappedStatus = statusMap[status.toUpperCase()] || 'SENT';
 
+  // tenantId was always in the job payload but this where-clause never used
+  // it — the single query in the codebase that dropped tenant scoping. RLS
+  // now also blocks a cross-tenant match, but the filter belongs here too.
   await prisma.message.updateMany({
-    where: { waMessageId },
+    where: { waMessageId, tenantId },
     data: {
       status: mappedStatus,
       ...(mappedStatus === 'DELIVERED' && { deliveredAt: new Date() }),
@@ -927,7 +930,11 @@ const worker = new Worker(
   // utils/logger.js's mixin. Consistent field name (requestId) across the
   // API and the worker on purpose, so a search doesn't need to know which
   // process emitted a given line to find related ones.
-  (job) => requestContext.run({ requestId: job.id }, () => {
+  // tenantId in the store doubles as the Postgres RLS context (see
+  // config/database.js). It comes from job.data, which the webhook populated
+  // from the HMAC-verified waPhoneId→tenant lookup — the worker never
+  // re-derives it from message content.
+  (job) => requestContext.run({ requestId: job.id, tenantId: job.data?.tenantId || '' }, () => {
     if (job.name === 'inbound-message') return processInboundMessage(job);
     if (job.name === 'status-update')   return processStatusUpdate(job);
   }),
