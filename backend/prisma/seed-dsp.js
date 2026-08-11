@@ -9,7 +9,12 @@ require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
-const prisma = new PrismaClient();
+// connection_limit=1 + the session-level set_config in main(): same reason
+// as prisma/seed.js — seeds write tenant rows outside any request context,
+// so they use the named system_scope RLS policy for the whole session.
+const prisma = new PrismaClient({
+  datasources: { db: { url: process.env.DATABASE_URL + (process.env.DATABASE_URL.includes('?') ? '&' : '?') + 'connection_limit=1' } },
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -155,6 +160,7 @@ ALWAYS:
 // ── Main seed function ────────────────────────────────────────────────────────
 async function main() {
   console.log('🌱 Seeding DSP tenant...\n');
+  await prisma.$executeRaw`SELECT set_config('app.rls_scope', 'system', FALSE)`;
 
   // ── 1. Create DSP Tenant ──────────────────────────────────────────
   const tenant = await prisma.tenant.upsert({

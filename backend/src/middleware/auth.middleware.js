@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 const prisma = require('../config/database');
 const { error } = require('../utils/response');
+const { setTenantContext } = require('./requestContext.middleware');
+const logger = require('../utils/logger');
 
 const authenticate = async (req, res, next) => {
   try {
@@ -43,6 +45,18 @@ const authenticate = async (req, res, next) => {
     req.user = user;
     req.tenantId = user.tenantId;
     req.tenant = user.tenant;
+
+    // Postgres RLS context (read by config/database.js on every query).
+    // Derived from the DB row of the JWT-verified user — never from anything
+    // the client sent. SUPERADMIN (tenantId null by schema design) gets the
+    // explicit 'system' scope policy, and every such request is logged so
+    // cross-tenant access is audited rather than silently blanket-allowed.
+    if (user.role === 'SUPERADMIN') {
+      setTenantContext({ tenantId: '', rlsScope: 'system' });
+      logger.info({ event: 'rls.system_scope', userId: user.id, method: req.method, path: req.originalUrl }, 'SUPERADMIN cross-tenant scope');
+    } else {
+      setTenantContext({ tenantId: user.tenantId || '', rlsScope: '' });
+    }
     next();
   } catch (err) {
     next(err);

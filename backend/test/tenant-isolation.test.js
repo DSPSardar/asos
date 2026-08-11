@@ -37,8 +37,16 @@ process.env.REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'sk-test';
 process.env.PORT = '0';
 
+// Fixture client. With row-level security now FORCEd on the tenant tables,
+// creating two tenants' worth of fixtures requires the named system_scope
+// policy — set session-wide, which is only reliable on a single connection,
+// hence connection_limit=1. The app under test does NOT get this scope; its
+// queries run through src/config/database.js with each simulated user's own
+// tenant context, which is exactly what these tests exercise.
 const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: { db: { url: process.env.DATABASE_URL + (process.env.DATABASE_URL.includes('?') ? '&' : '?') + 'connection_limit=1' } },
+});
 
 let server, port;
 const authHeader = (user) => 'Bearer ' + jwt.sign(
@@ -74,6 +82,8 @@ const request = (method, path, token, body) => new Promise((resolve) => {
 let tenantA, tenantB, userA, userB, leadA, leadB, contactA, contactB, convA, convB;
 
 before(async () => {
+  await prisma.$executeRaw`SELECT set_config('app.rls_scope', 'system', FALSE)`;
+
   const app = require('../src/app');
   const instance = typeof app === 'function' ? app() : app;
   server = instance.listen(0);

@@ -115,12 +115,12 @@ const approve = async (paymentId, reviewerId) => {
   const periodEnd = new Date(base);
   periodEnd.setMonth(periodEnd.getMonth() + payment.periodMonths);
 
-  await prisma.$transaction([
-    prisma.manualPayment.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.manualPayment.update({
       where: { id: paymentId },
       data: { status: 'APPROVED', reviewedById: reviewerId, reviewedAt: now },
-    }),
-    prisma.subscription.upsert({
+    });
+    await tx.subscription.upsert({
       where: { tenantId: payment.tenantId },
       create: {
         tenantId: payment.tenantId,
@@ -137,15 +137,15 @@ const approve = async (paymentId, reviewerId) => {
         currentPeriodEnd: periodEnd,
         ...limits,
       },
-    }),
+    });
     // Tenant.status is what requireActiveTenant gates on, so a tenant still
     // sitting in PENDING_APPROVAL or TRIAL has to be moved to ACTIVE here or
     // they stay locked out despite having paid.
-    prisma.tenant.update({
+    await tx.tenant.update({
       where: { id: payment.tenantId },
       data: { plan: payment.plan, status: 'ACTIVE' },
-    }),
-  ]);
+    });
+  });
 
   logger.info(
     { event: 'billing.manual_payment.approved', tenantId: payment.tenantId, paymentId, plan: payment.plan, amount: Number(payment.amount), periodEnd, reviewerId },

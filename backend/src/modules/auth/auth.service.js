@@ -91,6 +91,12 @@ const register = async ({ tenantName, tenantSlug, email, password, fullName, pho
       },
     });
 
+    // The tenant did not exist when this transaction's RLS context was set
+    // (config/database.js sets it from the — unauthenticated — request), so
+    // scope the rest of the transaction to the id just created or the
+    // aiConfig/subscription/lead inserts below are denied by row security.
+    await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${tenant.id}, TRUE)`;
+
     // Default AI config
     await tx.aiConfig.create({
       data: {
@@ -392,6 +398,9 @@ const googleAuth = async (token) => {
       const newUser = await tx.user.create({
         data: { tenantId: tenant.id, email, googleId, fullName: fullName || email, avatarUrl, role: 'TENANT_ADMIN' },
       });
+      // Same as password registration above: the RLS context predates this
+      // brand-new tenant, so re-scope before touching RLS-protected tables.
+      await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${tenant.id}, TRUE)`;
       await tx.aiConfig.create({
         data: {
           tenantId: tenant.id,

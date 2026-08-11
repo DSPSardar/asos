@@ -5,10 +5,17 @@ require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
-const prisma = new PrismaClient();
+// connection_limit=1 keeps every query on the same session so the
+// session-level RLS bypass below (set in main) actually covers all of them.
+// Seeds write rows for arbitrary tenants; the app's per-request tenant
+// context does not exist here.
+const prisma = new PrismaClient({
+  datasources: { db: { url: process.env.DATABASE_URL + (process.env.DATABASE_URL.includes('?') ? '&' : '?') + 'connection_limit=1' } },
+});
 
 async function main() {
   console.log('🌱 Seeding database...');
+  await prisma.$executeRaw`SELECT set_config('app.rls_scope', 'system', FALSE)`;
 
   // ── 1. Superadmin ─────────────────────────────────────────────────
   const superadminHash = await bcrypt.hash('superadmin123!', 12);

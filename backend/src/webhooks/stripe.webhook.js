@@ -6,6 +6,7 @@ const Sentry = require('@sentry/node');
 const billingService = require('../modules/billing/billing.service');
 const logger = require('../utils/logger');
 const env = require('../config/env');
+const { runWithSystemScope } = require('../middleware/requestContext.middleware');
 
 const router = Router();
 
@@ -25,7 +26,11 @@ router.post('/stripe', async (req, res) => {
 
   try {
     const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body);
-    const result  = await billingService.handleWebhook(rawBody, signature);
+    // System RLS scope: the tenant is resolved *inside* handleWebhook from
+    // the signature-verified Stripe event (stripeCustomerId → tenant), so no
+    // per-tenant context exists yet at this point. Signature check above is
+    // what gates entry; the scope use is logged via the pino mixin.
+    const result  = await runWithSystemScope(() => billingService.handleWebhook(rawBody, signature));
     logger.info({ event: 'webhook.stripe.accepted' }, 'Stripe webhook processed');
     return res.status(200).json(result);
   } catch (err) {

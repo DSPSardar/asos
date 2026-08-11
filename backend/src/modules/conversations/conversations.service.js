@@ -238,18 +238,18 @@ const confirmPayment = async (tenantId, conversationId, userId) => {
   if (conv.lead?.stage === 'CLOSED_WON') return conv;
 
   const now = new Date();
-  const [updated] = await prisma.$transaction([
-    prisma.conversation.update({
+  const updated = await prisma.$transaction(async (tx) => {
+    const updatedConv = await tx.conversation.update({
       where: { id: conversationId },
       data: { status: 'CLOSED', aiEnabled: false, handoffReason: 'Payment verified — enrollment confirmed' },
-    }),
-    prisma.lead.update({
+    });
+    await tx.lead.update({
       where: { id: conv.leadId },
       data: { stage: 'CLOSED_WON', closedAt: now },
-    }),
+    });
     // STAGE_CHANGE, not AI_ACTION: this is a lifecycle transition made by a
     // human, and analytics separates the two by type.
-    prisma.activity.create({
+    await tx.activity.create({
       data: {
         tenantId,
         leadId: conv.leadId,
@@ -258,8 +258,9 @@ const confirmPayment = async (tenantId, conversationId, userId) => {
         content: '💳 Payment verified — enrollment confirmed',
         metadata: { action: 'payment_confirmed', from: conv.lead?.stage || null, to: 'CLOSED_WON' },
       },
-    }),
-  ]);
+    });
+    return updatedConv;
+  });
 
   // Purchase fires here rather than when the AI hears "yes": this is the first
   // point at which money has actually been verified, so it is the only honest
@@ -327,11 +328,11 @@ const deleteConversation = async (tenantId, conversationId) => {
   });
   if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404 });
 
-  await prisma.$transaction([
-    prisma.message.deleteMany({ where: { conversationId } }),
-    prisma.aiAgentLog.deleteMany({ where: { conversationId } }),
-    prisma.conversation.delete({ where: { id: conversationId } }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    await tx.message.deleteMany({ where: { conversationId } });
+    await tx.aiAgentLog.deleteMany({ where: { conversationId } });
+    await tx.conversation.delete({ where: { id: conversationId } });
+  });
   return { deleted: true };
 };
 
