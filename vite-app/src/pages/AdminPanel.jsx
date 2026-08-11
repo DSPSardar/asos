@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { adminAPI } from '@lib/api';
+import ManualPaymentsQueue from '@components/admin/ManualPaymentsQueue';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 function timeAgo(iso) {
@@ -356,6 +357,11 @@ export default function AdminPanel() {
           <MetricCard label="AI Messages"     value={metrics.messages?.aiHandled ?? '—'} />
         </div>
       )}
+
+      {/* Bank-transfer payments awaiting verification. Above the tenant table
+          because an unreviewed payment is a client locked out of a plan they
+          have already paid for. */}
+      <ManualPaymentsQueue />
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
