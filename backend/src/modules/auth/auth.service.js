@@ -162,11 +162,18 @@ const login = async ({ email, password }) => {
   });
 
   if (!user || !user.isActive) {
+    // Not logging the raw email here on purpose, matching the existing
+    // anti-enumeration discipline in this file (see requestPasswordReset
+    // below) — bulk-grepping these logs must not become a way to discover
+    // which addresses have accounts. userId is absent for the same reason:
+    // there is no user to attach one to on this branch.
+    logger.warn({ event: 'auth.login.failed', reason: 'no_such_user_or_inactive' }, 'Login failed');
     throw Object.assign(new Error('Invalid credentials'), { statusCode: 401, expose: true });
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
+    logger.warn({ event: 'auth.login.failed', reason: 'wrong_password', userId: user.id }, 'Login failed');
     throw Object.assign(new Error('Invalid credentials'), { statusCode: 401, expose: true });
   }
 
@@ -186,7 +193,7 @@ const login = async ({ email, password }) => {
     data: { refreshTokenHash: hash, lastLoginAt: new Date() },
   });
 
-  logger.info({ userId: user.id, tenantId: user.tenantId }, 'User logged in');
+  logger.info({ event: 'auth.login.success', userId: user.id, tenantId: user.tenantId }, 'User logged in');
 
   return {
     accessToken,

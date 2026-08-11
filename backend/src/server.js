@@ -1,7 +1,12 @@
 // src/server.js
 // HTTP server entrypoint
 
-require('dotenv').config();
+// Must be the first require in the file — see instrument.js for why. It
+// also calls dotenv.config(), so this replaces the old standalone
+// require('dotenv').config() line that used to be here.
+require('./instrument');
+const Sentry = require('@sentry/node');
+
 const createApp = require('./app');
 const env = require('./config/env');
 const logger = require('./utils/logger');
@@ -16,15 +21,21 @@ const PORT = parseInt(env.PORT, 10);
 // This does not change that outcome (a corrupted process should not keep
 // serving traffic), it makes sure the crash is logged through the same
 // structured pipeline as everything else before the process exits, so it is
-// findable rather than a plain-text needle in the deploy log.
+// findable rather than a plain-text needle in the deploy log. Sentry.init()
+// (in instrument.js) installs its own global handlers for both of these
+// too, but they run independently of these — explicit capture here
+// guarantees the event is queued and flushed before process.exit() runs,
+// rather than racing Sentry's own exit-handling against ours.
 process.on('uncaughtException', (err) => {
   logger.fatal({ err }, 'Uncaught exception — process exiting');
-  process.exit(1);
+  Sentry.captureException(err);
+  Sentry.flush(2000).finally(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (reason) => {
   logger.fatal({ err: reason }, 'Unhandled promise rejection — process exiting');
-  process.exit(1);
+  Sentry.captureException(reason);
+  Sentry.flush(2000).finally(() => process.exit(1));
 });
 
 const start = async () => {

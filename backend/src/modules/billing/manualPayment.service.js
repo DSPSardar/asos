@@ -56,7 +56,7 @@ const submitPayment = async (tenantId, { amount, currency, paidAt, reference, pl
     select: LIST_FIELDS,
   });
 
-  logger.info({ tenantId, paymentId: created.id, plan, amount }, 'Manual payment submitted for review');
+  logger.info({ event: 'billing.manual_payment.submitted', tenantId, paymentId: created.id, plan, amount }, 'Manual payment submitted for review');
   return serialize(created);
 };
 
@@ -148,7 +148,7 @@ const approve = async (paymentId, reviewerId) => {
   ]);
 
   logger.info(
-    { tenantId: payment.tenantId, paymentId, plan: payment.plan, periodEnd, reviewerId },
+    { event: 'billing.manual_payment.approved', tenantId: payment.tenantId, paymentId, plan: payment.plan, amount: Number(payment.amount), periodEnd, reviewerId },
     'Manual payment approved — plan activated'
   );
 
@@ -167,7 +167,7 @@ const reject = async (paymentId, reviewerId, reviewNote) => {
     data: { status: 'REJECTED', reviewedById: reviewerId, reviewedAt: new Date(), reviewNote: reviewNote || null },
   });
 
-  logger.info({ tenantId: payment.tenantId, paymentId, reviewerId }, 'Manual payment rejected');
+  logger.info({ event: 'billing.manual_payment.rejected', tenantId: payment.tenantId, paymentId, reviewerId, reviewNote: reviewNote || null }, 'Manual payment rejected');
   return { id: paymentId, status: 'REJECTED' };
 };
 

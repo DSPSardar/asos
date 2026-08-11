@@ -2,7 +2,12 @@
 // BullMQ worker — processes every inbound WhatsApp message
 // Orchestrates: CRM resolution → Claude AI → WA reply → Meta attribution
 
-require('dotenv').config();
+// Must be the first require in the file — see instrument.js for why. Also
+// calls dotenv.config(), replacing the old standalone call that used to be
+// the first line here.
+require('../instrument');
+const Sentry = require('@sentry/node');
+
 const { Worker } = require('bullmq');
 const redis = require('../config/redis');
 const prisma = require('../config/database');
@@ -27,12 +32,14 @@ const env = require('../config/env');
 // intended safety net for that, not staying up in an unknown state.
 process.on('uncaughtException', (err) => {
   logger.fatal({ err }, 'Uncaught exception in worker — process exiting');
-  process.exit(1);
+  Sentry.captureException(err);
+  Sentry.flush(2000).finally(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (reason) => {
   logger.fatal({ err: reason }, 'Unhandled promise rejection in worker — process exiting');
-  process.exit(1);
+  Sentry.captureException(reason);
+  Sentry.flush(2000).finally(() => process.exit(1));
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -937,10 +944,25 @@ worker.on('completed', (job) => {
 
 worker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, name: job?.name, err: err.message, attempts: job?.attemptsMade }, 'Job failed');
+
+  // BullMQ retries per queues/message.queue.js (up to 5 attempts with
+  // exponential backoff) before giving up — most 'failed' events here are a
+  // mid-flight retry, not an incident. Only report once retries are
+  // genuinely exhausted (attemptsMade reaches the job's configured limit),
+  // so Sentry shows "this lead's message never got processed" once, not up
+  // to five times per real failure.
+  const exhausted = job && job.attemptsMade >= (job.opts?.attempts || 1);
+  if (exhausted) {
+    Sentry.captureException(err, {
+      tags: { jobName: job?.name },
+      extra: { jobId: job?.id, attemptsMade: job?.attemptsMade },
+    });
+  }
 });
 
 worker.on('error', (err) => {
   logger.error({ err }, 'Worker error');
+  Sentry.captureException(err);
 });
 
 logger.info('🔄 Conversation worker started');

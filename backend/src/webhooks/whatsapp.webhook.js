@@ -2,6 +2,7 @@
 // Receives all incoming WhatsApp Cloud API events
 
 const { Router } = require('express');
+const Sentry = require('@sentry/node');
 const env = require('../config/env');
 const logger = require('../utils/logger');
 const whatsappService = require('../services/whatsapp.service');
@@ -59,7 +60,7 @@ router.post('/', async (req, res) => {
     });
 
     if (!tenant) {
-      logger.warn({ phoneNumberId }, 'No tenant found for WA phone number ID');
+      logger.warn({ event: 'webhook.whatsapp.rejected', reason: 'unknown_phone_number_id', phoneNumberId }, 'No tenant found for WA phone number ID');
       return;
     }
 
@@ -87,20 +88,20 @@ router.post('/', async (req, res) => {
     if (isPlaceholderSecret) {
       if (env.NODE_ENV === 'production') {
         logger.error(
-          { tenantId: tenant.id },
+          { event: 'webhook.whatsapp.rejected', reason: 'no_real_app_secret', tenantId: tenant.id },
           'WA webhook rejected: no real app secret configured for this tenant. ' +
           'Set the tenant waAppSecret or WHATSAPP_APP_SECRET — unsigned webhooks are never processed in production.'
         );
         return;
       }
-      logger.warn({ tenantId: tenant.id }, 'WA webhook signature check skipped — placeholder secret (non-production only)');
+      logger.warn({ event: 'webhook.whatsapp.signature_skipped', tenantId: tenant.id }, 'WA webhook signature check skipped — placeholder secret (non-production only)');
     } else {
       if (!signature) {
-        logger.warn({ tenantId: tenant.id }, 'WA webhook rejected: missing x-hub-signature-256 header');
+        logger.warn({ event: 'webhook.whatsapp.rejected', reason: 'missing_signature', tenantId: tenant.id }, 'WA webhook rejected: missing x-hub-signature-256 header');
         return;
       }
       if (!whatsappService.verifySignature(rawBody, signature, appSecret)) {
-        logger.warn({ tenantId: tenant.id }, 'WA webhook rejected: HMAC verification failed');
+        logger.warn({ event: 'webhook.whatsapp.rejected', reason: 'hmac_mismatch', tenantId: tenant.id }, 'WA webhook rejected: HMAC verification failed');
         return;
       }
     }
@@ -143,11 +144,16 @@ router.post('/', async (req, res) => {
         timestamp: parsed.timestamp,
       });
 
-      logger.info({ tenantId: tenant.id, phone: parsed.phone, waMessageId: parsed.waMessageId }, '📨 Inbound message queued');
+      logger.info({ event: 'webhook.whatsapp.accepted', tenantId: tenant.id, phone: parsed.phone, waMessageId: parsed.waMessageId }, '📨 Inbound message queued');
     }
 
   } catch (err) {
-    logger.error({ err }, 'Error processing WA webhook');
+    logger.error({ event: 'webhook.whatsapp.error', err }, 'Error processing WA webhook');
+    // Response already sent (line 47) before Meta's 5s timeout — this can
+    // only report, never change what the client sees. Not covered by
+    // Express's own error-handling chain since this route catches its own
+    // errors rather than calling next(err).
+    Sentry.captureException(err);
   }
 });
 
