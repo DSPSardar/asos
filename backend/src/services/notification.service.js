@@ -11,8 +11,8 @@ const logger = require('../utils/logger');
  * preferences allow it for the given event type.
  *
  * @param {object} tenant        - Full tenant object (with settings JSON)
- * @param {'newLead'|'hotLead'|'needsHuman'} eventType
- * @param {object} payload       - { contactName, phone, score, reason }
+ * @param {'newLead'|'hotLead'|'needsHuman'|'unansweredQuestion'} eventType
+ * @param {object} payload       - { contactName, phone, score, reason, question }
  */
 const notifyAdmin = async (tenant, eventType, payload = {}) => {
   try {
@@ -32,7 +32,7 @@ const notifyAdmin = async (tenant, eventType, payload = {}) => {
   }
 };
 
-const buildMessage = (eventType, { contactName, phone, score, reason }, tenant) => {
+const buildMessage = (eventType, { contactName, phone, score, reason, question }, tenant) => {
   const name  = contactName || phone || 'Unknown';
   const brand = tenant.name || 'ASOS';
 
@@ -45,6 +45,10 @@ const buildMessage = (eventType, { contactName, phone, score, reason }, tenant) 
 
     case 'needsHuman':
       return `🙋 *Human Handoff — ${brand}*\n\nContact: ${name}\nPhone: +${phone}\nReason: ${reason || 'AI escalated'}\n\nPlease take over this conversation.`;
+
+    case 'unansweredQuestion':
+      // AI is still handling this lead — this is a heads-up, not a handoff.
+      return `❓ *Knowledge Gap — ${brand}*\n\nContact: ${name}\nPhone: +${phone}\nQuestion: ${question || 'unspecified'}\n\nThe AI didn't have this in its knowledge base — worth adding an answer.`;
 
     default:
       return `📢 *${brand} Alert*\n\nContact: ${name} (+${phone})`;

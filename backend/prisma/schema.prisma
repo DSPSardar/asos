@@ -323,6 +323,12 @@ model Conversation {
   status            ConversationStatus   @default(ACTIVE)
   aiEnabled         Boolean              @default(true) @map("ai_enabled")
   handoffReason     String?              @map("handoff_reason")
+  // Set the moment status flips to HUMAN_TAKEOVER (handleHandoff() in
+  // conversation.worker.js is the single write point for that transition).
+  // Without this, handoffReason existed but nothing recorded WHEN — so an
+  // escalation SLA could not be measured even retroactively, since
+  // updatedAt gets touched by any later change to the row, not just this one.
+  handoffAt         DateTime?            @map("handoff_at")
   lastMessageAt     DateTime?            @map("last_message_at")
 
   // ── Payment proof tracking ──
