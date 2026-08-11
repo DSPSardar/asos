@@ -93,6 +93,15 @@ api.interceptors.request.use((config) => {
 
   const token = useAuthStore.getState().token;
   if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  // This instance sets a default Content-Type of application/json, which would
+  // override the multipart type a FormData body needs — and multipart is
+  // useless without the boundary parameter the browser generates. Clearing the
+  // header lets the browser set both. Without this, file uploads reach the
+  // server as unparseable JSON and multer sees no file.
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 
@@ -234,6 +243,14 @@ export const billingAPI = {
   portal:       () => api.post('/billing/portal'),
   invoices:     () => api.get('/billing/invoices'),
   cancel:       () => api.post('/billing/cancel'),
+
+  // Bank transfer + screenshot. Stripe cannot take payments for a Pakistani
+  // business, so this — not checkout() above — is the live billing path.
+  // FormData on purpose: the proof is a file upload. Do NOT set Content-Type
+  // by hand; the browser must add the multipart boundary itself.
+  submitManualPayment: (formData) =>
+    api.post('/billing/manual-payments', formData),
+  listManualPayments:  () => api.get('/billing/manual-payments'),
 };
 
 export const aiConfigAPI = {
@@ -287,4 +304,13 @@ export const adminAPI = {
   updateAdmin: (id, data) => api.put(`/admin/tenants/${id}/admin`, data),
   deleteAccount:(id)    => api.delete(`/admin/tenants/${id}`),
   metrics:     ()       => api.get('/admin/metrics'),
+
+  // Bank-transfer payment review. approve() is what activates the plan and
+  // sets its expiry — see backend manualPayment.service.js.
+  listManualPayments: (params) => api.get('/admin/manual-payments', { params }),
+  approveManualPayment: (id) => api.post(`/admin/manual-payments/${id}/approve`),
+  rejectManualPayment:  (id, reviewNote) => api.post(`/admin/manual-payments/${id}/reject`, { reviewNote }),
+  // Path only — rendered in an <img>, which cannot carry the auth header, so
+  // AdminPanel fetches it as a blob through the authorised axios instance.
+  manualPaymentProofPath: (id) => `/admin/manual-payments/${id}/proof`,
 };

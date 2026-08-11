@@ -2,6 +2,7 @@
 // 4-tier global SaaS pricing (Starter / Growth / Pro / Agency) — mirrors getaisales-Landing.html.
 import React, { useState, useCallback } from 'react';
 import { PageHeader } from '@pages/Layout';
+import BankTransferPanel from '@components/billing/BankTransferPanel';
 
 // ─────────────────────────────────────────────────────────────
 // Plan + invoice mock data — single source of truth: landing page
@@ -152,6 +153,9 @@ export default function Billing() {
       <div className="space-y-6 p-6">
         <CurrentPlanCard cycle={cycle} setCycle={setCycle} onUpdateCard={onUpdateCard} />
         <PlanComparison cycle={cycle} onSubscribe={onSubscribe} />
+        {/* Placed above the Stripe cards deliberately: this is how clients
+            actually pay. Stripe cannot take payments for a Pakistani business. */}
+        <BankTransferPanel onToast={showToast} />
         <UsageGrid />
         <PaymentMethod onUpdateCard={onUpdateCard} />
         <InvoiceTable onDownload={onDownloadInv} />

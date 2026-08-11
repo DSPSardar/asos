@@ -125,6 +125,15 @@ enum SubscriptionStatus {
   TRIALING
 }
 
+// Review state for a bank-transfer payment a tenant claims to have made.
+// Distinct from SubscriptionStatus: this tracks one payment, not the
+// subscription it pays for.
+enum ManualPaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ─────────────────────────────────────────────
 // TENANTS — Core multi-tenant entity
 // ─────────────────────────────────────────────
@@ -172,6 +181,7 @@ model Tenant {
   contentDrafts   ContentDraft[]
   clientReports   ClientReport[]
   knowledgeGaps   KnowledgeGap[]
+  manualPayments  ManualPayment[]
 
   @@map("tenants")
 }
@@ -683,4 +693,56 @@ model Subscription {
   tenant               Tenant             @relation(fields: [tenantId], references: [id])
 
   @@map("subscriptions")
+}
+
+// ─────────────────────────────────────────────
+// MANUAL PAYMENTS — bank transfer + screenshot
+// ─────────────────────────────────────────────
+//
+// Stripe cannot receive payments for a Pakistani business, so clients pay by
+// direct bank transfer and send a screenshot. Before this model there was no
+// record of any of it: an admin could set tenant.plan by hand, but that wrote
+// no amount, no date, no proof, and — critically — no currentPeriodEnd, so a
+// paid plan never lapsed and nothing could be reconciled against the bank.
+//
+// Do NOT confuse this with the payment-proof fields on Conversation. Those are
+// a *lead* paying a *tenant* over WhatsApp. This is a *tenant* paying us.
+model ManualPayment {
+  id             String              @id @default(uuid())
+  tenantId       String              @map("tenant_id")
+
+  // What the tenant says they paid.
+  amount         Decimal             @db.Decimal(12, 2)
+  currency       String              @default("PKR")
+  paidAt         DateTime            @map("paid_at")
+  reference      String?             // bank reference / transaction id
+
+  // What it buys, applied on approval.
+  plan           TenantPlan
+  periodMonths   Int                 @default(1) @map("period_months")
+
+  // The screenshot lives in the database on purpose. Railway's container
+  // filesystem is ephemeral — anything written to /app/uploads is destroyed on
+  // every redeploy — and a payment audit trail cannot evaporate. These are
+  // small images and there are a handful per month; the size cap and MIME
+  // allowlist are enforced at the route. Move to object storage if volume ever
+  // makes this a problem.
+  proofImage     Bytes?              @map("proof_image")
+  proofMimeType  String?             @map("proof_mime_type")
+  proofFilename  String?             @map("proof_filename")
+
+  status         ManualPaymentStatus @default(PENDING)
+  notes          String?             // tenant's own note
+  reviewedById   String?             @map("reviewed_by_id")
+  reviewedAt     DateTime?           @map("reviewed_at")
+  reviewNote     String?             @map("review_note")   // rejection reason
+
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([status, createdAt])
+  @@map("manual_payments")
 }
