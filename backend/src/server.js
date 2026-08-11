@@ -10,6 +10,23 @@ const redis = require('./config/redis');
 
 const PORT = parseInt(env.PORT, 10);
 
+// Without these, Node's default behavior is a raw stderr dump — invisible
+// to whatever structured-log tooling is watching Railway's output — and for
+// unhandledRejection specifically, modern Node crashes the process anyway.
+// This does not change that outcome (a corrupted process should not keep
+// serving traffic), it makes sure the crash is logged through the same
+// structured pipeline as everything else before the process exits, so it is
+// findable rather than a plain-text needle in the deploy log.
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Uncaught exception — process exiting');
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.fatal({ err: reason }, 'Unhandled promise rejection — process exiting');
+  process.exit(1);
+});
+
 const start = async () => {
   try {
     // Test DB connection
