@@ -19,6 +19,10 @@ const BANK = {
   accountTitle:  import.meta.env.VITE_BANK_ACCOUNT_TITLE || '',
   accountNumber: import.meta.env.VITE_BANK_ACCOUNT_NUMBER || '',
   iban:          import.meta.env.VITE_BANK_IBAN      || '',
+  // Optional: needed for an over-the-counter or interbank (IBFT) deposit,
+  // where the IBAN alone isn't always what a teller or app asks for.
+  branch:        import.meta.env.VITE_BANK_BRANCH      || '',
+  branchCode:    import.meta.env.VITE_BANK_BRANCH_CODE  || '',
 };
 const hasBankDetails = Object.values(BANK).some(Boolean);
 
@@ -111,6 +115,8 @@ export default function BankTransferPanel({ onToast }) {
           {BANK.accountTitle  && (<div><dt className="text-slate-500">Account title</dt><dd className="font-medium text-slate-200">{BANK.accountTitle}</dd></div>)}
           {BANK.accountNumber && (<div><dt className="text-slate-500">Account number</dt><dd className="font-mono font-medium text-slate-200">{BANK.accountNumber}</dd></div>)}
           {BANK.iban          && (<div><dt className="text-slate-500">IBAN</dt><dd className="font-mono font-medium text-slate-200">{BANK.iban}</dd></div>)}
+          {BANK.branch        && (<div><dt className="text-slate-500">Branch</dt><dd className="font-medium text-slate-200">{BANK.branch}</dd></div>)}
+          {BANK.branchCode    && (<div><dt className="text-slate-500">Branch code</dt><dd className="font-mono font-medium text-slate-200">{BANK.branchCode}</dd></div>)}
         </dl>
       ) : (
         // Better an honest prompt than a card with blank fields the client
