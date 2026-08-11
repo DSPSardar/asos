@@ -602,6 +602,21 @@ const handleInboundMessage = async (job) => {
     });
   }
 
+  // Settings rule: "unanswered" — notify when the Closer couldn't answer a
+  // question from PRODUCT CONTEXT (see knowledge_gap in claude.service.js).
+  // This toggle existed in Settings.jsx and did nothing until now. Notify
+  // only, not a handoff — the AI keeps selling; the owner gets a heads-up
+  // there's a gap worth filling in their knowledge base. Defaults true, like
+  // payment/legal, so existing tenants keep getting it unless they turn it
+  // off explicitly.
+  if (aiResult.closerOutput?.knowledge_gap && tenant.aiConfig?.handoffRules?.unanswered !== false) {
+    notificationService.notifyAdmin(tenant, 'unansweredQuestion', {
+      contactName: contact.name,
+      phone: normalizedPhone,
+      question: aiResult.closerOutput.knowledge_gap,
+    });
+  }
+
   // ── 11. Route based on AI action ─────────────────────────────────
 
   if (aiResult.action === 'handoff') {
@@ -838,6 +853,7 @@ const handleHandoff = async (tenant, conversation, lead, reason) => {
       status: 'HUMAN_TAKEOVER',
       aiEnabled: false,
       handoffReason: reason || 'Manual handoff',
+      handoffAt: new Date(),
     },
   });
 

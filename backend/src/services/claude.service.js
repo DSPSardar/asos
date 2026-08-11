@@ -125,26 +125,18 @@ business_unit RULES:
   unless the lead explicitly switches to the other business.
 `;
 
-// Build effective handoff triggers dynamically from the tenant's handoffRules toggles.
-// handoffRules = { payment: bool, legal: bool, unanswered: bool, hotProposal: bool }
-// handoffTriggers = admin-defined custom array (optional override)
-const buildEffectiveTriggers = (aiConfig) => {
-  const rules = aiConfig.handoffRules || {};
-  const triggers = new Set(['seat_confirmed']); // always active
+// ── Settings-rule handoff detectors ─────────────────────────────────
+// Pure functions (no OpenAI call, no DB access) so the rule matching itself
+// is unit-testable without spending real API credits or mocking the model.
+// Bilingual on purpose — this product's own Qualifier prompt treats
+// Urdu/Roman-Urdu as first-class (see is_price_objection above), so a
+// human-escalation rule that only understood English would miss most of
+// this user base's actual disputes and threats.
+const PAYMENT_DISPUTE_PATTERN = /refund|dispute|charge ?back|payment.*fail|failed.*payment|paisay wapis|paise wapas|wapis karo|galat charge|dhoka|fraud hua/i;
+const detectPaymentDispute = (message) => PAYMENT_DISPUTE_PATTERN.test(message || '');
 
-  if (rules.payment !== false) {
-    // payment ON by default — these are genuine human-only situations
-    ['payment_dispute', 'refund_request', 'charge_dispute', 'billing_error'].forEach(t => triggers.add(t));
-  }
-  if (rules.legal !== false) {
-    ['legal_threat', 'lawsuit', 'consumer_complaint', 'FBR', 'fraud_allegation'].forEach(t => triggers.add(t));
-  }
-
-  // Custom tenant-defined triggers (from AI Config page) always included
-  (aiConfig.handoffTriggers || []).forEach(t => triggers.add(t));
-
-  return [...triggers];
-};
+const LEGAL_THREAT_PATTERN = /lawyer|vakeel|legal action|sue you|court|adalat|consumer complaint|shikayat karonga|shikayat karungi|\bFBR\b|fraud case|police complaint|fir karonga/i;
+const detectLegalThreat = (message) => LEGAL_THREAT_PATTERN.test(message || '');
 
 const buildQualifierPrompt = (aiConfig, lead, contact, welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false) => `
 You are the QUALIFIER AGENT for a sales AI system.
@@ -588,19 +580,42 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   // The Qualifier no longer outputs handoff_human in next_action.
   // Handoff fires ONLY when the lead has explicitly confirmed enrollment.
   // Plus settings-based rules for payment disputes / legal threats.
+  //
+  // Settings.jsx exposes four toggles (handoffRules: payment, unanswered,
+  // legal, hotProposal — DEFAULT_RULES there is { payment: true,
+  // unanswered: true, legal: true, hotProposal: false }). Until now, only
+  // `payment` actually did anything: `legal` and `unanswered` were checked
+  // nowhere, and `hotProposal`'s notification fired unconditionally
+  // regardless of the toggle. A tenant could turn on "escalate on legal
+  // threat," believe it protected them, and it silently did nothing.
+  //
+  // buildEffectiveTriggers() above was apparently meant to drive this via a
+  // trigger-name list fed to the model, but was never called from anywhere —
+  // dead code. Superseded here by explicit regex rules matching the pattern
+  // `payment` already used successfully, rather than adding a new field to
+  // the Qualifier's JSON schema, which would risk diluting its classification
+  // quality on the fields the live pipeline already depends on. Deleted
+  // rather than left in place looking load-bearing when it isn't.
   const rules = aiConfig.handoffRules || {};
   let rulesHandoff = false;
   let rulesHandoffReason = null;
 
-  // Settings rule: payment disputes / refund requests → always human
-  if (rules.payment !== false) {
-    const msgLower = (newMessage || '').toLowerCase();
-    const paymentDispute = /refund|dispute|charge back|chargeback|payment.*fail|failed.*payment/.test(msgLower);
-    if (paymentDispute) {
-      rulesHandoff = true;
-      rulesHandoffReason = 'Payment dispute detected — human required';
-      logger.info({ leadId: lead.id }, '🛡 Rule: payment dispute → handoff');
-    }
+  // Settings rule: payment disputes / refund requests → always human.
+  // Previously English-only, in a product whose own Qualifier prompt treats
+  // Urdu/Roman-Urdu as first-class (see is_price_objection's own example
+  // list) — a lead disputing a charge in Urdu was invisible to this rule.
+  if (rules.payment !== false && detectPaymentDispute(newMessage)) {
+    rulesHandoff = true;
+    rulesHandoffReason = 'Payment dispute detected — human required';
+    logger.info({ leadId: lead.id }, '🛡 Rule: payment dispute → handoff');
+  }
+
+  // Settings rule: legal threats / consumer complaints → always human.
+  // Net new — this toggle existed in the UI and did nothing.
+  if (!rulesHandoff && rules.legal !== false && detectLegalThreat(newMessage)) {
+    rulesHandoff = true;
+    rulesHandoffReason = 'Legal threat or complaint detected — human required';
+    logger.info({ leadId: lead.id }, '🛡 Rule: legal threat → handoff');
   }
 
   // Primary gate: Qualifier (claude-sonnet-4-6) decides when enrollment is confirmed.
@@ -611,7 +626,15 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   const enrollmentConfirmed = !handedBackToAI && !isFirstReplyAfterWelcomeVoice && qualifierOutput.is_enrollment_confirmed === true;
   const forceHandoff = enrollmentConfirmed || rulesHandoff;
 
-  const humanFollowupRequired = qualifierOutput.score >= 8 || qualifierOutput.lead_status === 'HOT';
+  // hotProposal defaults to false in Settings.jsx (opt-in, unlike the other
+  // three rules which default true), but this notification previously fired
+  // unconditionally, ignoring the toggle entirely — every tenant got it
+  // whether they'd asked for it or not. Now respects the default: a tenant
+  // who never touched this setting stops getting the WhatsApp ping, and
+  // gets it back by explicitly turning it on. Flagged prominently in the PR
+  // description, not just this comment, since it changes default behavior.
+  const humanFollowupRequired =
+    (qualifierOutput.score >= 8 || qualifierOutput.lead_status === 'HOT') && rules.hotProposal === true;
 
   // ── 5. CLOSER ───────────────────────────────────────────────
   // Fetch admin-verified Q&As to inject into Closer's knowledge base
@@ -790,4 +813,6 @@ module.exports = {
   // exposed for direct use / testing
   runQualifier,
   runCloser,
+  detectPaymentDispute,
+  detectLegalThreat,
 };
