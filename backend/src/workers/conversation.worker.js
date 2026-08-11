@@ -14,9 +14,26 @@ const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
 const logger = require('../utils/logger');
+const { requestContext } = require('../middleware/requestContext.middleware');
 const { publishStatusUpdate } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
+
+// See server.js for the matching handlers and why they exist. concurrency:10
+// below means several unrelated jobs may be in flight when one throws
+// something BullMQ's own per-job try/catch never sees — that is by
+// definition a bug loose enough to have escaped every existing handler, and
+// Railway's restartPolicy (railway.toml, ON_FAILURE, 5 retries) is the
+// intended safety net for that, not staying up in an unknown state.
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Uncaught exception in worker — process exiting');
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.fatal({ err: reason }, 'Unhandled promise rejection in worker — process exiting');
+  process.exit(1);
+});
 
 // ─────────────────────────────────────────────────────────────────────
 // PER-CONVERSATION LOCK
@@ -880,10 +897,17 @@ const processStatusUpdate = async (job) => {
 
 const worker = new Worker(
   QUEUE_NAMES.MESSAGE_QUEUE,
-  async (job) => {
+  // Wrapped in the same AsyncLocalStorage the API's requestContext middleware
+  // uses, keyed by BullMQ's own job.id — every log line emitted while this
+  // job runs (across claude.service.js, whatsapp.service.js, etc., all of
+  // which just call the shared logger) picks it up automatically via
+  // utils/logger.js's mixin. Consistent field name (requestId) across the
+  // API and the worker on purpose, so a search doesn't need to know which
+  // process emitted a given line to find related ones.
+  (job) => requestContext.run({ requestId: job.id }, () => {
     if (job.name === 'inbound-message') return processInboundMessage(job);
     if (job.name === 'status-update')   return processStatusUpdate(job);
-  },
+  }),
   {
     connection: redis,
     concurrency: 10,         // Process up to 10 messages simultaneously

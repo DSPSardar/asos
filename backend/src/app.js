@@ -12,6 +12,7 @@ const rateLimit = require('express-rate-limit');
 const env = require('./config/env');
 const logger = require('./utils/logger');
 const { errorHandler, notFound } = require('./middleware/error.middleware');
+const { requestContextMiddleware } = require('./middleware/requestContext.middleware');
 
 // Route modules
 const authRoutes         = require('./modules/auth/auth.routes');
@@ -58,6 +59,11 @@ const createApp = () => {
 
   // Trust Apache/Nginx reverse proxy so X-Forwarded-For is used for rate limiting
   app.set('trust proxy', 1);
+
+  // Mounted before everything else so every log line for this request —
+  // including a CORS rejection or a rate-limit block below — carries the
+  // same requestId. See requestContext.middleware.js and utils/logger.js.
+  app.use(requestContextMiddleware);
 
   // ── Security headers
   app.use(helmet());
