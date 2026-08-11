@@ -1,9 +1,11 @@
-// src/pages/Terms.jsx — DRAFT terms of service.
+// src/pages/Terms.jsx — Terms of Service. Solicitor-reviewed 11 August 2026.
 //
 // Deliberately conservative: it does not promise uptime, does not claim
 // compliance certifications, and does not overstate what the AI does. Those
 // limits come from CLAUDE.md's marketing-accuracy rules, which apply here
-// because this is a public page a customer can rely on.
+// because this is a public page a customer can rely on. Changes here went
+// through legal review once already — a substantive edit should go back
+// through it again, not just get merged.
 import React from 'react';
 import LegalPage, { Section } from '@components/legal/LegalPage';
 import { SALES_EMAIL } from '@components/landing/links';

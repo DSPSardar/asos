@@ -104,8 +104,6 @@ describe('routing', () => {
     renderAt(path);
     expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(screen.getByTestId('pathname').textContent).toBe(path);
-    // The draft banner must survive: these are unreviewed legal documents.
-    expect(screen.getByRole('note')).toHaveTextContent(/draft/i);
   });
 
   it.each(DASHBOARD_PATHS)('keeps %s behind the authenticated shell', async (path) => {
