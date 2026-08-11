@@ -1,9 +1,11 @@
-// src/pages/Privacy.jsx — DRAFT privacy policy.
+// src/pages/Privacy.jsx — Privacy Policy. Solicitor-reviewed 11 August 2026.
 //
 // Written against what the code actually does, not from a template. The
 // processor list below was taken from the outbound hosts in backend/src and
 // the keys validated in backend/src/config/env.js. If you add a service that
-// receives customer data, add it here in the same commit.
+// receives customer data, add it here in the same commit — the review
+// covered this list as of the date above, so a new processor needs the same
+// scrutiny, not just a silent addition.
 import React from 'react';
 import LegalPage, { Section } from '@components/legal/LegalPage';
 import { SALES_EMAIL } from '@components/landing/links';
