@@ -1,7 +1,14 @@
 // src/modules/dev/dev.routes.js
-// DEV-ONLY endpoints — only mounted when WHATSAPP_MOCK=true
-// Allows injecting fake inbound WhatsApp messages to test the full AI pipeline
-// without a real Meta webhook.
+// DEV-ONLY endpoints — only mounted when WHATSAPP_MOCK=true AND NODE_ENV is
+// not 'production' (see app.js). Allows injecting fake inbound WhatsApp
+// messages to test the full AI pipeline without a real Meta webhook.
+//
+// Second layer of defense: authenticate() below. These endpoints let the
+// caller enumerate every tenant's id and inject a message into any of them —
+// that must never be reachable by an anonymous request, even on a NODE_ENV
+// that technically isn't 'production' (a shared staging box, for instance).
+// A developer using this locally is already logged into the dashboard, so
+// this costs them nothing.
 
 const express = require('express');
 const router = express.Router();
@@ -9,6 +16,9 @@ const { z } = require('zod');
 const { publishInboundMessage } = require('../../queues/message.queue');
 const prisma = require('../../config/database');
 const logger = require('../../utils/logger');
+const { authenticate } = require('../../middleware/auth.middleware');
+
+router.use(authenticate);
 
 const injectSchema = z.object({
   tenantId: z.string().uuid(),

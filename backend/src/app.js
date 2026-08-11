@@ -30,8 +30,28 @@ const contentStudioRoutes = require('./modules/content-studio/content-studio.rou
 const reportsRoutes = require('./modules/reports/reports.routes');
 const webhookRoutes      = require('./webhooks/webhook.routes');
 const twilioVoiceWebhook = require('./webhooks/twilio.webhook');
-// Dev-only routes (mounted only when WHATSAPP_MOCK=true)
-const devRoutes = env.WHATSAPP_MOCK === 'true' ? require('./modules/dev/dev.routes') : null;
+// Dev-only routes: inject fake inbound WhatsApp messages into any tenant's
+// pipeline by tenantId, and list every tenant's id to make that easy.
+// Historically gated on WHATSAPP_MOCK=true alone, with no NODE_ENV check and
+// no authentication on the routes themselves — a single accidentally-flipped
+// env var in production would have exposed tenant enumeration and message
+// injection to anyone, unauthenticated. NODE_ENV is now checked here as the
+// primary gate (a dev tool must never be reachable in production, full stop,
+// regardless of any other flag); dev.routes.js also now requires a valid
+// session as defense-in-depth, in case this file is ever mounted somewhere
+// NODE_ENV isn't 'production' but is still reachable by more than the
+// developer running it locally (e.g. a shared staging environment).
+const devRoutes = (env.WHATSAPP_MOCK === 'true' && env.NODE_ENV !== 'production')
+  ? require('./modules/dev/dev.routes')
+  : null;
+
+if (env.WHATSAPP_MOCK === 'true' && env.NODE_ENV === 'production') {
+  logger.error(
+    'WHATSAPP_MOCK=true is set in a production environment — dev routes were ' +
+    'NOT mounted (NODE_ENV gate), but this variable should not be set here. ' +
+    'Unset WHATSAPP_MOCK in this environment\'s variables.'
+  );
+}
 
 const createApp = () => {
   const app = express();
