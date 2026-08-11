@@ -1,4 +1,10 @@
 // src/main.jsx — Vite app entry point
+
+// Imported first, before React or anything that could render, so Sentry is
+// listening before the app does anything that might throw. See
+// src/instrument.js.
+import Sentry from './instrument';
+
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -11,6 +17,12 @@ import './index.css';
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(e) { return { error: e }; }
+  // Reports to Sentry in addition to rendering the fallback below — a
+  // render-time error here would otherwise be visible only as a blank
+  // screen a user complains about, with nothing in any log to explain it.
+  componentDidCatch(error, info) {
+    Sentry.captureException(error, { extra: { componentStack: info?.componentStack } });
+  }
   render() {
     if (this.state.error) {
       return (

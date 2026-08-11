@@ -36,6 +36,17 @@ ARG VITE_BANK_ACCOUNT_NUMBER
 ARG VITE_BANK_IBAN
 ARG VITE_BANK_BRANCH
 ARG VITE_BANK_BRANCH_CODE
+ARG VITE_SENTRY_DSN
+
+# RAILWAY_GIT_COMMIT_SHA is Railway's own automatically-provided variable
+# (docs.railway.com/variables/reference#git-variables), not one set by hand
+# in the dashboard — but it is subject to the exact same rule as every other
+# variable above: Railway does not forward it into a Dockerfile build unless
+# it's declared with ARG here too. Remapped to a VITE_-prefixed name via ENV
+# because Vite only bakes import.meta.env values whose name actually starts
+# with VITE_; the source variable's name does not.
+ARG RAILWAY_GIT_COMMIT_SHA
+ENV VITE_APP_VERSION=$RAILWAY_GIT_COMMIT_SHA
 
 RUN npm run build
 EXPOSE 3000

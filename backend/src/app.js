@@ -9,6 +9,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const Sentry = require('@sentry/node');
 const env = require('./config/env');
 const logger = require('./utils/logger');
 const { errorHandler, notFound } = require('./middleware/error.middleware');
@@ -175,6 +176,27 @@ const createApp = () => {
 
   // ── 404 + Error handlers (must be last)
   app.use(notFound);
+
+  // Sentry's handler must sit between notFound and the app's own
+  // errorHandler: it inspects/reports whatever reaches it via next(err),
+  // then calls next(err) itself so errorHandler below still runs unchanged
+  // and shapes the JSON response exactly as before — this only adds
+  // reporting, nothing about the response changes.
+  //
+  // shouldHandleError excludes routine 4xx the app throws on purpose
+  // (bad credentials, "lead not found" after a tenant check, validation
+  // errors — anything with `expose: true` and a sub-500 statusCode). Kept
+  // in sync with instrument.js's beforeSend, which applies the same rule
+  // for errors this handler never even sees (e.g. from outside Express's
+  // own middleware chain). Without this, Sentry would open a new "issue"
+  // for every mistyped password — that is not what an error tracker is for,
+  // and it would drown out the incidents actually worth looking at.
+  Sentry.setupExpressErrorHandler(app, {
+    shouldHandleError(error) {
+      return !(error?.expose && Number(error?.statusCode) < 500);
+    },
+  });
+
   app.use(errorHandler);
 
   return app;
