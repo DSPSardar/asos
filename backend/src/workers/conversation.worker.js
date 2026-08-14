@@ -461,11 +461,68 @@ const handleInboundMessage = async (job) => {
   }
 
   if (isCandidateProof && messageType === 'image' && !isPaymentProof) {
-    // Classified as NOT a receipt: don't touch conversation/lead state and
-    // don't send the "payment received" ack. Fall through to the normal
-    // Qualifier/Closer pipeline below so the lead gets a real reply about
-    // whatever they actually sent (e.g. "that's the refund policy, not a
-    // receipt — could you send the bank transfer screenshot instead?").
+    const classificationFailed = imageClassification?.reason === 'classification_failed';
+
+    if (classificationFailed) {
+      // We genuinely don't know what this image is — the vision call itself
+      // errored (network, rate limit, model outage), not "the model looked
+      // and it wasn't a receipt." Falling through to the normal Closer here
+      // was the actual bug behind the incident this branch is named after:
+      // the Closer would generate its own reassuring "verifying, please
+      // wait" reply from the payment-instructions system prompt language,
+      // with no real verification happening and no one ever notified —
+      // worse than either genuine outcome, because it tells the customer
+      // something false while telling the admin nothing at all. Escalate
+      // to human review exactly like a confirmed receipt would, just with
+      // an honest message and a distinguishable reason so the dashboard
+      // shows this wasn't actually confirmed.
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          status: 'PENDING_VERIFICATION',
+          aiEnabled: false,
+          handoffReason: 'Payment image could not be auto-verified (classification failed) — please check manually',
+        },
+      });
+
+      const ackMessage = tenant.aiConfig?.paymentProofMessage?.trim()
+        || "Thank you for the screenshot! I'm having a little trouble verifying it automatically, but our team will check it and confirm your seat shortly. 🙏";
+
+      await sendAndSaveReply({
+        tenant, conversation, tenantId,
+        phone: normalizedPhone,
+        content: ackMessage,
+        tokensUsed: 0,
+        rawResponse: null,
+      });
+
+      await prisma.activity.create({
+        data: {
+          tenantId,
+          leadId: lead.id,
+          type: 'AI_ACTION',
+          content: '⚠️ Payment image could not be auto-verified — escalated for manual check',
+          metadata: { flag: 'payment_proof_classification_failed', messageType, waMessageId },
+        },
+      });
+
+      notificationService.notifyAdmin(tenant, 'needsHuman', {
+        contactName: contact.name,
+        phone: normalizedPhone,
+        reason: "Payment image sent but couldn't be auto-verified — please check manually",
+      });
+
+      logger.info({ leadId: lead.id, conversationId: conversation.id },
+        '⚠️ Payment-proof classification failed — AI paused, awaiting manual check');
+      return;
+    }
+
+    // Confident rejection (the model actually looked and it isn't a
+    // receipt): don't touch conversation/lead state and don't send the
+    // "payment received" ack. Fall through to the normal Qualifier/Closer
+    // pipeline below so the lead gets a real reply about whatever they
+    // actually sent (e.g. "that's the refund policy, not a receipt — could
+    // you send the bank transfer screenshot instead?").
     await prisma.activity.create({
       data: {
         tenantId,
