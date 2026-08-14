@@ -13,7 +13,8 @@ const Sentry = require('@sentry/node');
 const env = require('./config/env');
 const logger = require('./utils/logger');
 const { errorHandler, notFound } = require('./middleware/error.middleware');
-const { requestContextMiddleware } = require('./middleware/requestContext.middleware');
+const { requestContextMiddleware, runWithSystemScope } = require('./middleware/requestContext.middleware');
+const prisma = require('./config/database');
 
 // Route modules
 const authRoutes         = require('./modules/auth/auth.routes');
@@ -143,6 +144,38 @@ const createApp = () => {
   // This static middleware covers dev and acts as a fallback.
   const uploadsPath = require('path').resolve(process.cwd(), 'uploads');
   app.use('/uploads', express.static(uploadsPath, { maxAge: '365d', immutable: true }));
+
+  // ── Serve inbound WhatsApp media (stored in Postgres, not local disk)
+  // See InboundMedia in schema.prisma and saveInboundMedia() in
+  // whatsapp.service.js for why: the container that downloads this media
+  // (asos-worker) and the one serving it (this service) don't share a
+  // filesystem, so the bytes live in the one place both can reach.
+  //
+  // Deliberately unauthenticated, matching the /uploads mount above — an
+  // <img src="..."> tag in the dashboard can't attach an Authorization
+  // header, so this can only ever be as protected as the id is hard to
+  // guess (a random UUID), the same model /uploads/inbound-media/<tenant>/
+  // <uuid>.<ext> already used. runWithSystemScope is required here because
+  // there is no authenticated tenant on this request for Postgres RLS to
+  // key off of — see requestContext.middleware.js.
+  app.get('/media/:id', async (req, res) => {
+    try {
+      const row = await runWithSystemScope(() =>
+        prisma.inboundMedia.findUnique({
+          where: { id: req.params.id },
+          select: { data: true, mimeType: true },
+        })
+      );
+      if (!row) return res.status(404).json({ success: false, message: 'Not found' });
+
+      res.setHeader('Content-Type', row.mimeType || 'application/octet-stream');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.send(row.data);
+    } catch (err) {
+      logger.warn({ err: err.message, mediaId: req.params.id }, 'Failed to serve inbound media');
+      res.status(500).json({ success: false, message: 'Failed to load media' });
+    }
+  });
 
   // ── Health check
   app.get('/health', (req, res) => res.json({

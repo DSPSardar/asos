@@ -173,6 +173,7 @@ model Tenant {
   messages        Message[]
   campaigns       Campaign[]
   activities      Activity[]
+  inboundMedia    InboundMedia[]
   aiConfig        AiConfig?
   subscription    Subscription?
   adsTracking     AdsTracking[]
@@ -357,6 +358,27 @@ model Conversation {
 // ─────────────────────────────────────────────
 // MESSAGES — Every WA message in/out
 // ─────────────────────────────────────────────
+
+// Bytes of inbound WhatsApp media (images/video/documents), stored in
+// Postgres rather than on a container's local disk. Railway's `asos`
+// (serves this data) and `asos-worker` (downloads and writes it) are
+// separate containers with separate, non-persistent filesystems — a file
+// written by one is invisible to (and never durable on) the other. Storing
+// the bytes in the database sidesteps that entirely: any service instance
+// can read them, and they survive redeploys. See saveInboundMedia() in
+// whatsapp.service.js and the GET /media/:id route in app.js.
+model InboundMedia {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  mimeType  String   @map("mime_type")
+  data      Bytes
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("inbound_media")
+}
 
 model Message {
   id               String           @id @default(uuid())

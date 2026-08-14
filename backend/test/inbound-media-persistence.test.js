@@ -1,18 +1,23 @@
 // test/inbound-media-persistence.test.js
 //
-// Regression guard for the other half of the reported bug: the Conversations
-// dashboard showed the literal text "[Image]" instead of the photo a student
-// sent, because no code path ever downloaded the media or stored a URL for
-// it. saveInboundMedia() is the fix — this exercises the real function
-// (not a reimplementation) against a stubbed 'axios' so it never leaves
-// this machine, and then checks the actual file it wrote on disk.
+// Regression guard for the "[Image]" placeholder bug, updated for the fix's
+// second iteration. The first version of this fix wrote inbound media to
+// local disk — which turned out to be broken in production: Railway's
+// `asos` (serves media) and `asos-worker` (downloads it) are separate
+// containers with separate, non-persistent filesystems, so a file the
+// worker wrote was invisible to the service actually serving it, and
+// wouldn't have survived a redeploy either way. This version stores the
+// bytes in Postgres (InboundMedia) instead, which any service instance can
+// read and which persists across deploys like every other table.
+//
+// This exercises the real saveInboundMedia() (not a reimplementation)
+// against a stubbed 'axios' (Meta's media API) and a stubbed '@prisma/client'
+// so nothing leaves this machine, then checks it round-trips through a
+// fetch-by-id the way GET /media/:id in app.js actually does it.
 'use strict';
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
 const Module = require('module');
 
 process.env.DATABASE_URL ||= 'postgresql://user:pass@localhost:5432/db';
@@ -23,24 +28,41 @@ process.env.OPENAI_API_KEY ||= 'sk-test';
 const FAKE_JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 const fakeTenant = { id: 'test-tenant-id', waPhoneId: '123', waAccessToken: 'plain-test-token' };
 
-test('downloads and persists an inbound image, returning a usable mediaUrl', async (t) => {
-  // Run inside a scratch cwd so the function's process.cwd()-relative
-  // 'uploads/' write lands somewhere disposable, not in the repo checkout.
-  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asos-media-test-'));
-  const originalCwd = process.cwd();
-  process.chdir(scratchDir);
+// In-memory stand-in for the inbound_media table, shared by the stubbed
+// prisma client's create/findUnique so the test can prove a real round trip
+// (write via saveInboundMedia, read via the same shape app.js's route uses)
+// rather than just asserting on the write in isolation.
+function makeFakeDatabaseModule() {
+  const rows = new Map();
+  const fakePrisma = {
+    inboundMedia: {
+      create: async ({ data }) => {
+        const id = `fake-media-id-${rows.size + 1}`;
+        rows.set(id, { id, ...data });
+        return { id };
+      },
+      findUnique: async ({ where: { id }, select }) => {
+        const row = rows.get(id);
+        if (!row) return null;
+        if (!select) return row;
+        const out = {};
+        for (const key of Object.keys(select)) if (select[key]) out[key] = row[key];
+        return out;
+      },
+    },
+  };
+  return { fakePrisma, __rows: rows };
+}
 
+test('downloads inbound media and persists it to Postgres, returning a usable /media/<id> url', async (t) => {
   const originalLoad = Module._load;
+  const { fakePrisma, __rows } = makeFakeDatabaseModule();
+
   Module._load = function (request, parent, isMain) {
+    if (request === '../config/database') return fakePrisma;
     if (request === 'axios') {
       return {
-        get: async (url, config) => {
-          // Two distinct axios.get calls happen in sequence inside the real
-          // downloadMedia(): first the Graph API media-lookup (by mediaId),
-          // then a fetch of the temporary signed URL it returns. Match each
-          // by exact URL so a suffix collision can't route the wrong
-          // response to the wrong call (the earlier version of this test
-          // had exactly that bug).
+        get: async (url) => {
           if (url === 'https://graph.facebook.com/v20.0/test-media-id') {
             return { data: { url: 'https://fake-media-cdn.example/blob-abc123' } };
           }
@@ -57,37 +79,39 @@ test('downloads and persists an inbound image, returning a usable mediaUrl', asy
 
   t.after(() => {
     Module._load = originalLoad;
-    process.chdir(originalCwd);
-    fs.rmSync(scratchDir, { recursive: true, force: true });
     delete require.cache[require.resolve('../src/services/whatsapp.service')];
+    delete require.cache[require.resolve('../src/config/database')];
   });
 
   delete require.cache[require.resolve('../src/services/whatsapp.service')];
+  delete require.cache[require.resolve('../src/config/database')];
   const whatsappService = require('../src/services/whatsapp.service');
 
-  const result = await whatsappService.saveInboundMedia(fakeTenant, 'test-media-id', { messageType: 'image' });
+  const result = await whatsappService.saveInboundMedia(fakeTenant, 'test-media-id');
 
   assert.ok(result, 'saveInboundMedia should not return null on a successful download');
-  assert.match(result.url, /^\/uploads\/inbound-media\/test-tenant-id\/[0-9a-f-]+\.jpg$/,
-    'mediaUrl should follow the documented /uploads/inbound-media/<tenantId>/<uuid>.<ext> shape');
+  assert.match(result.url, /^\/media\/fake-media-id-\d+$/, "mediaUrl should be the /media/<id> shape app.js's route serves");
   assert.equal(result.mimeType, 'image/jpeg');
   assert.ok(result.buffer.equals(FAKE_JPEG_BYTES), 'returned buffer should be the exact downloaded bytes');
 
-  // The actual point of this fix: the file must really be on disk at the
-  // path the frontend's resolveUploadUrl()/express.static('/uploads') will
-  // be asked to serve — not just an in-memory object.
-  const diskPath = path.join(scratchDir, result.url);
-  assert.ok(fs.existsSync(diskPath), `file should exist on disk at ${diskPath}`);
-  assert.ok(fs.readFileSync(diskPath).equals(FAKE_JPEG_BYTES), 'file on disk should match the downloaded bytes exactly');
+  // The point of this fix: prove the write is readable back by id — the
+  // same lookup GET /media/:id performs — not just that .create() was
+  // called with the right shape.
+  const rowId = result.url.replace('/media/', '');
+  const stored = __rows.get(rowId);
+  assert.ok(stored, 'a row should exist in the (fake) inbound_media table for this id');
+  assert.equal(stored.tenantId, 'test-tenant-id');
+  assert.equal(stored.mimeType, 'image/jpeg');
+  assert.ok(Buffer.isBuffer(stored.data) ? stored.data.equals(FAKE_JPEG_BYTES) : stored.data === FAKE_JPEG_BYTES,
+    'the bytes stored under this id should match what was downloaded');
 });
 
 test('returns null (not a throw) when the Meta media lookup fails, so the caller can fall back to text-only', async (t) => {
-  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'asos-media-test-'));
-  const originalCwd = process.cwd();
-  process.chdir(scratchDir);
-
   const originalLoad = Module._load;
+  const { fakePrisma, __rows } = makeFakeDatabaseModule();
+
   Module._load = function (request, parent, isMain) {
+    if (request === '../config/database') return fakePrisma;
     if (request === 'axios') {
       return {
         get: async () => { throw new Error('simulated Meta API failure'); },
@@ -99,14 +123,15 @@ test('returns null (not a throw) when the Meta media lookup fails, so the caller
 
   t.after(() => {
     Module._load = originalLoad;
-    process.chdir(originalCwd);
-    fs.rmSync(scratchDir, { recursive: true, force: true });
     delete require.cache[require.resolve('../src/services/whatsapp.service')];
+    delete require.cache[require.resolve('../src/config/database')];
   });
 
   delete require.cache[require.resolve('../src/services/whatsapp.service')];
+  delete require.cache[require.resolve('../src/config/database')];
   const whatsappService = require('../src/services/whatsapp.service');
 
-  const result = await whatsappService.saveInboundMedia(fakeTenant, 'bad-media-id', { messageType: 'image' });
+  const result = await whatsappService.saveInboundMedia(fakeTenant, 'bad-media-id');
   assert.equal(result, null);
+  assert.equal(__rows.size, 0, 'no row should be created when the download itself failed');
 });
