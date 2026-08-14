@@ -143,7 +143,13 @@ const createApp = () => {
   // In production nginx serves /uploads/ directly from the shared Docker volume.
   // This static middleware covers dev and acts as a fallback.
   const uploadsPath = require('path').resolve(process.cwd(), 'uploads');
-  app.use('/uploads', express.static(uploadsPath, { maxAge: '365d', immutable: true }));
+  app.use('/uploads', (req, res, next) => {
+    // Same Helmet CORP fix as /media/:id below — this mount predates that
+    // route and has the identical latent bug for any content-studio image
+    // ever embedded cross-subdomain from the dashboard.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  }, express.static(uploadsPath, { maxAge: '365d', immutable: true }));
 
   // ── Serve inbound WhatsApp media (stored in Postgres, not local disk)
   // See InboundMedia in schema.prisma and saveInboundMedia() in
@@ -168,6 +174,15 @@ const createApp = () => {
       );
       if (!row) return res.status(404).json({ success: false, message: 'Not found' });
 
+      // Helmet's default Cross-Origin-Resource-Policy: same-origin blocks
+      // this from loading as an <img> from the dashboard's origin (a
+      // different subdomain than the API) even though the response itself
+      // is fine — CORP is enforced by the browser independently of the CORS
+      // allow-list above, and direct navigation to the URL doesn't exercise
+      // it at all, which is exactly why this slipped through manual
+      // testing the first time. Explicitly widen it for this one route
+      // rather than turning it off app-wide.
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       res.setHeader('Content-Type', row.mimeType || 'application/octet-stream');
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       res.send(row.data);
