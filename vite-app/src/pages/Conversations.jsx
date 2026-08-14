@@ -1,6 +1,6 @@
 // src/pages/Conversations.jsx — WhatsApp-style two-pane conversations view (live API)
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { conversationsAPI, settingsAPI } from '@lib/api';
+import { conversationsAPI, settingsAPI, resolveUploadUrl } from '@lib/api';
 
 // ─────────────────────────────────────────────────────────────
 // Style maps (covers both real DB stages and legacy labels)
@@ -83,6 +83,7 @@ function mapMessage(msg) {
     from,
     text: msg.content || '',
     type: msg.type || 'TEXT',
+    mediaUrl: msg.mediaUrl || null,
     ts:   formatTime(msg.sentAt),
     raw:  msg,
   };
@@ -804,6 +805,53 @@ function MessageBubble({ m }) {
           <span aria-hidden="true">🎤</span>
           <span>Voice note sent</span>
           <span className="tabular-nums text-slate-500">{m.ts}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Inbound (or any) image/document/video with a persisted file — show the
+  // actual media, not the placeholder text. Older messages sent before this
+  // fix have no mediaUrl (never downloaded), so they still fall through to
+  // the plain-text bubble below rather than a broken image.
+  if (m.mediaUrl && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(m.type)) {
+    const src = resolveUploadUrl(m.mediaUrl);
+    return (
+      <div className={`flex w-full ${incoming ? 'justify-start' : 'justify-end'}`}>
+        <div className={`flex max-w-[78%] flex-col ${incoming ? 'items-start' : 'items-end'}`}>
+          <div
+            className={`overflow-hidden rounded-2xl shadow-sm ${
+              incoming ? 'rounded-tl-sm' : 'rounded-tr-sm'
+            }`}
+          >
+            {m.type === 'IMAGE' && (
+              <a href={src} target="_blank" rel="noreferrer">
+                <img src={src} alt="Shared image" className="block max-h-80 w-full object-cover" loading="lazy" />
+              </a>
+            )}
+            {m.type === 'VIDEO' && (
+              <video src={src} controls className="block max-h-80 max-w-full" />
+            )}
+            {m.type === 'DOCUMENT' && (
+              <a
+                href={src}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 bg-surface2/80 px-3.5 py-2.5 text-[13.5px] text-slate-100 hover:bg-surface2"
+              >
+                <span aria-hidden="true">📄</span>
+                <span className="truncate">{m.text || 'Document'}</span>
+              </a>
+            )}
+          </div>
+          {m.text && m.type === 'IMAGE' && (
+            <div className="mt-1 max-w-full whitespace-pre-line px-1 text-[12.5px] text-slate-300">{m.text}</div>
+          )}
+          <div className="mt-1 flex items-center gap-1.5 px-1 text-[10px] text-slate-500">
+            {ai             && <span className="rounded bg-accent/15 px-1 py-px font-semibold text-accent">AI</span>}
+            {!incoming && !ai && <span className="rounded bg-violet-300/15 px-1 py-px font-semibold text-violet-300">You</span>}
+            <span className="tabular-nums">{m.ts}</span>
+          </div>
         </div>
       </div>
     );

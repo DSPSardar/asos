@@ -2,6 +2,9 @@
 // WhatsApp Cloud API (Meta) — send messages, handle media
 
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const { randomUUID } = require('crypto');
 const env = require('../config/env');
 const logger = require('../utils/logger');
 const { decrypt } = require('../utils/crypto');
@@ -253,6 +256,60 @@ const downloadMedia = async (tenant, mediaId) => {
   }
 };
 
+// ── Persist inbound media to disk, permanently ─────────────────────────
+// Meta's media URL from getMediaUrl() is a short-lived signed link (good for
+// minutes), so it can never be stored as-is on a message row — by the time
+// anyone opens the conversation it would already be expired. This downloads
+// the bytes once via downloadMedia() and writes them to the same local
+// uploads volume the content-studio images already use (see
+// content-studio.service.js), so inbound photos/documents/videos become a
+// permanent, self-hosted `/uploads/...` path — same pattern, own subfolder
+// so a bad actor abusing one tenant's inbound media can't collide with
+// another tenant's files.
+//
+// Returns the relative path (e.g. `/uploads/inbound-media/<tenantId>/<uuid>.jpg`)
+// to store on Message.mediaUrl, or null if the download failed — callers
+// must treat null as "no media persisted" and fall back to text-only,
+// never as a reason to throw and drop the inbound message.
+
+const EXT_BY_MIME = {
+  'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
+  'video/mp4': 'mp4', 'video/3gpp': '3gp',
+  'application/pdf': 'pdf',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+};
+
+// Returns { url, buffer, mimeType } on success — the caller gets both the
+// permanent path to store AND the raw bytes it already had to download, so a
+// second caller (e.g. payment-proof image classification) never triggers a
+// second Meta round trip for the same media id. Returns null on failure.
+const saveInboundMedia = async (tenant, mediaId, { messageType, filenameHint } = {}) => {
+  const media = await downloadMedia(tenant, mediaId);
+  if (!media) return null;
+
+  try {
+    const inferredExt = EXT_BY_MIME[media.mimeType]
+      || (filenameHint && path.extname(filenameHint).replace('.', ''))
+      || (messageType === 'image' ? 'jpg' : 'bin');
+
+    const dir = path.resolve(process.cwd(), 'uploads', 'inbound-media', tenant.id);
+    fs.mkdirSync(dir, { recursive: true });
+
+    const filename = `${randomUUID()}.${inferredExt}`;
+    fs.writeFileSync(path.join(dir, filename), media.buffer);
+
+    const rel = `/uploads/inbound-media/${tenant.id}/${filename}`;
+    logger.info({ tenantId: tenant.id, mediaId, mimeType: media.mimeType, bytes: media.buffer.length, path: rel }, 'Inbound WA media saved to disk');
+    return { url: rel, buffer: media.buffer, mimeType: media.mimeType };
+  } catch (err) {
+    logger.warn({ err: err.message, tenantId: tenant.id, mediaId }, 'Failed to persist inbound WA media to disk');
+    return null;
+  }
+};
+
 // ── Parse incoming webhook message ───────────────────────────────────
 
 const parseInboundMessage = (webhookBody) => {
@@ -398,6 +455,7 @@ module.exports = {
   markAsRead,
   getMediaUrl,
   downloadMedia,
+  saveInboundMedia,
   parseInboundMessage,
   verifySignature,
   verifyCredentials,

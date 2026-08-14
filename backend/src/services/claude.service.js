@@ -788,6 +788,57 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
 };
 
 // =====================================================================
+// PAYMENT PROOF IMAGE CLASSIFICATION
+// =====================================================================
+// The worker's payment-proof branch used to trust `messageType === 'image'`
+// alone (see conversation.worker.js §6c) — any photo sent after payment
+// instructions went out got auto-confirmed as "payment received," including
+// unrelated screenshots (refund-policy text, ID cards, memes). This is the
+// one real content check in that path: a small, cheap, single-purpose vision
+// call that answers exactly one question — does this image look like a bank
+// transfer / payment receipt? — before the worker is allowed to send a
+// confirmation the lead will read as "you're enrolled."
+//
+// Fails CLOSED on purpose: if the vision call errors out (bad key, timeout,
+// model outage) this returns isPaymentProof: false rather than silently
+// falling back to the old "trust the message type" behavior — a missed
+// auto-confirmation just means a human verifies it a little sooner, whereas
+// a wrong auto-confirmation is the actual incident this exists to prevent.
+
+const classifyPaymentProofImage = async (buffer, mimeType) => {
+  try {
+    const base64 = buffer.toString('base64');
+    const res = await client.chat.completions.create({
+      model: env.OPENAI_MODEL,
+      max_tokens: 120,
+      messages: [
+        {
+          role: 'system',
+          content: 'You classify a single WhatsApp image. Reply with strict JSON only: {"isPaymentProof": boolean, "reason": string}. isPaymentProof is true ONLY if the image is a bank transfer receipt, payment app confirmation screen, or transaction screenshot showing an amount and a date/reference number. It is false for anything else — policy text, chat screenshots, ID cards/documents, unrelated photos — even if money-related words appear in it.',
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Classify this image.' },
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+          ],
+        },
+      ],
+      response_format: { type: 'json_object' },
+    });
+
+    const parsed = JSON.parse(res.choices?.[0]?.message?.content || '{}');
+    return {
+      isPaymentProof: parsed.isPaymentProof === true,
+      reason: parsed.reason || null,
+    };
+  } catch (err) {
+    logger.warn({ err: err.message }, 'Payment-proof image classification failed — treating as not-proof (fail closed)');
+    return { isPaymentProof: false, reason: 'classification_failed' };
+  }
+};
+
+// =====================================================================
 // SUMMARY (unchanged from v1 — used by Conversations page)
 // =====================================================================
 
@@ -815,4 +866,5 @@ module.exports = {
   runCloser,
   detectPaymentDispute,
   detectLegalThreat,
+  classifyPaymentProofImage,
 };

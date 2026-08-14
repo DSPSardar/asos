@@ -159,6 +159,20 @@ const handleInboundMessage = async (job) => {
     content = transcript || '[Voice message — could not transcribe]';
   }
 
+  // ── 1c. Persist inbound image/document/video to disk ──────────────
+  // extractMessageContent() only ever gives the AI (and the conversation
+  // view) a placeholder string like "[Image]" — there was never a URL for
+  // the dashboard to render. Download once here and keep the real file so
+  // the message row can carry a permanent mediaUrl instead of just text.
+  // Best-effort: a failed download still leaves the placeholder content and
+  // the message continues through the normal pipeline below.
+  let mediaUrl = null;
+  let savedMedia = null;
+  if (['image', 'video', 'document'].includes(messageType) && mediaId) {
+    savedMedia = await whatsappService.saveInboundMedia(tenant, mediaId, { messageType });
+    mediaUrl = savedMedia?.url || null;
+  }
+
   // ── 2. Mark message as read (async, non-blocking) ─────────────────
   whatsappService.markAsRead(tenant, waMessageId).catch(() => {});
 
@@ -342,6 +356,7 @@ const handleInboundMessage = async (job) => {
       sender: 'CONTACT',
       type: messageType?.toUpperCase() || 'TEXT',
       content: content || null,
+      mediaUrl,
       status: 'DELIVERED',
       sentAt: timestamp ? new Date(parseInt(timestamp) * 1000) : new Date(),
     },
@@ -410,16 +425,57 @@ const handleInboundMessage = async (job) => {
   }
 
   // ── 6c. Payment proof ─────────────────────────────────────────────
-  // A payment screenshot reaches the AI as the literal string "[Image]" —
-  // there is nothing in it for a model to reason about, so this is decided in
-  // code, not by the Closer. Guarded by paymentDetailsSentAt: an image only
-  // counts as proof if we actually asked this lead to pay, otherwise any photo
-  // (an ad screenshot, a CV, a meme) would mark them as paid.
+  // A payment screenshot used to reach the AI as the literal string "[Image]"
+  // and this branch decided proof-or-not purely from messageType + timing —
+  // no one and nothing ever looked at the picture. Observed in production:
+  // a lead sent a screenshot of the refund policy (not a receipt) after
+  // payment details had gone out, and got told "payment received, seat
+  // confirmed" anyway. Guarded by paymentDetailsSentAt: an image only even
+  // gets *considered* proof if we actually asked this lead to pay — but from
+  // here on, an image additionally has to pass classifyPaymentProofImage()
+  // before it's allowed to auto-confirm anything.
+  //
+  // Documents (PDF receipts etc.) have no cheap vision check available here
+  // and keep the previous type+timing behavior — this fix targets the
+  // specific failure that was observed and reported (image, not document).
   const PROOF_MESSAGE_TYPES = ['image', 'document'];
-  const isPaymentProof =
+  const isCandidateProof =
     PROOF_MESSAGE_TYPES.includes((messageType || '').toLowerCase()) &&
     !!conversation.paymentDetailsSentAt &&
     !conversation.paymentProofDetected;
+
+  let isPaymentProof = isCandidateProof && messageType !== 'image';
+  let imageClassification = null;
+
+  if (isCandidateProof && messageType === 'image') {
+    if (savedMedia?.buffer) {
+      imageClassification = await claudeService.classifyPaymentProofImage(savedMedia.buffer, savedMedia.mimeType);
+      isPaymentProof = imageClassification.isPaymentProof;
+      logger.info({ conversationId: conversation.id, ...imageClassification }, '🖼️ Payment-proof image classified');
+    } else {
+      // Image failed to download — nothing to classify. Fail closed (same
+      // rationale as classifyPaymentProofImage itself): don't auto-confirm
+      // a payment no one actually looked at.
+      logger.warn({ conversationId: conversation.id, mediaId }, 'Payment-proof candidate image had no downloadable buffer — treating as not-proof');
+    }
+  }
+
+  if (isCandidateProof && messageType === 'image' && !isPaymentProof) {
+    // Classified as NOT a receipt: don't touch conversation/lead state and
+    // don't send the "payment received" ack. Fall through to the normal
+    // Qualifier/Closer pipeline below so the lead gets a real reply about
+    // whatever they actually sent (e.g. "that's the refund policy, not a
+    // receipt — could you send the bank transfer screenshot instead?").
+    await prisma.activity.create({
+      data: {
+        tenantId,
+        leadId: lead.id,
+        type: 'AI_ACTION',
+        content: '🖼️ Image received after payment instructions, but did not look like a receipt — not auto-confirmed',
+        metadata: { flag: 'payment_proof_rejected', messageType, waMessageId, reason: imageClassification?.reason || null },
+      },
+    });
+  }
 
   if (isPaymentProof) {
     await prisma.conversation.update({
