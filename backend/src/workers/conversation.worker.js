@@ -18,6 +18,7 @@ const elevenlabsService = require('../services/elevenlabs.service');
 const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
+const { toDbMessageType } = require('../utils/messageType');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
 const { publishStatusUpdate } = require('../queues/message.queue');
@@ -347,6 +348,15 @@ const handleInboundMessage = async (job) => {
   // Reuse the stored row on replay: inserting a second copy would duplicate
   // the lead's question in the transcript, and the AI would then read a
   // conversation where it was asked the same thing twice.
+  //
+  // toDbMessageType() guards against WhatsApp event types the database
+  // enum has no room for (reaction, location, button, sticker, video,
+  // etc.) — see utils/messageType.js for why this exists: an unguarded
+  // write here was the confirmed cause of leads going unanswered after
+  // sending an emoji reaction (2026-08-14, "Invalid value for argument
+  // `type`. Expected MessageType." crashing the job on every retry).
+  const dbMessageType = toDbMessageType(messageType);
+
   const inboundMessage = existingInbound || await prisma.message.create({
     data: {
       tenantId,
@@ -354,7 +364,7 @@ const handleInboundMessage = async (job) => {
       waMessageId,
       direction: 'INBOUND',
       sender: 'CONTACT',
-      type: messageType?.toUpperCase() || 'TEXT',
+      type: dbMessageType,
       content: content || null,
       mediaUrl,
       status: 'DELIVERED',
