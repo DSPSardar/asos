@@ -810,7 +810,7 @@ const classifyPaymentProofImage = async (buffer, mimeType) => {
     const base64 = buffer.toString('base64');
     const res = await client.chat.completions.create({
       model: env.OPENAI_MODEL,
-      max_tokens: 120,
+      max_completion_tokens: 120,
       messages: [
         {
           role: 'system',
