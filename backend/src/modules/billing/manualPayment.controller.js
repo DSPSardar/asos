@@ -10,7 +10,13 @@ const { success, created } = require('../../utils/response');
 const submitSchema = z.object({
   amount: z.coerce.number().positive('Amount must be greater than zero').max(99_999_999),
   currency: z.string().trim().length(3).toUpperCase().optional(),
-  paidAt: z.coerce.date().max(new Date(Date.now() + 86_400_000), 'Payment date cannot be in the future'),
+  // refine, not .max(new Date(...)): a Date argument is evaluated once at
+  // module load, so after a day of process uptime every legitimate
+  // "paid today" submission would start failing as "in the future".
+  paidAt: z.coerce.date().refine(
+    (d) => d.getTime() <= Date.now() + 86_400_000,
+    'Payment date cannot be in the future'
+  ),
   reference: z.string().trim().max(120).optional(),
   plan: z.enum(['FREE', 'PRO', 'ENTERPRISE']),
   periodMonths: z.coerce.number().int().min(1).max(24).optional(),

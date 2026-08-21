@@ -132,17 +132,25 @@ router.post('/', async (req, res) => {
       }
 
       // ── 6. Publish to message queue ───────────────────────────
-      await publishInboundMessage({
-        tenantId: tenant.id,
-        phone: parsed.phone,
-        contactName: parsed.contactName,
-        content: parsed.content,
-        waMessageId: parsed.waMessageId,
-        messageType: parsed.messageType,
-        referral: parsed.referral,
-        mediaId: parsed.mediaId,
-        timestamp: parsed.timestamp,
-      });
+      // If the enqueue fails, release the dedup key set above — otherwise
+      // Meta's redelivery of this exact message would be dropped for 24h
+      // and the lead's message silently lost.
+      try {
+        await publishInboundMessage({
+          tenantId: tenant.id,
+          phone: parsed.phone,
+          contactName: parsed.contactName,
+          content: parsed.content,
+          waMessageId: parsed.waMessageId,
+          messageType: parsed.messageType,
+          referral: parsed.referral,
+          mediaId: parsed.mediaId,
+          timestamp: parsed.timestamp,
+        });
+      } catch (err) {
+        await redis.del(dedupKey).catch(() => {});
+        throw err;
+      }
 
       logger.info({ event: 'webhook.whatsapp.accepted', tenantId: tenant.id, phone: parsed.phone, waMessageId: parsed.waMessageId }, '📨 Inbound message queued');
     }
