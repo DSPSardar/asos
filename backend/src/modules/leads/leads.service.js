@@ -186,6 +186,11 @@ const assignLead = async (tenantId, leadId, agentId, requestingUserId) => {
   const agent = await prisma.user.findFirst({ where: { id: agentId, tenantId, isActive: true } });
   if (!agent) throw Object.assign(new Error('Agent not found'), { statusCode: 404, expose: true });
 
+  // The agent check above scopes the assignee, not the lead — the lead id
+  // comes straight from req.params and needs its own tenant check.
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, tenantId }, select: { id: true } });
+  if (!lead) throw Object.assign(new Error('Lead not found'), { statusCode: 404, expose: true });
+
   const updated = await prisma.lead.update({
     where: { id: leadId },
     data: { assignedTo: agentId },
@@ -208,6 +213,11 @@ const assignLead = async (tenantId, leadId, agentId, requestingUserId) => {
 // ── Add note to lead ──────────────────────────────────────────────────
 
 const addNote = async (tenantId, leadId, userId, content) => {
+  // RLS can't catch a wrong leadId here — the Activity row itself carries the
+  // caller's tenantId, so WITH CHECK passes even if leadId belongs elsewhere.
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, tenantId }, select: { id: true } });
+  if (!lead) throw Object.assign(new Error('Lead not found'), { statusCode: 404, expose: true });
+
   return prisma.activity.create({
     data: {
       tenantId,
@@ -224,6 +234,9 @@ const addNote = async (tenantId, leadId, userId, content) => {
 // ── Update deal value ─────────────────────────────────────────────────
 
 const updateDealValue = async (tenantId, leadId, dealValue, currency) => {
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, tenantId }, select: { id: true } });
+  if (!lead) throw Object.assign(new Error('Lead not found'), { statusCode: 404, expose: true });
+
   return prisma.lead.update({
     where: { id: leadId },
     data: { dealValue, currency },
