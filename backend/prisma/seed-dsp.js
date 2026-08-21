@@ -6,6 +6,14 @@
 //   node prisma/seed-dsp.js
 
 require('dotenv').config();
+
+// Demo credentials (dsp-admin123! etc.) are printed by this script and
+// documented in-repo — never seed them into production unless forced.
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PROD_SEED !== 'true') {
+  console.error('Refusing to seed demo users in production (set ALLOW_PROD_SEED=true to override).');
+  process.exit(1);
+}
+
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 

@@ -44,6 +44,14 @@ const start = async () => {
     await prisma.$connect();
     logger.info('PostgreSQL connected');
 
+    // Verify the DB role can't bypass RLS — warn-only until
+    // REQUIRE_RLS_ENFORCEMENT=true is set post role-swap (see config/env.js).
+    const rlsOk = await prisma.assertRlsEnforceable({
+      logger,
+      fatal: env.REQUIRE_RLS_ENFORCEMENT === 'true',
+    }).catch((err) => { logger.warn({ err }, 'Could not verify RLS role'); return true; });
+    if (!rlsOk) process.exit(1);
+
     // Test Redis (avoid double-connect when BullMQ already initialized it)
     if (redis.status === 'wait') {
       await redis.connect();

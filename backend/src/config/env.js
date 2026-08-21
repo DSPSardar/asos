@@ -78,6 +78,12 @@ const envSchema = z.object({
   EMAIL_FROM:              z.string().email().optional(),
   PASSWORD_RESET_URL:      z.string().url().default('https://asos-kappa.vercel.app/reset-password'),
 
+  // Set to 'true' AFTER running scripts/create-app-role.sql and switching
+  // DATABASE_URL to asos_app — the API and worker then refuse to boot on a
+  // role that bypasses RLS. Defaults to warn-only so this deploy can't take
+  // production down before the role swap has been done.
+  REQUIRE_RLS_ENFORCEMENT: z.enum(['true','false']).optional().default('false'),
+
   APP_URL:                 z.string().url().default('http://localhost:3001'),
   ALLOWED_ORIGINS:         z.string().default('http://localhost:3001'),
   LOG_LEVEL:               z.enum(['fatal','error','warn','info','debug','trace']).default('info'),
