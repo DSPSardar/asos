@@ -18,7 +18,9 @@ const elevenlabsService = require('../services/elevenlabs.service');
 const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
+const billingService = require('../modules/billing/billing.service');
 const { toDbMessageType } = require('../utils/messageType');
+const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
 const { publishStatusUpdate } = require('../queues/message.queue');
@@ -604,6 +606,28 @@ const handleInboundMessage = async (job) => {
   const aiControlFlag = await redis.get(`asos:ai_control:${conversation.id}`).catch(() => null);
   const handedBackToAI = aiControlFlag === '1';
 
+  // ── 7c. Enforce the plan's AI token limit ─────────────────────────
+  // aiTokensUsed has always been incremented (claude.service.js §8) but the
+  // limit was never checked anywhere on this path — a FREE tenant could burn
+  // unbounded OpenAI spend. On limit, hand off so a human sees the lead
+  // rather than the conversation going silent; handleHandoff disables AI, so
+  // this fires once per conversation, not per message.
+  try {
+    await billingService.checkPlanLimits(tenantId, 'ai_tokens');
+  } catch (limitErr) {
+    if (limitErr.statusCode === 402) {
+      logger.warn({ tenantId, leadId: lead.id }, '💸 AI token limit reached — handing conversation to human');
+      await handleHandoff(tenant, conversation, lead, 'AI token limit reached — plan upgrade required');
+      notificationService.notifyAdmin(tenant, 'needsHuman', {
+        contactName: contact.name,
+        phone: normalizedPhone,
+        reason: 'AI token limit reached — AI paused for this conversation until the plan is upgraded',
+      });
+      return;
+    }
+    throw limitErr;
+  }
+
   // ── 8. Load message history for context ──────────────────────────
   const messageHistory = await prisma.message.findMany({
     where: { conversationId: conversation.id, tenantId },
@@ -626,7 +650,13 @@ const handleInboundMessage = async (job) => {
       // slicing off "the last item" would then strip that reply instead
       // of the current message, and the AI would never see it already
       // answered.
-      messageHistory: messageHistory.filter((m) => m.id !== inboundMessage.id),
+      // sanitizeHistoryForAI: the payment-details block lives in the Message
+      // table for the dashboard, but bank account numbers must never reach
+      // the LLM provider — see utils/aiHistory.js.
+      messageHistory: sanitizeHistoryForAI(
+        messageHistory.filter((m) => m.id !== inboundMessage.id),
+        tenant.aiConfig?.paymentDetails
+      ),
       handedBackToAI,
       welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact.sentWelcomeVoice),
     });
@@ -899,7 +929,12 @@ const sendPaymentInstructions = async ({ tenant, conversation, tenantId, phone }
     tenant, conversation, tenantId, phone,
     content: details,
     tokensUsed: 0,
-    rawResponse: null,
+    // Marker, not an AI response: lets tooling identify this row without
+    // comparing content strings.
+    rawResponse: { systemMessage: 'payment_details' },
+    // Never read account numbers aloud through a third-party TTS service —
+    // the text block is the deliverable here.
+    voiceNote: false,
   });
 
   await prisma.conversation.update({
@@ -911,7 +946,7 @@ const sendPaymentInstructions = async ({ tenant, conversation, tenantId, phone }
   return true;
 };
 
-const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content, tokensUsed, rawResponse }) => {
+const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content, tokensUsed, rawResponse, voiceNote = true }) => {
   let waMessageId = null;
 
   if (!content?.trim()) {
@@ -925,10 +960,32 @@ const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content
     return;
   }
 
-  try {
-    waMessageId = await whatsappService.sendText(tenant, phone, content);
-  } catch (err) {
-    logger.error({ err, tenantId, phone }, 'Failed to send WA reply');
+  // Meta's send API fails transiently (throttling, 5xx) often enough that a
+  // single attempt silently dropping the reply is a real incident: the lead
+  // reads silence and nobody is told. Retry briefly, and if it still fails,
+  // leave a visible Activity so the dashboard shows the gap.
+  const MAX_SEND_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS && !waMessageId; attempt++) {
+    try {
+      waMessageId = await whatsappService.sendText(tenant, phone, content);
+    } catch (err) {
+      logger.error({ err, tenantId, phone, attempt }, 'Failed to send WA reply');
+      if (attempt < MAX_SEND_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+      }
+    }
+  }
+
+  if (!waMessageId) {
+    await prisma.activity.create({
+      data: {
+        tenantId,
+        leadId: conversation.leadId,
+        type: 'AI_ACTION',
+        content: '⚠️ WhatsApp send failed after retries — the lead did NOT receive the last reply',
+        metadata: { flag: 'wa_send_failed', attempts: MAX_SEND_ATTEMPTS },
+      },
+    }).catch(() => {});
   }
 
   await prisma.message.create({
@@ -949,7 +1006,7 @@ const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content
   // ── Optional voice-note follow-up, in the owner's ElevenLabs cloned voice.
   // Best-effort and fully isolated: the text reply above has already been
   // sent and saved, so nothing here can affect it.
-  if (elevenlabsService.isVoiceCloneConfigured()) {
+  if (voiceNote && elevenlabsService.isVoiceCloneConfigured()) {
     try {
       const tts = await elevenlabsService.textToSpeech(content);
       if (tts) {
@@ -1094,6 +1151,13 @@ worker.on('error', (err) => {
   logger.error({ err }, 'Worker error');
   Sentry.captureException(err);
 });
+
+// Same RLS-role verification as server.js — the worker holds its own DB
+// connection and processes every tenant's messages, so it must not run on a
+// bypassing role either once enforcement is switched on.
+prisma.assertRlsEnforceable({ logger, fatal: env.REQUIRE_RLS_ENFORCEMENT === 'true' })
+  .then((ok) => { if (!ok) process.exit(1); })
+  .catch((err) => logger.warn({ err }, 'Could not verify RLS role'));
 
 logger.info('🔄 Conversation worker started');
 

@@ -7,6 +7,17 @@ const metaService = require('../../services/meta.service');
 const logger = require('../../utils/logger');
 const redis = require('../../config/redis');
 const { publishInboundMessage } = require('../../queues/message.queue');
+const { sanitizeHistoryForAI } = require('../../utils/aiHistory');
+const { signMediaUrl } = require('../../utils/mediaToken');
+
+// Stored mediaUrls are bare `/media/<id>` paths; the serving route now
+// requires a signed, expiring link (see app.js), so sign them on the way
+// out. Legacy `/uploads/...` paths pass through untouched.
+const withSignedMediaUrls = (messages) => (messages || []).map((m) =>
+  m.mediaUrl?.startsWith('/media/')
+    ? { ...m, mediaUrl: signMediaUrl(m.mediaUrl.slice('/media/'.length)) }
+    : m
+);
 
 // Redis key: marks conversations where a human deliberately handed control back to AI.
 // Persists until the next manual takeover. Prevents Claude from auto-handing off HOT leads.
@@ -51,6 +62,7 @@ const getConversation = async (tenantId, conversationId) => {
     },
   });
   if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404, expose: true });
+  conv.messages = withSignedMediaUrls(conv.messages);
   return conv;
 };
 
@@ -275,14 +287,21 @@ const confirmPayment = async (tenantId, conversationId, userId) => {
 };
 
 const getSummary = async (tenantId, conversationId) => {
-  const messages = await prisma.message.findMany({
-    where: { conversationId, tenantId },
-    orderBy: { sentAt: 'asc' },
-    take: 30,
-    select: { sender: true, content: true },
-  });
+  const [messages, aiConfig] = await Promise.all([
+    prisma.message.findMany({
+      where: { conversationId, tenantId },
+      orderBy: { sentAt: 'asc' },
+      take: 30,
+      select: { sender: true, content: true },
+    }),
+    prisma.aiConfig.findUnique({ where: { tenantId }, select: { paymentDetails: true } }),
+  ]);
 
-  return claudeService.generateSummary({ tenantId, messageHistory: messages });
+  // Bank details must not reach the LLM — see utils/aiHistory.js.
+  return claudeService.generateSummary({
+    tenantId,
+    messageHistory: sanitizeHistoryForAI(messages, aiConfig?.paymentDetails),
+  });
 };
 
 const getSuggestedReply = async (tenantId, conversationId) => {
@@ -297,12 +316,15 @@ const getSuggestedReply = async (tenantId, conversationId) => {
     take: 20,
     select: { sender: true, content: true },
   });
+  const aiConfig = await prisma.aiConfig.findUnique({ where: { tenantId } });
+  // Bank details must not reach the LLM — see utils/aiHistory.js.
+  const history = sanitizeHistoryForAI(messages, aiConfig?.paymentDetails);
   const out = await claudeService.runCloser({
-    aiConfig: await prisma.aiConfig.findUnique({ where: { tenantId } }),
+    aiConfig,
     lead: conv.lead,
     contact: conv.contact,
-    messageHistory: messages,
-    newMessage: messages[messages.length - 1]?.content || 'Suggest next message',
+    messageHistory: history,
+    newMessage: history[history.length - 1]?.content || 'Suggest next message',
     qualifierOutput: { lead_status: conv.lead.scoreLabel, score: Math.max(1, Math.round((conv.lead.aiScore || 10) / 10)), intent: conv.lead.intent || 'medium', problem_summary: conv.lead.problemSummary || '', next_action: conv.lead.nextAction || 'continue_qualifying' },
   });
   return { suggestion: out.reply_message };
