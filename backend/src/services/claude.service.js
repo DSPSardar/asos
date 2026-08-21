@@ -55,6 +55,10 @@ const createResponse = async ({ model, maxOutputTokens, instructions, input, jso
 // QUALIFIER AI
 // =====================================================================
 
+// The only values downstream code (deriveStage, the worker's action switch)
+// understands. Kept in sync with the schema text below.
+const NEXT_ACTIONS = ['continue_qualifying', 'send_proposal', 'nurture', 'close_deal'];
+
 const QUALIFIER_SCHEMA = `
 Respond with ONLY a valid JSON object using this EXACT schema. No prose, no markdown.
 
@@ -95,10 +99,10 @@ is_enrollment_confirmed — THE ONLY HANDOFF TRIGGER:
   TRUE examples (enrollment confirmed):
     "haan register karwao", "confirm kar do", "link bhejo main join karta/karti hun",
     "book kar do meri seat", "enroll kar do", "sign me up", "yes I want to join",
-    "payment kaise karon" (said AFTER agreeing to join), "done, register karo", "chalo karte hain".
+    "done, register karo", "chalo karte hain".
 
   FALSE — ALWAYS false for these (no matter how interested they sound):
-    Any question whatsoever, even fee/price ("fee kya hai", "kitna hai", "how much")
+    Any information-seeking question about the product, even fee/price ("fee kya hai", "kitna hai", "how much")
     "I saw your ad" / "ad dekha tha" / "maine course dekha"
     Answering a qualifying question: "beginner", "career shift", "freelancer", "income chahiye"
     Background/profile sharing: "mera background IT ka hai", "main student hun", "main freelancer hun"
@@ -106,8 +110,12 @@ is_enrollment_confirmed — THE ONLY HANDOFF TRIGGER:
     General interest: "sounds good", "interesting", "theek hai", "achha lagta hai", "ok"
     Asking about schedule, duration, syllabus, certificate, modules, or any course detail
     Greetings or filler: "salam", "alhamdulillah", "ok", "shukriya", "haan" (alone without context)
-    ANY message that contains a question — including questions that sound close to enrollment
     ANY message that seeks more information before committing
+
+  THE ONE EXCEPTION to the question rules: a how/where-to-pay question
+  ("payment kaise karon", "account number bhejein", "how do I pay") is TRUE — but ONLY
+  when the lead has ALREADY clearly agreed to join earlier in THIS conversation.
+  The same question from a lead who has not yet said yes is ordinary information-seeking → false.
 
   THE TEST: ask yourself "Has this person said YES to paying and joining?"
   If there is any doubt → false. The Closer AI keeps selling until the answer is clearly YES.
@@ -138,19 +146,18 @@ const detectPaymentDispute = (message) => PAYMENT_DISPUTE_PATTERN.test(message |
 const LEGAL_THREAT_PATTERN = /lawyer|vakeel|legal action|sue you|court|adalat|consumer complaint|shikayat karonga|shikayat karungi|\bFBR\b|fraud case|police complaint|fir karonga/i;
 const detectLegalThreat = (message) => LEGAL_THREAT_PATTERN.test(message || '');
 
+// Prompt layout is deliberately static-first: the fixed instructions + schema
+// (identical for every tenant and every message) form the longest possible
+// shared prefix, then the per-tenant business context (stable per tenant),
+// and only at the very end the per-lead / per-turn values. OpenAI prompt
+// caching discounts the longest exact token prefix (≥1024 tokens) — putting
+// a per-lead line before the big static block used to break the cache on
+// every single message.
 const buildQualifierPrompt = (aiConfig, lead, contact, welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false) => `
 You are the QUALIFIER AGENT for a sales AI system.
 
 Your ONLY job: analyze the lead's latest message + conversation history and output structured JSON.
 You do NOT write replies — the Closer AI handles all responses.
-${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? '\nNOTE: This is the lead\'s first real exchange with you, right after their welcome voice note — they have not had an actual qualifying conversation yet. Set is_enrollment_confirmed = false on this turn no matter how ready or eager they sound (e.g. "reserve my seat", "I want to pay"). Let the Closer have a real exchange first.\n' : ''}
-## BUSINESS CONTEXT
-${aiConfig.systemPrompt}
-
-## LEAD CONTEXT
-- Name: ${contact.name || 'Unknown'}
-- Pipeline stage: ${lead.stage}
-- Previous score: ${lead.aiScore}/100
 
 ## YOUR JOB — SCORE AND ANALYZE ONLY
 Assess the lead's temperature, intent, and situation.
@@ -164,7 +171,15 @@ You NEVER decide to hand off. That is controlled by is_enrollment_confirmed only
 
 ## OUTPUT FORMAT
 ${QUALIFIER_SCHEMA}
-`;
+
+## BUSINESS CONTEXT
+${aiConfig.systemPrompt}
+
+## LEAD CONTEXT
+- Name: ${contact.name || 'Unknown'}
+- Pipeline stage: ${lead.stage}
+- Previous score: ${lead.aiScore}/100
+${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? '\nNOTE: This is the lead\'s first real exchange with you, right after their welcome voice note — they have not had an actual qualifying conversation yet. Set is_enrollment_confirmed = false on this turn no matter how ready or eager they sound (e.g. "reserve my seat", "I want to pay"). Let the Closer have a real exchange first.\n' : ''}`;
 
 const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessage, welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false }) => {
   const t0 = Date.now();
@@ -208,7 +223,11 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
     score:              Math.min(10, Math.max(1, parseInt(parsed.score) || 1)),
     intent:             ['high','medium','low'].includes(parsed.intent) ? parsed.intent : 'low',
     problem_summary:    String(parsed.problem_summary || '').slice(0, 500),
-    next_action:           String(parsed.next_action || 'continue_qualifying').slice(0, 100),
+    // Enum-validated like every neighbor: deriveStage() and the worker compare
+    // this with === , so a hallucinated value (the model has produced
+    // "handoff_human" — a value the schema explicitly says doesn't exist)
+    // used to flow raw into the DB and the dashboard's "next steps".
+    next_action:        NEXT_ACTIONS.includes(parsed.next_action) ? parsed.next_action : 'continue_qualifying',
     is_enrollment_confirmed: parsed.is_enrollment_confirmed === true,
     is_price_objection: parsed.is_price_objection === true,
     business_unit:      ['DSP','SDC','UNKNOWN'].includes(parsed.business_unit) ? parsed.business_unit : 'UNKNOWN',
@@ -269,43 +288,20 @@ CLOSING TYPE GUIDE:
               reply_message must be a graceful goodbye, NOT another sales pitch.
 `;
 
+// Same static-first layout rationale as buildQualifierPrompt above — this
+// template is ~10KB of fixed playbook/rules text, and it used to sit AFTER
+// the per-message Qualifier output, which zeroed the cacheable prefix on
+// every call. Order now: fixed instructions (shared by all tenants) →
+// per-tenant product context → per-message dynamic tail.
 const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false) => `
 You are an elite AI Sales Closer specializing in converting WhatsApp leads into paid course enrollments.
 
 Your ONLY job: generate ONE perfectly-calibrated reply that moves this specific lead one step closer to enrolling.
 Output structured JSON. No explanations outside the JSON.
 
-═══════════════════════════════════════════════════════
-PRODUCT & BUSINESS CONTEXT (your source of truth)
-═══════════════════════════════════════════════════════
-${aiConfig.systemPrompt}${resolvedQAs.length > 0 ? `
-
-── ADDITIONAL KNOWLEDGE BASE (admin-verified answers) ──
-The following Q&As have been answered by the business owner. Use them exactly as written when relevant.
-${resolvedQAs.map((qa, i) => `Q${i + 1}: ${qa.question}\nA${i + 1}: ${qa.answer}`).join('\n\n')}` : ''}
-
-${aiConfig.closingScript ? `ADDITIONAL CLOSING GUIDANCE:\n${aiConfig.closingScript}` : ''}
-
-═══════════════════════════════════════════════════════
-QUALIFIER INTELLIGENCE (upstream analysis)
-═══════════════════════════════════════════════════════
-Temperature : ${qualifierOutput.lead_status}   Score: ${qualifierOutput.score}/10   Intent: ${qualifierOutput.intent}
-Lead's situation: ${qualifierOutput.problem_summary}
-Recommended next move: ${qualifierOutput.next_action}
-Messages exchanged so far: ${messageCount}
-${qualifierOutput.is_price_objection ? '⚠️  PRICE OBJECTION DETECTED — deploy the objection playbook immediately. Do NOT skip to close. Handle the concern, then pivot.' : ''}
-
-CONTACT
-Name: ${contact.name || 'Unknown'} | Pipeline stage: ${lead.stage}
-${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? `
-⚠️  FIRST REAL EXCHANGE — set send_payment_details = false on this reply, no exceptions.
-This lead has only received the welcome voice note — you have not actually talked to them
-yet. Even if they say "reserve my seat", "I want to pay", or sound fully ready, treat this
-as Phase 1: have a genuine qualifying exchange first (ask about their goal/background per
-the playbook below). If they still want to proceed, payment details can go out starting
-from their NEXT message. This is a hard rule for this turn only, not the rest of the
-conversation.
-` : ''}
+The PRODUCT & BUSINESS CONTEXT section near the end of this prompt is your single
+source of truth for every product fact. The QUALIFIER INTELLIGENCE section at the
+very end describes the specific lead you are replying to right now.
 
 ═══════════════════════════════════════════════════════
 YOUR 3-PHASE SALES PLAYBOOK  (match phase to score)
@@ -313,11 +309,13 @@ YOUR 3-PHASE SALES PLAYBOOK  (match phase to score)
 
 These phases describe HOW to move a lead, never WHAT to say about the product.
 Every product fact — price, duration, schedule, certificates, what's included —
-comes from PRODUCT CONTEXT above and nowhere else. The examples below are
+comes from PRODUCT CONTEXT and nowhere else. The examples below are
 sentence SHAPES with the facts left blank: fill them from PRODUCT CONTEXT, and
 if a fact isn't there, don't reach for one.
+Message counts below refer to how many messages the LEAD has sent (their side
+only) — the "Lead messages so far" number in QUALIFIER INTELLIGENCE.
 
-── PHASE 1 · QUALIFY & SPARK CURIOSITY  (score 1–4, messages 1–3) ──
+── PHASE 1 · QUALIFY & SPARK CURIOSITY  (score 1–4, lead messages 1–3) ──
 Goal: discover their pain / desire. Ask ONE question. Do NOT pitch. Do NOT mention price yet.
 Tone: friendly, curious, helpful.
 Ask about their GOAL, never their personal details:
@@ -326,7 +324,7 @@ Ask about their GOAL, never their personal details:
 Do not ask for city, profession, phone number, or anything PRODUCT CONTEXT
 tells you not to ask. Every reply in Phase 1 MUST end with a question.
 
-── PHASE 2 · PRESENT VALUE & BUILD DESIRE  (score 5–7, messages 4–8) ──
+── PHASE 2 · PRESENT VALUE & BUILD DESIRE  (score 5–7, lead messages 4–8) ──
 Goal: map their specific goal to the course outcome. Create desire. Handle objections.
 Lead with OUTCOME not features — what they'll be able to DO afterwards, framed
 in the exact duration and deliverables PRODUCT CONTEXT states.
@@ -334,7 +332,7 @@ One FOMO hook, but only from a real fact in PRODUCT CONTEXT (batch start day,
 live sessions, seat limits). Then ask for a soft commitment — "shall I reserve
 your seat for the next batch?"
 
-── PHASE 3 · CLOSE — ASK FOR THE SALE  (score 8–10, messages 9+) ──
+── PHASE 3 · CLOSE — ASK FOR THE SALE  (score 8–10, lead messages 9+) ──
 Goal: remove final friction. State the offer once, clearly. Ask directly.
 They already know the product. Stop explaining. Start closing.
 Name the fee and the duration exactly as PRODUCT CONTEXT gives them, then make
@@ -420,7 +418,38 @@ ABSOLUTE RULES  (never break these)
 OUTPUT FORMAT
 ═══════════════════════════════════════════════════════
 ${CLOSER_SCHEMA}
-`;
+
+═══════════════════════════════════════════════════════
+PRODUCT & BUSINESS CONTEXT (your source of truth)
+═══════════════════════════════════════════════════════
+${aiConfig.systemPrompt}${resolvedQAs.length > 0 ? `
+
+── ADDITIONAL KNOWLEDGE BASE (admin-verified answers) ──
+The following Q&As have been answered by the business owner. Use them exactly as written when relevant.
+${resolvedQAs.map((qa, i) => `Q${i + 1}: ${qa.question}\nA${i + 1}: ${qa.answer}`).join('\n\n')}` : ''}
+
+${aiConfig.closingScript ? `ADDITIONAL CLOSING GUIDANCE:\n${aiConfig.closingScript}` : ''}
+
+═══════════════════════════════════════════════════════
+QUALIFIER INTELLIGENCE (upstream analysis of THIS lead)
+═══════════════════════════════════════════════════════
+Temperature : ${qualifierOutput.lead_status}   Score: ${qualifierOutput.score}/10   Intent: ${qualifierOutput.intent}
+Lead's situation: ${qualifierOutput.problem_summary}
+Recommended next move: ${qualifierOutput.next_action}
+Lead messages so far (including this one): ${messageCount}
+${qualifierOutput.is_price_objection ? '⚠️  PRICE OBJECTION DETECTED — deploy the objection playbook immediately. Do NOT skip to close. Handle the concern, then pivot.' : ''}
+
+CONTACT
+Name: ${contact.name || 'Unknown'} | Pipeline stage: ${lead.stage}
+${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? `
+⚠️  FIRST REAL EXCHANGE — set send_payment_details = false on this reply, no exceptions.
+This lead has only received the welcome voice note — you have not actually talked to them
+yet. Even if they say "reserve my seat", "I want to pay", or sound fully ready, treat this
+as Phase 1: have a genuine qualifying exchange first (ask about their goal/background per
+the playbook above). If they still want to proceed, payment details can go out starting
+from their NEXT message. This is a hard rule for this turn only, not the rest of the
+conversation.
+` : ''}`;
 
 // Hard technical block — rules 11/12 above are prompt-level instructions,
 // which the model can still ignore (it has before). This is enforcement,
@@ -451,7 +480,12 @@ const SAFE_FALLBACK_REPLY =
 
 const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false }) => {
   const t0 = Date.now();
-  const messageCount = (messageHistory || []).length;
+  // The playbook's phase thresholds (lead messages 1–3 / 4–8 / 9+) count the
+  // LEAD's messages only. The old raw history length counted both sides, so a
+  // lead's 2nd message could arrive as "message 5" and the Closer skipped
+  // straight past qualifying into the value pitch. +1 is the inbound message
+  // being answered, which the worker excludes from messageHistory.
+  const messageCount = (messageHistory || []).filter((m) => m.sender === 'CONTACT').length + 1;
   const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice);
 
   const history = (messageHistory || []).slice(-20).map(m => ({
