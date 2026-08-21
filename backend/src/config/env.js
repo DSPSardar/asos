@@ -19,6 +19,12 @@ const envSchema = z.object({
   REDIS_URL:               z.string().default('redis://localhost:6379'),
 
   JWT_SECRET:              z.string().min(32),
+  // Dedicated key for credential encryption (utils/crypto.js). Optional for
+  // backward compatibility: unset falls back to the JWT_SECRET-derived key
+  // that existing ciphertext was written with. Set it, then run
+  // scripts/reencrypt-credentials.js to decouple stored WA/Meta tokens from
+  // JWT_SECRET rotation.
+  ENCRYPTION_KEY:          z.string().min(32).optional(),
   JWT_EXPIRES_IN:          z.string().default('15m'),
   JWT_REFRESH_SECRET:      z.string().min(32),
   JWT_REFRESH_EXPIRES_IN:  z.string().default('7d'),

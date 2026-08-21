@@ -159,19 +159,30 @@ const deleteTenant = async (tenantId) => {
   if (!tenant) throw Object.assign(new Error('Tenant not found'), { statusCode: 404, expose: true });
 
   await prisma.$transaction(async (tx) => {
-    // Conversations have child records — delete those first
-    const convIds = (await tx.conversation.findMany({ where: { tenantId }, select: { id: true } })).map(c => c.id);
-    if (convIds.length > 0) {
-      await tx.message.deleteMany({ where: { conversationId: { in: convIds } } });
-      await tx.aiAgentLog.deleteMany({ where: { conversationId: { in: convIds } } });
-    }
+    // Children before parents, so no delete FK-fails:
+    //   Message/AiAgentLog → Conversation; Activity/AdsTracking → Lead;
+    //   Lead → Contact + Campaign; ContentDraft → ContentSession +
+    //   BrandProfile + Campaign. Every model here carries tenantId, so
+    //   deleteMany by tenant covers rows a conversation-based sweep missed
+    //   (this previously skipped 7 tables and the final tenant delete
+    //   FK-failed, leaving the tenant half-deleted).
+    await tx.message.deleteMany({ where: { tenantId } });
+    await tx.aiAgentLog.deleteMany({ where: { tenantId } });
     await tx.activity.deleteMany({ where: { tenantId } });
     await tx.adsTracking.deleteMany({ where: { tenantId } });
     await tx.conversation.deleteMany({ where: { tenantId } });
     await tx.lead.deleteMany({ where: { tenantId } });
+    await tx.contentDraft.deleteMany({ where: { tenantId } });
+    await tx.contentSession.deleteMany({ where: { tenantId } });
+    await tx.brandProfile.deleteMany({ where: { tenantId } });
+    await tx.campaign.deleteMany({ where: { tenantId } });
+    await tx.clientReport.deleteMany({ where: { tenantId } });
+    await tx.knowledgeGap.deleteMany({ where: { tenantId } });
+    await tx.inboundMedia.deleteMany({ where: { tenantId } });
     await tx.contact.deleteMany({ where: { tenantId } });
     await tx.aiConfig.deleteMany({ where: { tenantId } });
     await tx.subscription.deleteMany({ where: { tenantId } });
+    // ManualPayment cascades via onDelete: Cascade on its tenant relation.
     await tx.user.deleteMany({ where: { tenantId } });
     await tx.tenant.delete({ where: { id: tenantId } });
   });

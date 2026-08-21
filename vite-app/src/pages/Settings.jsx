@@ -586,7 +586,7 @@ function MetaAdsTab({ showToast }) {
     <>
       <Section
         title="Meta Ads Connection"
-        description="Connected via Meta Marketing API (App ID: 1289869725962804). Use the same system user token from your DSPUSER."
+        description="Connected via Meta Marketing API. Use a system user token from your Meta Business settings."
         footer={
           <>
             <SecondaryButton onClick={handleVerify} disabled={verifying || !tokenSaved}>

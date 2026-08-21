@@ -2,6 +2,7 @@
 // WhatsApp Cloud API (Meta) — send messages, handle media
 
 const axios = require('axios');
+const crypto = require('crypto');
 const env = require('../config/env');
 const logger = require('../utils/logger');
 const { decrypt } = require('../utils/crypto');
@@ -282,18 +283,20 @@ const saveInboundMedia = async (tenant, mediaId) => {
   if (!media) return null;
 
   try {
+    const sha256 = crypto.createHash('sha256').update(media.buffer).digest('hex');
     const row = await prisma.inboundMedia.create({
       data: {
         tenantId: tenant.id,
         mimeType: media.mimeType || 'application/octet-stream',
         data: media.buffer,
+        sha256,
       },
       select: { id: true },
     });
 
     const url = `/media/${row.id}`;
     logger.info({ tenantId: tenant.id, mediaId, mimeType: media.mimeType, bytes: media.buffer.length, mediaRowId: row.id }, 'Inbound WA media persisted to Postgres');
-    return { url, buffer: media.buffer, mimeType: media.mimeType };
+    return { url, buffer: media.buffer, mimeType: media.mimeType, mediaRowId: row.id, sha256 };
   } catch (err) {
     logger.warn({ err: err.message, tenantId: tenant.id, mediaId }, 'Failed to persist inbound WA media to database');
     return null;

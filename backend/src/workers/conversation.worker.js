@@ -547,6 +547,26 @@ const handleInboundMessage = async (job) => {
   }
 
   if (isPaymentProof) {
+    // ── Reviewer signals, not auto-decisions ─────────────────────────
+    // Human verification stays the gate; these checks arm the reviewer:
+    //  • duplicate: the exact same file bytes were already submitted to this
+    //    tenant (classic reused-screenshot fraud) — the receipt "looks real"
+    //    because it IS real, just already spent.
+    //  • amount mismatch: the receipt's extracted amount differs from the
+    //    tenant's configured enrollment fee.
+    let duplicateOf = null;
+    if (savedMedia?.sha256 && savedMedia?.mediaRowId) {
+      duplicateOf = await prisma.inboundMedia.findFirst({
+        where: { tenantId, sha256: savedMedia.sha256, NOT: { id: savedMedia.mediaRowId } },
+        select: { id: true, createdAt: true },
+      }).catch(() => null);
+    }
+
+    const expectedFee = Number(tenant.settings?.enrollmentFee) || null;
+    const extractedAmount = imageClassification?.amount || null;
+    const amountMismatch = Boolean(expectedFee && extractedAmount && extractedAmount !== expectedFee);
+    const suspicious = Boolean(duplicateOf) || amountMismatch;
+
     await prisma.conversation.update({
       where: { id: conversation.id },
       data: {
@@ -554,12 +574,20 @@ const handleInboundMessage = async (job) => {
         paymentProofAt: new Date(),
         status: 'PENDING_VERIFICATION',
         aiEnabled: false,
-        handoffReason: 'Payment proof received — awaiting human verification',
+        handoffReason: duplicateOf
+          ? '⚠️ Payment proof is a DUPLICATE of an earlier submission — verify carefully'
+          : amountMismatch
+            ? `⚠️ Payment proof amount (${extractedAmount}) does not match the expected fee (${expectedFee}) — verify carefully`
+            : 'Payment proof received — awaiting human verification',
       },
     });
 
-    const ackMessage = tenant.aiConfig?.paymentProofMessage?.trim()
-      || 'Thank you! We have received your payment confirmation. Our team will verify it and confirm your seat shortly. 🙏';
+    // A suspicious proof gets the neutral "we'll verify" wording, never the
+    // configured "payment received" celebration.
+    const ackMessage = suspicious
+      ? 'Thank you for the screenshot! Our team will verify the payment and confirm your seat shortly. 🙏'
+      : (tenant.aiConfig?.paymentProofMessage?.trim()
+        || 'Thank you! We have received your payment confirmation. Our team will verify it and confirm your seat shortly. 🙏');
 
     await sendAndSaveReply({
       tenant, conversation, tenantId,
@@ -574,15 +602,36 @@ const handleInboundMessage = async (job) => {
         tenantId,
         leadId: lead.id,
         type: 'AI_ACTION',
-        content: '💳 Payment proof received — conversation moved to verification queue',
-        metadata: { flag: 'payment_proof_detected', messageType, waMessageId },
+        content: duplicateOf
+          ? '🚨 Payment proof received — but the identical image was submitted before. Possible reused screenshot.'
+          : amountMismatch
+            ? `🚨 Payment proof received — extracted amount ${extractedAmount} does not match expected fee ${expectedFee}.`
+            : '💳 Payment proof received — conversation moved to verification queue',
+        metadata: {
+          flag: suspicious ? 'payment_proof_suspicious' : 'payment_proof_detected',
+          messageType,
+          waMessageId,
+          sha256: savedMedia?.sha256 || null,
+          duplicateOfMediaId: duplicateOf?.id || null,
+          extracted: imageClassification ? {
+            amount: imageClassification.amount,
+            currency: imageClassification.currency,
+            date: imageClassification.date,
+            reference: imageClassification.reference,
+          } : null,
+          expectedFee,
+        },
       },
     });
 
     notificationService.notifyAdmin(tenant, 'needsHuman', {
       contactName: contact.name,
       phone: normalizedPhone,
-      reason: 'Payment proof received — verify and confirm the seat',
+      reason: duplicateOf
+        ? '🚨 Payment proof received but it is an EXACT duplicate of an earlier screenshot — check before confirming'
+        : amountMismatch
+          ? `🚨 Payment proof received but the amount (${extractedAmount}) does not match the fee (${expectedFee}) — check before confirming`
+          : 'Payment proof received — verify and confirm the seat',
     });
 
     logger.info({ leadId: lead.id, conversationId: conversation.id },
@@ -629,11 +678,17 @@ const handleInboundMessage = async (job) => {
   }
 
   // ── 8. Load message history for context ──────────────────────────
-  const messageHistory = await prisma.message.findMany({
+  // Outbound AI AUDIO rows are excluded: each is just the voice-note twin of
+  // the text reply right before it (older rows even carry the identical
+  // text), so including them doubled every AI reply in the LLM's view of the
+  // conversation — and inflated the old raw messageCount the Closer's phase
+  // logic ran on. Inbound audio stays: it's the lead's actual (transcribed)
+  // message.
+  const messageHistory = (await prisma.message.findMany({
     where: { conversationId: conversation.id, tenantId },
     orderBy: { sentAt: 'asc' },
-    select: { id: true, sender: true, content: true, sentAt: true },
-  });
+    select: { id: true, sender: true, content: true, sentAt: true, type: true, direction: true },
+  })).filter((m) => !(m.type === 'AUDIO' && m.direction === 'OUTBOUND'));
 
   // ── 9. Call Claude AI Engine ──────────────────────────────────────
   let aiResult;
@@ -1006,7 +1061,14 @@ const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content
   // ── Optional voice-note follow-up, in the owner's ElevenLabs cloned voice.
   // Best-effort and fully isolated: the text reply above has already been
   // sent and saved, so nothing here can affect it.
-  if (voiceNote && elevenlabsService.isVoiceCloneConfigured()) {
+  //
+  // Per-tenant opt-out: the ElevenLabs credentials are platform-global, so
+  // without this gate every tenant's leads would hear the platform owner's
+  // cloned voice at the owner's expense. settings.voiceNotesEnabled = false
+  // turns it off for a tenant; default stays on so current behavior for the
+  // owner's own tenant is unchanged.
+  const tenantVoiceEnabled = tenant.settings?.voiceNotesEnabled !== false;
+  if (voiceNote && tenantVoiceEnabled && elevenlabsService.isVoiceCloneConfigured()) {
     try {
       const tts = await elevenlabsService.textToSpeech(content);
       if (tts) {
@@ -1020,7 +1082,10 @@ const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content
             direction: 'OUTBOUND',
             sender: 'AI',
             type: 'AUDIO',
-            content,
+            // Marker, not a second copy of the reply text: the duplicate
+            // content used to appear twice in every AI-bound history and in
+            // the dashboard thread.
+            content: '[Voice note of the reply above]',
             status: audioMessageId ? 'SENT' : 'FAILED',
             aiTokensUsed: 0,
             aiRawResponse: null,
@@ -1129,6 +1194,43 @@ worker.on('completed', (job) => {
   logger.debug({ jobId: job.id, name: job.name }, 'Job completed');
 });
 
+// A job that exhausted its retries is a lead whose message will never be
+// answered. Sentry alone was the only witness — the tenant's dashboard
+// showed nothing, so the lead read silence and nobody followed up. Surface
+// it where the humans actually look: an Activity on the lead's timeline and
+// the admin's WhatsApp notification channel.
+const deadLetterInboundMessage = async (job, err) => {
+  const { tenantId, phone, contactName, waMessageId } = job.data || {};
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) return;
+
+  const normalized = phone ? whatsappService.normalizePhone(phone) : null;
+  const contact = normalized
+    ? await prisma.contact.findFirst({ where: { tenantId, phone: normalized }, select: { id: true, name: true } })
+    : null;
+  const lead = contact
+    ? await prisma.lead.findFirst({ where: { tenantId, contactId: contact.id }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+    : null;
+
+  if (lead) {
+    await prisma.activity.create({
+      data: {
+        tenantId,
+        leadId: lead.id,
+        type: 'AI_ACTION',
+        content: '🚨 A message from this lead could not be processed after all retries — they have NOT received a reply. Please respond manually.',
+        metadata: { flag: 'message_processing_failed', waMessageId: waMessageId || null, error: String(err?.message || err).slice(0, 300) },
+      },
+    }).catch(() => {});
+  }
+
+  notificationService.notifyAdmin(tenant, 'needsHuman', {
+    contactName: contact?.name || contactName,
+    phone: normalized || phone,
+    reason: 'A message from this lead failed processing after all retries — reply manually',
+  });
+};
+
 worker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, name: job?.name, err: err.message, attempts: job?.attemptsMade }, 'Job failed');
 
@@ -1144,6 +1246,14 @@ worker.on('failed', (job, err) => {
       tags: { jobName: job?.name },
       extra: { jobId: job?.id, attemptsMade: job?.attemptsMade },
     });
+
+    if (job?.name === 'inbound-message' && job?.data?.tenantId) {
+      // Same AsyncLocalStorage wrap as the processor so the RLS tenant
+      // context is present once enforcement is on.
+      requestContext.run({ requestId: `${job.id}_deadletter`, tenantId: job.data.tenantId }, () =>
+        deadLetterInboundMessage(job, err).catch((e) => logger.warn({ err: e }, 'Dead-letter reporting failed'))
+      );
+    }
   }
 });
 

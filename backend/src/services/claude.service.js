@@ -848,7 +848,12 @@ const classifyPaymentProofImage = async (buffer, mimeType) => {
       messages: [
         {
           role: 'system',
-          content: 'You classify a single WhatsApp image. Reply with strict JSON only: {"isPaymentProof": boolean, "reason": string}. isPaymentProof is true ONLY if the image is a bank transfer receipt, payment app confirmation screen, or transaction screenshot showing an amount and a date/reference number. It is false for anything else — policy text, chat screenshots, ID cards/documents, unrelated photos — even if money-related words appear in it.',
+          content: 'You classify a single WhatsApp image. Reply with strict JSON only: ' +
+            '{"isPaymentProof": boolean, "reason": string, "amount": number|null, "currency": string|null, "date": string|null, "reference": string|null}. ' +
+            'isPaymentProof is true ONLY if the image is a bank transfer receipt, payment app confirmation screen, or transaction screenshot showing an amount and a date/reference number. ' +
+            'It is false for anything else — policy text, chat screenshots, ID cards/documents, unrelated photos — even if money-related words appear in it. ' +
+            'When isPaymentProof is true, also extract what the receipt shows: amount as a plain number (no separators), currency as the ISO/displayed code (e.g. "PKR"), date as shown (ISO if possible), reference as the transaction/reference id string. ' +
+            'Use null for any field not clearly readable — NEVER guess.',
         },
         {
           role: 'user',
@@ -862,13 +867,20 @@ const classifyPaymentProofImage = async (buffer, mimeType) => {
     });
 
     const parsed = JSON.parse(res.choices?.[0]?.message?.content || '{}');
+    const amount = Number(parsed.amount);
     return {
       isPaymentProof: parsed.isPaymentProof === true,
       reason: parsed.reason || null,
+      // Extracted receipt fields — read by the human reviewer (surfaced in
+      // the Activity + admin notification), never used to auto-approve.
+      amount: Number.isFinite(amount) && amount > 0 ? amount : null,
+      currency: parsed.currency ? String(parsed.currency).slice(0, 10) : null,
+      date: parsed.date ? String(parsed.date).slice(0, 40) : null,
+      reference: parsed.reference ? String(parsed.reference).slice(0, 100) : null,
     };
   } catch (err) {
     logger.warn({ err: err.message }, 'Payment-proof image classification failed — treating as not-proof (fail closed)');
-    return { isPaymentProof: false, reason: 'classification_failed' };
+    return { isPaymentProof: false, reason: 'classification_failed', amount: null, currency: null, date: null, reference: null };
   }
 };
 

@@ -2,6 +2,7 @@
 // Receives all incoming WhatsApp Cloud API events
 
 const { Router } = require('express');
+const crypto = require('crypto');
 const Sentry = require('@sentry/node');
 const env = require('../config/env');
 const logger = require('../utils/logger');
@@ -22,7 +23,13 @@ router.get('/', async (req, res) => {
   if (mode === 'subscribe') {
     // A tenant can configure its own Meta verify token from the dashboard.
     // Keep the environment token as a fallback for existing deployments.
-    let verified = token === env.WHATSAPP_VERIFY_TOKEN;
+    // Hash-then-timingSafeEqual: constant-time regardless of length, so the
+    // comparison leaks nothing about the configured token.
+    const tokensMatch = (a, b) => crypto.timingSafeEqual(
+      crypto.createHash('sha256').update(String(a)).digest(),
+      crypto.createHash('sha256').update(String(b)).digest()
+    );
+    let verified = Boolean(token) && tokensMatch(token, env.WHATSAPP_VERIFY_TOKEN);
     if (!verified && token) {
       const tenant = await prisma.tenant.findFirst({
         where: { waVerifyToken: token },
