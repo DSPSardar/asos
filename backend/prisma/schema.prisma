@@ -372,11 +372,15 @@ model InboundMedia {
   tenantId  String   @map("tenant_id")
   mimeType  String   @map("mime_type")
   data      Bytes
+  // SHA-256 of `data` — lets the payment-proof branch flag a screenshot the
+  // same lead (or another lead of this tenant) already submitted.
+  sha256    String?
   createdAt DateTime @default(now()) @map("created_at")
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
+  @@index([tenantId, sha256])
   @@map("inbound_media")
 }
 

@@ -6,6 +6,14 @@
 //   node prisma/seed-dsp.js
 
 require('dotenv').config();
+
+// Demo credentials (dsp-admin123! etc.) are printed by this script and
+// documented in-repo — never seed them into production unless forced.
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PROD_SEED !== 'true') {
+  console.error('Refusing to seed demo users in production (set ALLOW_PROD_SEED=true to override).');
+  process.exit(1);
+}
+
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
@@ -122,12 +130,23 @@ const LOST_REASONS = [
 ];
 
 // ── AI system prompt for DSP ──────────────────────────────────────────────────
-const DSP_SYSTEM_PROMPT = `You are Zara, an AI sales consultant for DSP (Digital Skills Platform) — a premium AI education program by Sardar Group.
-
-Your goal is to help prospective students understand the Agentic AI Mastery program and guide them toward enrollment.
+// This block is FACTS + VOICE only. It is injected into both agents'
+// system prompts as PRODUCT/BUSINESS CONTEXT, so it must not issue its own
+// competing role or process instructions:
+//   • no "You are <persona>" role override — the pipeline prompts already
+//     define each agent's job; the persona is a name and a voice, nothing more.
+//   • every closable fact the Closer is allowed to state must be HERE —
+//     rule 7 forbids quoting a fee from memory, so a missing fee meant every
+//     single fee question got deflected and flagged as a knowledge gap.
+//   • no steps the product doesn't have — the old "offer a quick 10-minute
+//     call" invented a call-booking flow that doesn't exist; the only real
+//     next step is WhatsApp enrollment + payment.
+const DSP_SYSTEM_PROMPT = `BUSINESS: DSP (Digital Skills Platform) — a premium AI education program by Sardar Group.
+PERSONA: Present yourself as "Zara", DSP's enrollment consultant. The persona is a name and a voice — your job and sales process are defined by your main instructions, not by this section.
 
 PROGRAM FACTS (use ONLY these):
-- 14-day intensive live program
+- Program: Agentic AI Mastery — 14-day intensive live program
+- Enrollment fee: Rs. 10,000 — one-time, full program. No discounts, no installment plans.
 - Learn AI tools, prompt engineering, automation, and building AI agents
 - No technical background required — complete beginners welcome
 - SECP certified certificate issued on completion
@@ -135,13 +154,14 @@ PROGRAM FACTS (use ONLY these):
 - Lifetime recording access
 - Limited to 30 students per batch
 - Target: students, freelancers, job seekers, professionals wanting dollar income
+- Enrollment happens entirely on WhatsApp: the lead confirms, payment details are sent, the lead pays and shares the receipt screenshot. There is NO call-booking step — never offer to schedule a call.
 
 COMMUNICATION STYLE:
 - Mix Urdu/Roman Urdu and English naturally (Pakistani urban professional)
 - Greet "Walaikum assalam" if they open with salam
 - Be warm, encouraging, and professional
 - Address common concerns: Can I learn without coding? Will I get a job? Is it worth it?
-- Create urgency around limited batch seats
+- Create urgency only from the real 30-seat batch limit
 
 QUALIFY ON:
 1. Current occupation (student/job/business)
@@ -150,11 +170,10 @@ QUALIFY ON:
 4. Budget/payment concern
 5. Timeline urgency
 
-ALWAYS:
+EMPHASIZE:
 - Lead with outcomes (dollar income, freelancing, automation)
 - Reference Sardar Group credibility
 - Mention SECP certification
-- Offer a quick 10-minute call for serious leads
 - Highlight the 30-seat limit`;
 
 // ── Main seed function ────────────────────────────────────────────────────────
@@ -248,7 +267,9 @@ async function main() {
         'Kab tak start karna chahte hain?',
       ],
     },
-    update: {},
+    // Re-running the seed refreshes the prompt so prompt fixes actually land
+    // in an existing dev DB instead of being silently skipped by the upsert.
+    update: { systemPrompt: DSP_SYSTEM_PROMPT },
   });
   console.log('✅ DSP AI config created');
 

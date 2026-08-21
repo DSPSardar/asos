@@ -77,6 +77,37 @@ const rlsTransaction = (arg, opts) => {
   }, opts);
 };
 
+// RLS is only enforced for roles without superuser/BYPASSRLS — Railway's
+// default postgres user is a superuser and silently bypasses every policy,
+// turning the entire tenant-isolation layer into decoration. Swapping
+// DATABASE_URL to the asos_app role (scripts/create-app-role.sql) is a
+// manual step, so verify it actually happened: in production, refuse to
+// serve traffic on a bypassing role; elsewhere, warn loudly.
+// Uses base.$queryRaw deliberately — pg_roles is not RLS-scoped and the
+// extension only wraps model operations anyway.
+const assertRlsEnforceable = async ({ logger, fatal }) => {
+  const rows = await base.$queryRaw`
+    SELECT rolsuper AS "rolsuper", rolbypassrls AS "rolbypassrls"
+    FROM pg_roles WHERE rolname = current_user
+  `;
+  const role = rows?.[0];
+  const bypasses = !role || role.rolsuper || role.rolbypassrls;
+
+  if (!bypasses) return true;
+
+  const msg =
+    'Database role bypasses row-level security (superuser or BYPASSRLS) — ' +
+    'tenant isolation policies are NOT being enforced. Run ' +
+    'scripts/create-app-role.sql and point DATABASE_URL at asos_app.';
+
+  if (fatal) {
+    logger.fatal({ role }, msg);
+    return false;
+  }
+  logger.warn({ role }, msg);
+  return true;
+};
+
 // Graceful shutdown
 process.on('beforeExit', async () => {
   await base.$disconnect();
@@ -85,6 +116,7 @@ process.on('beforeExit', async () => {
 module.exports = new Proxy(xprisma, {
   get(target, prop, receiver) {
     if (prop === '$transaction') return rlsTransaction;
+    if (prop === 'assertRlsEnforceable') return assertRlsEnforceable;
     return Reflect.get(target, prop, receiver);
   },
 });

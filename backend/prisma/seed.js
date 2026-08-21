@@ -2,6 +2,15 @@
 // Run: node prisma/seed.js
 
 require('dotenv').config();
+
+// These demo credentials (superadmin123! etc.) are documented in the README.
+// Running this against production would publish a live SUPERADMIN login —
+// refuse unless explicitly forced.
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PROD_SEED !== 'true') {
+  console.error('Refusing to seed demo users in production (set ALLOW_PROD_SEED=true to override).');
+  process.exit(1);
+}
+
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 

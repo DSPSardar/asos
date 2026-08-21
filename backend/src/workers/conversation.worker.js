@@ -18,7 +18,9 @@ const elevenlabsService = require('../services/elevenlabs.service');
 const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
+const billingService = require('../modules/billing/billing.service');
 const { toDbMessageType } = require('../utils/messageType');
+const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
 const { publishStatusUpdate } = require('../queues/message.queue');
@@ -545,6 +547,26 @@ const handleInboundMessage = async (job) => {
   }
 
   if (isPaymentProof) {
+    // ── Reviewer signals, not auto-decisions ─────────────────────────
+    // Human verification stays the gate; these checks arm the reviewer:
+    //  • duplicate: the exact same file bytes were already submitted to this
+    //    tenant (classic reused-screenshot fraud) — the receipt "looks real"
+    //    because it IS real, just already spent.
+    //  • amount mismatch: the receipt's extracted amount differs from the
+    //    tenant's configured enrollment fee.
+    let duplicateOf = null;
+    if (savedMedia?.sha256 && savedMedia?.mediaRowId) {
+      duplicateOf = await prisma.inboundMedia.findFirst({
+        where: { tenantId, sha256: savedMedia.sha256, NOT: { id: savedMedia.mediaRowId } },
+        select: { id: true, createdAt: true },
+      }).catch(() => null);
+    }
+
+    const expectedFee = Number(tenant.settings?.enrollmentFee) || null;
+    const extractedAmount = imageClassification?.amount || null;
+    const amountMismatch = Boolean(expectedFee && extractedAmount && extractedAmount !== expectedFee);
+    const suspicious = Boolean(duplicateOf) || amountMismatch;
+
     await prisma.conversation.update({
       where: { id: conversation.id },
       data: {
@@ -552,12 +574,20 @@ const handleInboundMessage = async (job) => {
         paymentProofAt: new Date(),
         status: 'PENDING_VERIFICATION',
         aiEnabled: false,
-        handoffReason: 'Payment proof received — awaiting human verification',
+        handoffReason: duplicateOf
+          ? '⚠️ Payment proof is a DUPLICATE of an earlier submission — verify carefully'
+          : amountMismatch
+            ? `⚠️ Payment proof amount (${extractedAmount}) does not match the expected fee (${expectedFee}) — verify carefully`
+            : 'Payment proof received — awaiting human verification',
       },
     });
 
-    const ackMessage = tenant.aiConfig?.paymentProofMessage?.trim()
-      || 'Thank you! We have received your payment confirmation. Our team will verify it and confirm your seat shortly. 🙏';
+    // A suspicious proof gets the neutral "we'll verify" wording, never the
+    // configured "payment received" celebration.
+    const ackMessage = suspicious
+      ? 'Thank you for the screenshot! Our team will verify the payment and confirm your seat shortly. 🙏'
+      : (tenant.aiConfig?.paymentProofMessage?.trim()
+        || 'Thank you! We have received your payment confirmation. Our team will verify it and confirm your seat shortly. 🙏');
 
     await sendAndSaveReply({
       tenant, conversation, tenantId,
@@ -572,15 +602,36 @@ const handleInboundMessage = async (job) => {
         tenantId,
         leadId: lead.id,
         type: 'AI_ACTION',
-        content: '💳 Payment proof received — conversation moved to verification queue',
-        metadata: { flag: 'payment_proof_detected', messageType, waMessageId },
+        content: duplicateOf
+          ? '🚨 Payment proof received — but the identical image was submitted before. Possible reused screenshot.'
+          : amountMismatch
+            ? `🚨 Payment proof received — extracted amount ${extractedAmount} does not match expected fee ${expectedFee}.`
+            : '💳 Payment proof received — conversation moved to verification queue',
+        metadata: {
+          flag: suspicious ? 'payment_proof_suspicious' : 'payment_proof_detected',
+          messageType,
+          waMessageId,
+          sha256: savedMedia?.sha256 || null,
+          duplicateOfMediaId: duplicateOf?.id || null,
+          extracted: imageClassification ? {
+            amount: imageClassification.amount,
+            currency: imageClassification.currency,
+            date: imageClassification.date,
+            reference: imageClassification.reference,
+          } : null,
+          expectedFee,
+        },
       },
     });
 
     notificationService.notifyAdmin(tenant, 'needsHuman', {
       contactName: contact.name,
       phone: normalizedPhone,
-      reason: 'Payment proof received — verify and confirm the seat',
+      reason: duplicateOf
+        ? '🚨 Payment proof received but it is an EXACT duplicate of an earlier screenshot — check before confirming'
+        : amountMismatch
+          ? `🚨 Payment proof received but the amount (${extractedAmount}) does not match the fee (${expectedFee}) — check before confirming`
+          : 'Payment proof received — verify and confirm the seat',
     });
 
     logger.info({ leadId: lead.id, conversationId: conversation.id },
@@ -604,12 +655,40 @@ const handleInboundMessage = async (job) => {
   const aiControlFlag = await redis.get(`asos:ai_control:${conversation.id}`).catch(() => null);
   const handedBackToAI = aiControlFlag === '1';
 
+  // ── 7c. Enforce the plan's AI token limit ─────────────────────────
+  // aiTokensUsed has always been incremented (claude.service.js §8) but the
+  // limit was never checked anywhere on this path — a FREE tenant could burn
+  // unbounded OpenAI spend. On limit, hand off so a human sees the lead
+  // rather than the conversation going silent; handleHandoff disables AI, so
+  // this fires once per conversation, not per message.
+  try {
+    await billingService.checkPlanLimits(tenantId, 'ai_tokens');
+  } catch (limitErr) {
+    if (limitErr.statusCode === 402) {
+      logger.warn({ tenantId, leadId: lead.id }, '💸 AI token limit reached — handing conversation to human');
+      await handleHandoff(tenant, conversation, lead, 'AI token limit reached — plan upgrade required');
+      notificationService.notifyAdmin(tenant, 'needsHuman', {
+        contactName: contact.name,
+        phone: normalizedPhone,
+        reason: 'AI token limit reached — AI paused for this conversation until the plan is upgraded',
+      });
+      return;
+    }
+    throw limitErr;
+  }
+
   // ── 8. Load message history for context ──────────────────────────
-  const messageHistory = await prisma.message.findMany({
+  // Outbound AI AUDIO rows are excluded: each is just the voice-note twin of
+  // the text reply right before it (older rows even carry the identical
+  // text), so including them doubled every AI reply in the LLM's view of the
+  // conversation — and inflated the old raw messageCount the Closer's phase
+  // logic ran on. Inbound audio stays: it's the lead's actual (transcribed)
+  // message.
+  const messageHistory = (await prisma.message.findMany({
     where: { conversationId: conversation.id, tenantId },
     orderBy: { sentAt: 'asc' },
-    select: { id: true, sender: true, content: true, sentAt: true },
-  });
+    select: { id: true, sender: true, content: true, sentAt: true, type: true, direction: true },
+  })).filter((m) => !(m.type === 'AUDIO' && m.direction === 'OUTBOUND'));
 
   // ── 9. Call Claude AI Engine ──────────────────────────────────────
   let aiResult;
@@ -626,7 +705,13 @@ const handleInboundMessage = async (job) => {
       // slicing off "the last item" would then strip that reply instead
       // of the current message, and the AI would never see it already
       // answered.
-      messageHistory: messageHistory.filter((m) => m.id !== inboundMessage.id),
+      // sanitizeHistoryForAI: the payment-details block lives in the Message
+      // table for the dashboard, but bank account numbers must never reach
+      // the LLM provider — see utils/aiHistory.js.
+      messageHistory: sanitizeHistoryForAI(
+        messageHistory.filter((m) => m.id !== inboundMessage.id),
+        tenant.aiConfig?.paymentDetails
+      ),
       handedBackToAI,
       welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact.sentWelcomeVoice),
     });
@@ -899,7 +984,12 @@ const sendPaymentInstructions = async ({ tenant, conversation, tenantId, phone }
     tenant, conversation, tenantId, phone,
     content: details,
     tokensUsed: 0,
-    rawResponse: null,
+    // Marker, not an AI response: lets tooling identify this row without
+    // comparing content strings.
+    rawResponse: { systemMessage: 'payment_details' },
+    // Never read account numbers aloud through a third-party TTS service —
+    // the text block is the deliverable here.
+    voiceNote: false,
   });
 
   await prisma.conversation.update({
@@ -911,7 +1001,7 @@ const sendPaymentInstructions = async ({ tenant, conversation, tenantId, phone }
   return true;
 };
 
-const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content, tokensUsed, rawResponse }) => {
+const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content, tokensUsed, rawResponse, voiceNote = true }) => {
   let waMessageId = null;
 
   if (!content?.trim()) {
@@ -925,10 +1015,32 @@ const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content
     return;
   }
 
-  try {
-    waMessageId = await whatsappService.sendText(tenant, phone, content);
-  } catch (err) {
-    logger.error({ err, tenantId, phone }, 'Failed to send WA reply');
+  // Meta's send API fails transiently (throttling, 5xx) often enough that a
+  // single attempt silently dropping the reply is a real incident: the lead
+  // reads silence and nobody is told. Retry briefly, and if it still fails,
+  // leave a visible Activity so the dashboard shows the gap.
+  const MAX_SEND_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS && !waMessageId; attempt++) {
+    try {
+      waMessageId = await whatsappService.sendText(tenant, phone, content);
+    } catch (err) {
+      logger.error({ err, tenantId, phone, attempt }, 'Failed to send WA reply');
+      if (attempt < MAX_SEND_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+      }
+    }
+  }
+
+  if (!waMessageId) {
+    await prisma.activity.create({
+      data: {
+        tenantId,
+        leadId: conversation.leadId,
+        type: 'AI_ACTION',
+        content: '⚠️ WhatsApp send failed after retries — the lead did NOT receive the last reply',
+        metadata: { flag: 'wa_send_failed', attempts: MAX_SEND_ATTEMPTS },
+      },
+    }).catch(() => {});
   }
 
   await prisma.message.create({
@@ -949,7 +1061,14 @@ const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content
   // ── Optional voice-note follow-up, in the owner's ElevenLabs cloned voice.
   // Best-effort and fully isolated: the text reply above has already been
   // sent and saved, so nothing here can affect it.
-  if (elevenlabsService.isVoiceCloneConfigured()) {
+  //
+  // Per-tenant opt-out: the ElevenLabs credentials are platform-global, so
+  // without this gate every tenant's leads would hear the platform owner's
+  // cloned voice at the owner's expense. settings.voiceNotesEnabled = false
+  // turns it off for a tenant; default stays on so current behavior for the
+  // owner's own tenant is unchanged.
+  const tenantVoiceEnabled = tenant.settings?.voiceNotesEnabled !== false;
+  if (voiceNote && tenantVoiceEnabled && elevenlabsService.isVoiceCloneConfigured()) {
     try {
       const tts = await elevenlabsService.textToSpeech(content);
       if (tts) {
@@ -963,7 +1082,10 @@ const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content
             direction: 'OUTBOUND',
             sender: 'AI',
             type: 'AUDIO',
-            content,
+            // Marker, not a second copy of the reply text: the duplicate
+            // content used to appear twice in every AI-bound history and in
+            // the dashboard thread.
+            content: '[Voice note of the reply above]',
             status: audioMessageId ? 'SENT' : 'FAILED',
             aiTokensUsed: 0,
             aiRawResponse: null,
@@ -1072,6 +1194,43 @@ worker.on('completed', (job) => {
   logger.debug({ jobId: job.id, name: job.name }, 'Job completed');
 });
 
+// A job that exhausted its retries is a lead whose message will never be
+// answered. Sentry alone was the only witness — the tenant's dashboard
+// showed nothing, so the lead read silence and nobody followed up. Surface
+// it where the humans actually look: an Activity on the lead's timeline and
+// the admin's WhatsApp notification channel.
+const deadLetterInboundMessage = async (job, err) => {
+  const { tenantId, phone, contactName, waMessageId } = job.data || {};
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) return;
+
+  const normalized = phone ? whatsappService.normalizePhone(phone) : null;
+  const contact = normalized
+    ? await prisma.contact.findFirst({ where: { tenantId, phone: normalized }, select: { id: true, name: true } })
+    : null;
+  const lead = contact
+    ? await prisma.lead.findFirst({ where: { tenantId, contactId: contact.id }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+    : null;
+
+  if (lead) {
+    await prisma.activity.create({
+      data: {
+        tenantId,
+        leadId: lead.id,
+        type: 'AI_ACTION',
+        content: '🚨 A message from this lead could not be processed after all retries — they have NOT received a reply. Please respond manually.',
+        metadata: { flag: 'message_processing_failed', waMessageId: waMessageId || null, error: String(err?.message || err).slice(0, 300) },
+      },
+    }).catch(() => {});
+  }
+
+  notificationService.notifyAdmin(tenant, 'needsHuman', {
+    contactName: contact?.name || contactName,
+    phone: normalized || phone,
+    reason: 'A message from this lead failed processing after all retries — reply manually',
+  });
+};
+
 worker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, name: job?.name, err: err.message, attempts: job?.attemptsMade }, 'Job failed');
 
@@ -1087,6 +1246,14 @@ worker.on('failed', (job, err) => {
       tags: { jobName: job?.name },
       extra: { jobId: job?.id, attemptsMade: job?.attemptsMade },
     });
+
+    if (job?.name === 'inbound-message' && job?.data?.tenantId) {
+      // Same AsyncLocalStorage wrap as the processor so the RLS tenant
+      // context is present once enforcement is on.
+      requestContext.run({ requestId: `${job.id}_deadletter`, tenantId: job.data.tenantId }, () =>
+        deadLetterInboundMessage(job, err).catch((e) => logger.warn({ err: e }, 'Dead-letter reporting failed'))
+      );
+    }
   }
 });
 
@@ -1094,6 +1261,13 @@ worker.on('error', (err) => {
   logger.error({ err }, 'Worker error');
   Sentry.captureException(err);
 });
+
+// Same RLS-role verification as server.js — the worker holds its own DB
+// connection and processes every tenant's messages, so it must not run on a
+// bypassing role either once enforcement is switched on.
+prisma.assertRlsEnforceable({ logger, fatal: env.REQUIRE_RLS_ENFORCEMENT === 'true' })
+  .then((ok) => { if (!ok) process.exit(1); })
+  .catch((err) => logger.warn({ err }, 'Could not verify RLS role'));
 
 logger.info('🔄 Conversation worker started');
 
