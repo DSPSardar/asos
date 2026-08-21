@@ -14,6 +14,7 @@ const env = require('./config/env');
 const logger = require('./utils/logger');
 const { errorHandler, notFound } = require('./middleware/error.middleware');
 const { requestContextMiddleware, runWithSystemScope } = require('./middleware/requestContext.middleware');
+const { verifyMediaSignature } = require('./utils/mediaToken');
 const prisma = require('./config/database');
 
 // Route modules
@@ -157,15 +158,20 @@ const createApp = () => {
   // (asos-worker) and the one serving it (this service) don't share a
   // filesystem, so the bytes live in the one place both can reach.
   //
-  // Deliberately unauthenticated, matching the /uploads mount above — an
-  // <img src="..."> tag in the dashboard can't attach an Authorization
-  // header, so this can only ever be as protected as the id is hard to
-  // guess (a random UUID), the same model /uploads/inbound-media/<tenant>/
-  // <uuid>.<ext> already used. runWithSystemScope is required here because
-  // there is no authenticated tenant on this request for Postgres RLS to
-  // key off of — see requestContext.middleware.js.
+  // An <img src="..."> tag in the dashboard can't attach an Authorization
+  // header, so this route is authenticated by a short-lived HMAC signature
+  // instead: getConversation() signs each mediaUrl at response time
+  // (utils/mediaToken.js) and anything unsigned or expired is refused.
+  // Inbound media includes payment-proof screenshots — bare-UUID access is
+  // not an acceptable protection level for those. runWithSystemScope is
+  // still required because there is no authenticated tenant on this request
+  // for Postgres RLS to key off of — see requestContext.middleware.js.
   app.get('/media/:id', async (req, res) => {
     try {
+      if (!verifyMediaSignature(req.params.id, req.query.e, req.query.s)) {
+        return res.status(403).json({ success: false, message: 'Invalid or expired media link' });
+      }
+
       const row = await runWithSystemScope(() =>
         prisma.inboundMedia.findUnique({
           where: { id: req.params.id },
@@ -184,7 +190,9 @@ const createApp = () => {
       // rather than turning it off app-wide.
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       res.setHeader('Content-Type', row.mimeType || 'application/octet-stream');
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      // private + bounded: signed links expire, and payment evidence must
+      // not sit in shared caches.
+      res.setHeader('Cache-Control', 'private, max-age=3600');
       res.send(row.data);
     } catch (err) {
       logger.warn({ err: err.message, mediaId: req.params.id }, 'Failed to serve inbound media');
