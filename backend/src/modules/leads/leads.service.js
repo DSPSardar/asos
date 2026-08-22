@@ -524,4 +524,95 @@ const deleteLead = async (tenantId, leadId) => {
   return { deleted: true };
 };
 
-module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue, getHotLeads, getHandoffQueue, syncFromDsp, sendDailyHotLeadDigest, deleteLead };
+
+// ── Bulk student import (manual enrollments closed outside ASOS) ─────
+// DSP's real sales motion: inquiry lands in ASOS/WhatsApp, but students
+// call/text the team's personal numbers and pay a human. Those enrollments
+// never touch the pipeline — this lets an admin upload the student list
+// (CSV on the frontend) and record them as CLOSED_WON with real fees.
+const importStudents = async (tenantId, students = [], requestingUserId = null) => {
+  if (!Array.isArray(students) || students.length === 0) {
+    throw Object.assign(new Error('No students provided'), { statusCode: 400, expose: true });
+  }
+  if (students.length > 500) {
+    throw Object.assign(new Error('Max 500 students per import — split the file'), { statusCode: 400, expose: true });
+  }
+
+  const VALID_PHASES = ['LEARN', 'BUILD', 'EARN'];
+  let created = 0;
+  let updated = 0;
+  let invalid = 0;
+
+  for (const row of students) {
+    const phone = normalizePhone(String(row.phone || ''));
+    if (!phone) { invalid += 1; continue; }
+
+    const name  = String(row.name || '').trim() || phone;
+    const email = String(row.email || '').trim() || null;
+    const fee   = Math.max(0, parseFloat(row.fee) || 0);
+    const enrolledAt = row.enrolledAt && !Number.isNaN(Date.parse(row.enrolledAt))
+      ? new Date(row.enrolledAt) : new Date();
+    const phase = VALID_PHASES.includes(String(row.phase || '').toUpperCase())
+      ? String(row.phase).toUpperCase() : 'LEARN';
+
+    // eslint-disable-next-line no-await-in-loop
+    await prisma.$transaction(async (tx) => {
+      let contact = await tx.contact.findFirst({
+        where: { tenantId, OR: [{ phone }, ...(email ? [{ email }] : [])] },
+        select: { id: true },
+      });
+      if (!contact) {
+        contact = await tx.contact.create({
+          data: {
+            tenantId, name, email, phone, optIn: false,
+            customFields: { source: 'MANUAL_IMPORT' },
+          },
+          select: { id: true },
+        });
+      }
+
+      const existingLead = await tx.lead.findFirst({
+        where: { tenantId, contactId: contact.id },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, stage: true },
+      });
+
+      if (existingLead) {
+        await tx.lead.update({
+          where: { id: existingLead.id },
+          data: {
+            stage: 'CLOSED_WON',
+            dealValue: fee || undefined,
+            currency: 'PKR',
+            closedAt: enrolledAt,
+            dspPhase: phase,
+          },
+        });
+        updated += 1;
+      } else {
+        const lead = await tx.lead.create({
+          data: {
+            tenantId, contactId: contact.id,
+            stage: 'CLOSED_WON', scoreLabel: 'HOT', aiScore: 100,
+            dealValue: fee || undefined, currency: 'PKR',
+            closedAt: enrolledAt, dspPhase: phase,
+          },
+          select: { id: true },
+        });
+        await tx.activity.create({
+          data: {
+            tenantId, leadId: lead.id, userId: requestingUserId,
+            type: 'SYSTEM',
+            content: 'Student imported — enrolled outside ASOS (direct/human sale)',
+            metadata: { source: 'MANUAL_IMPORT', fee },
+          },
+        });
+        created += 1;
+      }
+    });
+  }
+
+  return { received: students.length, created, updated, invalid };
+};
+
+module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue, getHotLeads, getHandoffQueue, syncFromDsp, sendDailyHotLeadDigest, deleteLead, importStudents };

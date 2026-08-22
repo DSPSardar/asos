@@ -1,5 +1,5 @@
 // src/pages/Students.jsx — DSP Student Lifecycle (Learn → Build → Earn)
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { leadsAPI } from '@lib/api';
 
 // ── Phase config ──────────────────────────────────────────────────────────────
@@ -69,17 +69,65 @@ const PHASE_STEPS = {
 const fmtPKR  = (v) => `Rs. ${Number(v).toLocaleString('en-PK')}`;
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-PK', { day:'2-digit', month:'short', year:'numeric' }) : '—';
 
+// ── Minimal CSV parser (handles quoted fields) ────────────────────────
+const parseCSV = (text) => {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += ch;
+    } else if (ch === '"') inQuotes = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.some((c) => c.trim() !== '')) rows.push(row);
+      row = [];
+    } else field += ch;
+  }
+  row.push(field);
+  if (row.some((c) => c.trim() !== '')) rows.push(row);
+  return rows;
+};
+
+// Flexible headers: name, phone/whatsapp/number, email, fee/amount/paid,
+// enrolled/date, phase
+const HEADER_MAP = {
+  name: 'name', student: 'name', 'student name': 'name',
+  phone: 'phone', whatsapp: 'phone', number: 'phone', mobile: 'phone', 'phone number': 'phone',
+  email: 'email',
+  fee: 'fee', amount: 'fee', paid: 'fee', price: 'fee', 'fee paid': 'fee',
+  enrolled: 'enrolledAt', date: 'enrolledAt', 'enrolled date': 'enrolledAt', 'enrollment date': 'enrolledAt',
+  phase: 'phase',
+};
+
+const csvToStudents = (text) => {
+  const rows = parseCSV(text);
+  if (rows.length < 2) return [];
+  const headers = rows[0].map((h) => HEADER_MAP[h.trim().toLowerCase()] || null);
+  return rows.slice(1).map((cells) => {
+    const obj = {};
+    headers.forEach((key, i) => { if (key && cells[i] !== undefined) obj[key] = cells[i].trim(); });
+    return obj;
+  }).filter((o) => o.phone || o.name);
+};
+
 export default function Students() {
   const [students, setStudents]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [phase, setPhase]         = useState('ALL');
   const [selected, setSelected]   = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState(null);
+  const fileRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await leadsAPI.list({ stage: 'CLOSED_WON', limit: 200 });
+      const res = await leadsAPI.list({ stage: 'CLOSED_WON', limit: 500 });
       const raw = res?.data?.data ?? res?.data ?? [];
       setStudents(raw);
     } catch {
@@ -90,6 +138,31 @@ export default function Students() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const onImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const text = await file.text();
+      const rows = csvToStudents(text);
+      if (rows.length === 0) {
+        setImportMsg('No rows found — need headers like: name, phone, fee, enrolled date');
+      } else {
+        const res = await leadsAPI.importStudents(rows.slice(0, 500));
+        const r = res?.data?.data ?? res?.data ?? {};
+        setImportMsg(`Imported ✓ ${r.created || 0} new, ${r.updated || 0} updated, ${r.invalid || 0} invalid (no phone)`);
+        load();
+      }
+    } catch (err) {
+      setImportMsg(err?.response?.data?.message || 'Import failed — check the file and try again');
+    } finally {
+      setImporting(false);
+      setTimeout(() => setImportMsg(null), 8000);
+    }
+  };
 
   const filtered = students.filter(s => {
     const name  = s.contact?.name || '';
@@ -102,7 +175,9 @@ export default function Students() {
   // ── Phase summary counts ──────────────────────────────────────────
   const phaseCounts = { LEARN: 0, BUILD: 0, EARN: 0 };
   students.forEach(s => { const p = s.dspPhase || 'LEARN'; if (phaseCounts[p] !== undefined) phaseCounts[p]++; });
-  const totalRevenue = students.length * 10000;
+  // Real revenue: sum of each enrolled student's dealValue. Students with no
+  // recorded fee contribute 0 — no invented per-head amounts.
+  const totalRevenue = students.reduce((sum, s) => sum + (parseFloat(s.dealValue) || 0), 0);
 
   return (
     <div className="flex flex-col h-full">
@@ -118,8 +193,20 @@ export default function Students() {
             <span className="text-sm font-bold text-slate-100">{students.length}</span>
             <span className="ml-3 text-xs text-slate-400">Revenue:</span>
             <span className="text-sm font-bold text-emerald-400">{fmtPKR(totalRevenue)}</span>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={importing}
+              className="ml-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition hover:bg-accent/20 disabled:opacity-50"
+            >
+              {importing ? 'Importing…' : '⬆ Import CSV'}
+            </button>
           </div>
         </div>
+
+        {importMsg && (
+          <div className="mt-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs text-slate-200">{importMsg}</div>
+        )}
 
         {/* Phase summary pills */}
         <div className="flex gap-3 mt-4 flex-wrap">
@@ -311,7 +398,7 @@ function StudentDetail({ student, onClose }) {
           ['Goal', qual.goal || '—'],
           ['Tech background', qual.techBackground || '—'],
           ['Enrolled', fmtDate(student.closedAt)],
-          ['Enrollment fee', fmtPKR(10000)],
+          ['Enrollment fee', student.dealValue ? fmtPKR(parseFloat(student.dealValue)) : '—'],
           ['AI Score', `${student.aiScore}/100`],
         ].map(([label, val]) => (
           <div key={label} className="flex justify-between text-xs">

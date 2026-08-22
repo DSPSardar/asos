@@ -170,6 +170,7 @@ export const leadsAPI = {
   create:      (data) => api.post('/leads', data),
   updateStage: (id, stage, lostReason) => api.patch(`/leads/${id}/stage`, { stage, lostReason }),
   assign:      (id, agentId) => api.patch(`/leads/${id}/assign`, { agentId }),
+  importStudents: (students) => api.post('/leads/import-students', { students }),
   addNote:     (id, content) => api.post(`/leads/${id}/notes`, { content }),
   updateDeal:  (id, dealValue, currency) => api.patch(`/leads/${id}/deal-value`, { dealValue, currency }),
   syncDsp:     () => api.post('/leads/sync-dsp'),

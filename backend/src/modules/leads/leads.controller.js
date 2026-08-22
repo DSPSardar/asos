@@ -109,4 +109,9 @@ const deleteLead = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { list, pipeline, getOne, create, updateStage, assign, addNote, updateDealValue, hotLeads, handoffQueue, syncFromDsp, sendDigest, deleteLead };
+const importStudents = async (req, res, next) => {
+  try { return success(res, await leadsService.importStudents(req.tenantId, req.body.students, req.user.id), 'Students imported'); }
+  catch (e) { next(e); }
+};
+
+module.exports = { list, pipeline, getOne, create, updateStage, assign, addNote, updateDealValue, hotLeads, handoffQueue, syncFromDsp, sendDigest, deleteLead, importStudents };
