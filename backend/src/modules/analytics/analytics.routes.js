@@ -15,5 +15,8 @@ router.get('/ai-performance', ctrl.aiPerf);
 router.get('/agents',         ctrl.agents);
 router.get('/messages',       ctrl.messages);
 router.get('/team-performance', ctrl.teamPerformance);
+router.get('/sources',        ctrl.sources);
+router.get('/conversions',    ctrl.conversions);
+router.get('/hot-by-hour',    ctrl.hotByHour);
 
 module.exports = router;

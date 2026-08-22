@@ -11,4 +11,8 @@ const agents    = async (req, res, next) => { try { return success(res, await sv
 const messages  = async (req, res, next) => { try { return success(res, await svc.getMessageVolume(req.tenantId, req.query)); } catch(e){next(e);} };
 const teamPerformance  = async (req, res, next) => { try { return success(res, await svc.getTeamPerformance(req.tenantId, req.query)); } catch(e){next(e);} };
 
-module.exports = { overview, funnel, revenue, aiPerf, agents, messages, teamPerformance };
+const sources     = async (req, res, next) => { try { return success(res, await svc.getLeadSources(req.tenantId, req.query)); } catch (e) { next(e); } };
+const conversions = async (req, res, next) => { try { return success(res, await svc.getDailyConversions(req.tenantId, req.query)); } catch (e) { next(e); } };
+const hotByHour   = async (req, res, next) => { try { return success(res, await svc.getHotByHour(req.tenantId)); } catch (e) { next(e); } };
+
+module.exports = { sources, conversions, hotByHour, overview, funnel, revenue, aiPerf, agents, messages, teamPerformance };

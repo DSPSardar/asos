@@ -221,6 +221,9 @@ export const analyticsAPI = {
   agents:        (params) => api.get('/analytics/agents', { params }),
   messages:      (params) => api.get('/analytics/messages', { params }),
   teamPerformance: (params) => api.get('/analytics/team-performance', { params }),
+  sources:       (params) => api.get('/analytics/sources', { params }),
+  conversions:   (params) => api.get('/analytics/conversions', { params }),
+  hotByHour:     () => api.get('/analytics/hot-by-hour'),
 };
 
 export const contentStudioAPI = {

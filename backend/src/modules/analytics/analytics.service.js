@@ -236,4 +236,63 @@ const getTeamPerformance = async (tenantId, { from, to } = {}) => {
   return { team: rows, leaderboard };
 };
 
-module.exports = { getOverview, getFunnel, getRevenue, getAIPerformance, getAgentPerformance, getMessageVolume, getTeamPerformance };
+
+// ── Lead sources: share of leads by campaign ─────────────────────────
+const getLeadSources = async (tenantId, { from, to } = {}) => {
+  const range = dateRange(from, to);
+  const grouped = await prisma.lead.groupBy({
+    by: ['campaignId'],
+    where: { tenantId, createdAt: range },
+    _count: { id: true },
+  });
+  const total = grouped.reduce((s, g) => s + g._count.id, 0);
+  if (!total) return { sources: [], total: 0 };
+
+  const campaignIds = grouped.map((g) => g.campaignId).filter(Boolean);
+  const campaigns = campaignIds.length
+    ? await prisma.campaign.findMany({ where: { id: { in: campaignIds }, tenantId }, select: { id: true, name: true } })
+    : [];
+  const nameById = new Map(campaigns.map((c) => [c.id, c.name]));
+
+  const sources = grouped
+    .map((g) => ({
+      name: g.campaignId ? (nameById.get(g.campaignId) || 'Unknown campaign') : 'Direct / Organic',
+      count: g._count.id,
+      value: Math.round((g._count.id / total) * 100),
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+  return { sources, total };
+};
+
+// ── Daily won conversions ────────────────────────────────────────────
+const getDailyConversions = async (tenantId, { from, to } = {}) => {
+  const range = dateRange(from, to);
+  const won = await prisma.lead.findMany({
+    where: { tenantId, stage: 'CLOSED_WON', closedAt: range },
+    select: { closedAt: true },
+  });
+  const byDay = new Map();
+  won.forEach((l) => {
+    if (!l.closedAt) return;
+    const key = l.closedAt.toISOString().slice(0, 10);
+    byDay.set(key, (byDay.get(key) || 0) + 1);
+  });
+  const days = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, n]) => ({ date, n }));
+  return { days, total: won.length };
+};
+
+// ── HOT leads by hour of creation (last 7 days) ──────────────────────
+const getHotByHour = async (tenantId) => {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const hot = await prisma.lead.findMany({
+    where: { tenantId, scoreLabel: 'HOT', createdAt: { gte: since } },
+    select: { createdAt: true },
+  });
+  const hours = Array.from({ length: 12 }, (_, i) => ({ h: String(i * 2).padStart(2, '0'), n: 0 }));
+  hot.forEach((l) => { hours[Math.floor(l.createdAt.getUTCHours() / 2)].n += 1; });
+  return { hours, total: hot.length };
+};
+
+module.exports = { getOverview, getFunnel, getRevenue, getAIPerformance, getAgentPerformance, getMessageVolume, getTeamPerformance, getLeadSources, getDailyConversions, getHotByHour };

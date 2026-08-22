@@ -1,6 +1,7 @@
 // src/pages/Analytics.jsx — Analytics (route: /analytics).
 // KPI tiles · funnel · source attribution · AI vs human · time-series grid · team table.
 import React, { useCallback, useEffect, useState } from 'react';
+import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 import {
   LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -11,7 +12,7 @@ import { analyticsAPI, campaignsAPI, reportsAPI } from '@lib/api';
 // ─────────────────────────────────────────────────────────────
 // Mock data
 // ─────────────────────────────────────────────────────────────
-const KPIS = [
+const DEMO_KPIS = [
   { label:'Total Leads',     value:'1,028',       delta:'+22%',  tone:'up',      sub:'vs previous 30 days' },
   { label:'Conversion Rate', value:'18.4%',       delta:'+2.1pp',tone:'up',      sub:'lead → booking confirmed' },
   { label:'Avg Deal Size',   value:'PKR 64L',     delta:'+8%',   tone:'up',      sub:'across confirmed bookings' },
@@ -19,14 +20,14 @@ const KPIS = [
   { label:'AI Handle Rate',  value:'92%',         delta:'+3pp',  tone:'up',      sub:'no human takeover needed' },
 ];
 
-const FUNNEL = [
+const DEMO_FUNNEL = [
   { stage:'Lead',      count:1028, color:'#6366f1' },
   { stage:'Qualified', count: 612, color:'#06b6d4' },
   { stage:'Proposal',  count: 274, color:'#a855f7' },
   { stage:'Won',       count: 189, color:'#10b981' },
 ];
 
-const SOURCE_PIE = [
+const DEMO_SOURCE_PIE = [
   { name:'WhatsApp Ads',  value: 41, color:'#22c55e' },
   { name:'Facebook Ads',  value: 27, color:'#3b82f6' },
   { name:'Instagram',     value: 16, color:'#ec4899' },
@@ -34,38 +35,38 @@ const SOURCE_PIE = [
   { name:'Website',       value:  6, color:'#94a3b8' },
 ];
 
-const AI_VS_HUMAN = [
+const DEMO_AI_VS_HUMAN = [
   { metric:'Avg response',     ai: 18, human:1240, label:'sec' },
   { metric:'Conv. rate',       ai: 19, human: 24,  label:'%' },
   { metric:'Threads handled',  ai:946, human: 82,  label:'#' },
   { metric:'CSAT score',       ai:4.6, human:4.8,  label:'/5' },
 ];
 
-const DAILY_LEADS = [
+const DEMO_DAILY_LEADS = [
   { d:'Apr 21', n:32 }, { d:'Apr 22', n:38 }, { d:'Apr 23', n:41 },
   { d:'Apr 24', n:47 }, { d:'Apr 25', n:44 }, { d:'Apr 26', n:51 },
   { d:'Apr 27', n:58 },
 ];
 
-const DAILY_CONVERSIONS = [
+const DEMO_DAILY_CONVERSIONS = [
   { d:'Apr 21', n: 5 }, { d:'Apr 22', n: 7 }, { d:'Apr 23', n: 6 },
   { d:'Apr 24', n: 9 }, { d:'Apr 25', n: 8 }, { d:'Apr 26', n:11 },
   { d:'Apr 27', n:12 },
 ];
 
-const AI_COST = [
-  { d:'Apr 21', usd:4.82 }, { d:'Apr 22', usd:5.31 }, { d:'Apr 23', usd:5.94 },
-  { d:'Apr 24', usd:6.41 }, { d:'Apr 25', usd:6.18 }, { d:'Apr 26', usd:6.92 },
-  { d:'Apr 27', usd:7.10 },
+const DEMO_AI_COST = [
+  { d:'Apr 21', n:4.82 }, { d:'Apr 22', n:5.31 }, { d:'Apr 23', n:5.94 },
+  { d:'Apr 24', n:6.41 }, { d:'Apr 25', n:6.18 }, { d:'Apr 26', n:6.92 },
+  { d:'Apr 27', n:7.10 },
 ];
 
-const HOT_BY_HOUR = [
+const DEMO_HOT_BY_HOUR = [
   { h:'00', n: 1 }, { h:'02', n: 0 }, { h:'04', n: 0 }, { h:'06', n: 1 },
   { h:'08', n: 4 }, { h:'10', n: 9 }, { h:'12', n:11 }, { h:'14', n:14 },
   { h:'16', n:12 }, { h:'18', n: 9 }, { h:'20', n: 6 }, { h:'22', n: 3 },
 ];
 
-const TEAM = [
+const DEMO_TEAM = [
   { id:'t1', name:'Saad Ali',    role:'Senior Agent', leads:118, won: 22, conv:'18.6%', deal:'PKR 71L', avatar:'SA' },
   { id:'t2', name:'Hira Ahmed',  role:'Manager',      leads: 96, won: 19, conv:'19.8%', deal:'PKR 58L', avatar:'HA' },
   { id:'t3', name:'Bilal Ahmed', role:'Agent',        leads: 78, won: 11, conv:'14.1%', deal:'PKR 42L', avatar:'BA' },
@@ -98,34 +99,54 @@ const fmtPKR = (n) => {
 // ─────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────
+const PIE_COLORS = ['#22c55e', '#3b82f6', '#ec4899', '#f59e0b', '#94a3b8', '#a855f7'];
+
 export default function Analytics() {
+  const isDemo = useAuthStore((state) => state.token === DEMO_ACCESS_TOKEN);
   const [range,       setRange]       = useState('30d');
   const [toast,       setToast]       = useState(null);
-  const [loading,     setLoading]     = useState(true);
+  const [loading,     setLoading]     = useState(!isDemo);
   const [flags,       setFlags]       = useState([]);
+  const [denied,      setDenied]      = useState(false);
 
-  // State — initialised with mock constants so charts never go blank
-  const [kpis,        setKpis]        = useState(KPIS);
-  const [funnelData,  setFunnelData]  = useState(FUNNEL);
-  const [sourcePie,   setSourcePie]   = useState(SOURCE_PIE);
-  const [aiMetrics,   setAiMetrics]   = useState(AI_VS_HUMAN);
-  const [dailyLeads,  setDailyLeads]  = useState(DAILY_LEADS);
-  const [aiMessages,  setAiMessages]  = useState(AI_COST);
-  const [teamRows,    setTeamRows]    = useState(TEAM);
+  // Live tenants start EMPTY and fill from the API — mock constants render
+  // only for the demo account. An empty chart is honest; a fake one isn't.
+  const [kpis,        setKpis]        = useState(isDemo ? DEMO_KPIS : []);
+  const [funnelData,  setFunnelData]  = useState(isDemo ? DEMO_FUNNEL : []);
+  const [sourcePie,   setSourcePie]   = useState(isDemo ? DEMO_SOURCE_PIE : []);
+  const [aiMetrics,   setAiMetrics]   = useState(isDemo ? DEMO_AI_VS_HUMAN : []);
+  const [dailyLeads,  setDailyLeads]  = useState(isDemo ? DEMO_DAILY_LEADS : []);
+  const [dailyConv,   setDailyConv]   = useState(isDemo ? DEMO_DAILY_CONVERSIONS : []);
+  const [aiMessages,  setAiMessages]  = useState(isDemo ? DEMO_AI_COST : []);
+  const [hotByHour,   setHotByHour]   = useState(isDemo ? DEMO_HOT_BY_HOUR : []);
+  const [teamRows,    setTeamRows]    = useState(isDemo ? DEMO_TEAM : []);
 
   const loadData = useCallback(async (r) => {
+    if (isDemo) { setLoading(false); return; }
     const days = { '7d':7, '30d':30, '90d':90, 'qtd':90, 'ytd':365 }[r] || 30;
     const from = new Date(Date.now() - days * 86400000).toISOString();
     const to   = new Date().toISOString();
     setLoading(true);
 
-    const [ovRes, fnRes, aiRes, msgRes, teamRes] = await Promise.allSettled([
+    const [ovRes, fnRes, aiRes, msgRes, teamRes, srcRes, convRes, hourRes] = await Promise.allSettled([
       analyticsAPI.overview({ from, to }),
       analyticsAPI.funnel({ from, to }),
       analyticsAPI.aiPerformance({ from, to }),
       analyticsAPI.messages({ from, to }),
       analyticsAPI.teamPerformance({ from, to }),
+      analyticsAPI.sources({ from, to }),
+      analyticsAPI.conversions({ from, to }),
+      analyticsAPI.hotByHour(),
     ]);
+
+    // Analytics endpoints are TENANT_ADMIN-gated — an agent gets 403 on all
+    // of them. Show that honestly instead of rendering fabricated numbers.
+    const firstErr = [ovRes, fnRes, aiRes].find((x) => x.status === 'rejected');
+    if (firstErr && [401, 403].includes(firstErr.reason?.response?.status)) {
+      setDenied(true);
+      setLoading(false);
+      return;
+    }
 
     // ── KPIs ──────────────────────────────────────────────────
     if (ovRes.status === 'fulfilled') {
@@ -147,7 +168,7 @@ export default function Analytics() {
       const COLOR = { NEW:'#6366f1', QUALIFYING:'#06b6d4', DIAGNOSED:'#a855f7', PROPOSED:'#f59e0b', CLOSED_WON:'#10b981' };
       const LABEL = { NEW:'Lead', QUALIFYING:'Qualified', DIAGNOSED:'Diagnosed', PROPOSED:'Proposed', CLOSED_WON:'Won' };
       const mapped = arr.filter(f => f.stage !== 'CLOSED_LOST').map(f => ({ stage: LABEL[f.stage]||f.stage, count: f.count, color: COLOR[f.stage]||'#64748b' }));
-      if (mapped.some(f => f.count > 0)) setFunnelData(mapped);
+      setFunnelData(mapped);
     }
 
     // ── AI vs Human ───────────────────────────────────────────
@@ -168,10 +189,8 @@ export default function Analytics() {
     if (msgRes.status === 'fulfilled') {
       const timeline = msgRes.value.data?.data?.timeline || msgRes.value.data?.timeline || [];
       const recent = timeline.slice(-14);
-      if (recent.length > 0) {
-        setDailyLeads(recent.map(d => ({ d: (d.date||'').slice(5), n: d.inbound||0 })));
-        setAiMessages(recent.map(d => ({ d: (d.date||'').slice(5), usd: d.ai||0 })));
-      }
+      setDailyLeads(recent.map(d => ({ d: (d.date||'').slice(5), n: d.inbound||0 })));
+      setAiMessages(recent.map(d => ({ d: (d.date||'').slice(5), n: d.ai||0 })));
     }
 
     // ── Team ──────────────────────────────────────────────────
@@ -186,11 +205,25 @@ export default function Analytics() {
         deal:  `Resp ${t.avgResponseSeconds}s`,
         avatar:(t.name||'A').split(' ').map(s => s[0]).join('').slice(0,2),
       }));
-      if (rows.length > 0) setTeamRows(rows);
+      setTeamRows(rows);
+    }
+
+    // ── Sources / conversions / hot-by-hour (real endpoints) ──
+    if (srcRes.status === 'fulfilled') {
+      const src = srcRes.value.data?.data || srcRes.value.data || {};
+      setSourcePie((src.sources || []).map((x, i) => ({ ...x, color: PIE_COLORS[i % PIE_COLORS.length] })));
+    }
+    if (convRes.status === 'fulfilled') {
+      const cv = convRes.value.data?.data || convRes.value.data || {};
+      setDailyConv((cv.days || []).map((d) => ({ d: (d.date || '').slice(5), n: d.n })));
+    }
+    if (hourRes.status === 'fulfilled') {
+      const hb = hourRes.value.data?.data || hourRes.value.data || {};
+      setHotByHour(hb.hours || []);
     }
 
     setLoading(false);
-  }, []);
+  }, [isDemo]);
 
   useEffect(() => {
     loadData(range);
@@ -207,7 +240,7 @@ export default function Analytics() {
     <>
       <PageHeader
         title="Analytics"
-        subtitle="Pipeline performance, source attribution, and team activity for Boulevard Tower REIT."
+        subtitle="Pipeline performance, source attribution, and team activity."
         action={
           <div className="flex items-center gap-2">
             {loading && <span className="text-[10px] text-slate-500 animate-pulse">Refreshing…</span>}
@@ -223,6 +256,13 @@ export default function Analytics() {
       />
 
       <div className="space-y-6 p-8">
+        {denied && (
+          <section className="glass-card rounded-xl p-6 text-sm text-slate-300">
+            <h2 className="text-sm font-semibold text-slate-100">Admin access required</h2>
+            <p className="mt-1.5 text-slate-400">Analytics is available to tenant admins. Ask your admin for access — nothing on this page is shown to agent accounts.</p>
+          </section>
+        )}
+        {!denied && (<>
         {/* Section A — KPI tiles */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {kpis.map((k) => <KpiTile key={k.label} {...k} />)}
@@ -248,15 +288,16 @@ export default function Analytics() {
         {/* Section D — Time-series 2x2 grid */}
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <TimeSeriesCard title="Daily Inbound Messages" hint={`last ${range}`}  data={dailyLeads}         dataKey="n"   color="#6366f1" type="bar" />
-          <TimeSeriesCard title="Daily Conversions"      hint="last 7 days"      data={DAILY_CONVERSIONS}  dataKey="n"   color="#10b981" type="line" />
-          <TimeSeriesCard title="Daily AI Messages"      hint={`last ${range}`}  data={aiMessages}         dataKey="usd" color="#f59e0b" type="area" />
-          <TimeSeriesCard title="Hot Leads by Hour"      hint="last 24h"         data={HOT_BY_HOUR}        dataKey="n"   color="#ef4444" type="bar" xKey="h" suffix=":00" />
+          <TimeSeriesCard title="Daily Conversions"      hint={`last ${range}`}  data={dailyConv}          dataKey="n"   color="#10b981" type="line" />
+          <TimeSeriesCard title="Daily AI Messages"      hint={`last ${range}`}  data={aiMessages}         dataKey="n"   color="#f59e0b" type="area" />
+          <TimeSeriesCard title="Hot Leads by Hour"      hint="last 7 days"      data={hotByHour}          dataKey="n"   color="#ef4444" type="bar" xKey="h" suffix=":00" />
         </section>
 
         {/* Section E — Team table */}
         <section>
           <TeamTable rows={teamRows} />
         </section>
+        </>)}
       </div>
 
       <Toast text={toast} />
@@ -305,7 +346,21 @@ function KpiTile({ label, value, delta, tone, sub }) {
 // ─────────────────────────────────────────────────────────────
 // Section B — Funnel
 // ─────────────────────────────────────────────────────────────
-function Funnel({ data = FUNNEL }) {
+function EmptyChart({ note = 'No data for this period yet.' }) {
+  return <div className="flex h-full min-h-[140px] items-center justify-center px-5 py-8 text-center text-xs text-slate-500">{note}</div>;
+}
+
+function Funnel({ data = [] }) {
+  if (!data.length || !data.some((f) => f.count > 0)) {
+    return (
+      <div className="glass-card rounded-xl">
+        <div className="border-b border-slate-800/60 px-5 py-4">
+          <h2 className="text-sm font-semibold tracking-tight text-slate-100">Conversion Funnel</h2>
+        </div>
+        <EmptyChart note="No leads in this period yet — the funnel builds as leads come in." />
+      </div>
+    );
+  }
   const max = data[0]?.count || 1;
   return (
     <div className="glass-card rounded-xl">
@@ -348,7 +403,17 @@ function Funnel({ data = FUNNEL }) {
 // ─────────────────────────────────────────────────────────────
 // Section C — Source attribution donut
 // ─────────────────────────────────────────────────────────────
-function SourceAttribution({ data = SOURCE_PIE }) {
+function SourceAttribution({ data = [] }) {
+  if (!data.length) {
+    return (
+      <div className="glass-card flex flex-col rounded-xl">
+        <div className="border-b border-slate-800/60 px-5 py-4">
+          <h2 className="text-sm font-semibold tracking-tight text-slate-100">Source Attribution</h2>
+        </div>
+        <EmptyChart note="No lead sources yet for this period." />
+      </div>
+    );
+  }
   return (
     <div className="glass-card flex flex-col rounded-xl">
       <div className="border-b border-slate-800/60 px-5 py-4">
@@ -387,7 +452,7 @@ function SourceAttribution({ data = SOURCE_PIE }) {
 // ─────────────────────────────────────────────────────────────
 // Section C — AI vs Human comparison
 // ─────────────────────────────────────────────────────────────
-function AiVsHuman({ metrics = AI_VS_HUMAN }) {
+function AiVsHuman({ metrics = [] }) {
   return (
     <div className="glass-card flex flex-col rounded-xl">
       <div className="border-b border-slate-800/60 px-5 py-4">
@@ -429,12 +494,14 @@ function AiVsHuman({ metrics = AI_VS_HUMAN }) {
 // Section D — Time-series card
 // ─────────────────────────────────────────────────────────────
 function TimeSeriesCard({ title, hint, data, dataKey, color, type, xKey = 'd', prefix = '', suffix = '' }) {
+  const hasData = Array.isArray(data) && data.length > 0 && data.some((row) => (row[dataKey] || 0) > 0);
   return (
     <div className="glass-card flex flex-col rounded-xl">
       <div className="flex items-center justify-between border-b border-slate-800/60 px-5 py-3.5">
         <h3 className="text-sm font-semibold tracking-tight text-slate-100">{title}</h3>
         <span className="text-[11px] text-slate-500">{hint}</span>
       </div>
+      {!hasData ? <EmptyChart /> : (
       <div className="px-3 pb-4 pt-2" style={{ height: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
           {type === 'line' ? (
@@ -477,6 +544,7 @@ function TimeSeriesCard({ title, hint, data, dataKey, color, type, xKey = 'd', p
           )}
         </ResponsiveContainer>
       </div>
+      )}
     </div>
   );
 }
