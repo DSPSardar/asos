@@ -6,8 +6,13 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations only. Runtime connects as the restricted asos_app role via
+  // DATABASE_URL (RLS enforced); `prisma migrate deploy` needs table
+  // ownership, so it uses this owner-level connection instead. Set on all
+  // backend services in Railway as ${{Postgres.DATABASE_URL}}.
+  directUrl = env("MIGRATION_DATABASE_URL")
 }
 
 // ─────────────────────────────────────────────
