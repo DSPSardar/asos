@@ -16,7 +16,19 @@ const SCORE_STYLE = {
   COLD: { bg: 'rgba(100,116,139,0.12)',border: 'rgba(100,116,139,0.3)',text: '#94a3b8', dot: '#64748b' },
 };
 
-const PIPELINE = [
+// Maps the LeadStage enum to display labels/colors. Order matters — it is
+// the left-to-right order of the chart.
+const STAGE_META = {
+  NEW:         { stage: 'New',      color: '#6366f1' },
+  QUALIFYING:  { stage: 'Qual.',    color: '#8b5cf6' },
+  DIAGNOSED:   { stage: 'Diag.',    color: '#a855f7' },
+  PROPOSED:    { stage: 'Proposal', color: '#d946ef' },
+  CLOSED_WON:  { stage: 'Won',      color: '#10b981' },
+  CLOSED_LOST: { stage: 'Lost',     color: '#475569' },
+};
+
+// Demo-mode only — real tenants get live counts from /leads/pipeline.
+const DEMO_PIPELINE = [
   { stage: 'New',      count: 47, color: '#6366f1' },
   { stage: 'Qual.',    count: 32, color: '#8b5cf6' },
   { stage: 'Diag.',    count: 18, color: '#a855f7' },
@@ -255,7 +267,7 @@ export default function Dashboard() {
           </div>
 
           {/* Pipeline snapshot */}
-          <PipelineSnapshot />
+          <PipelineSnapshot isDemo={isDemo} />
         </section>
       </div>
 
@@ -518,11 +530,51 @@ function LeadDrawer({ lead, agents, onClose, onAssign, onStage }) {
 }
 
 // ── Pipeline snapshot ─────────────────────────────────────────────────
-function PipelineSnapshot() {
+// Live tenant data from /leads/pipeline (Prisma groupBy stats). Demo mode
+// keeps the canned DEMO_PIPELINE numbers for sales walkthroughs.
+function PipelineSnapshot({ isDemo }) {
+  const [rows, setRows]   = useState(isDemo ? DEMO_PIPELINE : null); // null = loading
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (isDemo) { setRows(DEMO_PIPELINE); return; }
+    let cancelled = false;
+    leadsAPI.pipeline()
+      .then(res => {
+        if (cancelled) return;
+        const body  = res?.data ?? res ?? {};
+        const stats = Array.isArray(body.stats) ? body.stats : [];
+        setRows(Object.entries(STAGE_META).map(([key, meta]) => ({
+          ...meta,
+          count: stats.find(s => s.stage === key)?._count?.id ?? 0,
+        })));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError(true);
+        setRows(Object.values(STAGE_META).map(meta => ({ ...meta, count: 0 })));
+      });
+    return () => { cancelled = true; };
+  }, [isDemo]);
+
+  if (rows === null) {
+    return (
+      <div className="glass-card rounded-xl">
+        <SectionHeader title="Pipeline Snapshot" hint="" cta="Open leads →" ctaHref="/leads" />
+        <div className="flex h-56 items-center justify-center">
+          <span className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500/30 border-t-indigo-400" />
+        </div>
+      </div>
+    );
+  }
+
+  const PIPELINE = rows;
   const total = PIPELINE.reduce((s, p) => s + p.count, 0);
   return (
     <div className="glass-card rounded-xl">
-      <SectionHeader title="Pipeline Snapshot" hint={`${total} active`} cta="Open leads →" ctaHref="/leads" />
+      <SectionHeader title="Pipeline Snapshot"
+                     hint={error ? '⚠ couldn’t load — retry on refresh' : `${total} total`}
+                     cta="Open leads →" ctaHref="/leads" />
       <div className="h-56 px-3 pb-4 pt-1">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={PIPELINE} margin={{ top: 8, right: 8, left: -16, bottom: 0 }} barCategoryGap="22%">
