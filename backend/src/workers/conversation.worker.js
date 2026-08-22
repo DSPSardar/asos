@@ -1283,4 +1283,12 @@ prisma.assertRlsEnforceable({ logger, fatal: env.REQUIRE_RLS_ENFORCEMENT === 'tr
 
 logger.info('🔄 Conversation worker started');
 
+// One-time insights backfill: classify recent inbound messages that predate
+// the sentiment/signal pipeline (idempotent — finds nothing once done).
+// Delayed 30s so boot isn't competing with the queue coming online.
+setTimeout(() => {
+  const { runInsightsBackfill } = require('../services/insightsBackfill.service');
+  runInsightsBackfill().catch((err) => logger.warn({ err }, '📊 Insights backfill failed'));
+}, 30_000);
+
 module.exports = worker;
