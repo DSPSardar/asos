@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@pages/Layout';
-import { leadsAPI } from '@lib/api';
+import { insightsAPI, leadsAPI } from '@lib/api';
 import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 
 // ─────────────────────────────────────────────────────────────
@@ -101,6 +101,8 @@ function LiveInsights() {
   const navigate = useNavigate();
   const [hot, setHot]         = useState(null);   // null = loading
   const [handoff, setHandoff] = useState([]);
+  const [sentiment, setSentiment] = useState(null); // { trend, sampleSize }
+  const [digest, setDigest]       = useState(null); // { bullets, ... }
   const [error, setError]     = useState(false);
 
   const load = useCallback(() => {
@@ -114,6 +116,14 @@ function LiveInsights() {
         setError(true);
         setHot((h) => h ?? []);
       });
+    // Classification endpoints are newer — fetched separately so an error
+    // here never blanks the lead-based sections above.
+    insightsAPI.sentiment()
+      .then((r) => setSentiment(r?.data ?? r ?? null))
+      .catch(() => setSentiment(null));
+    insightsAPI.digest()
+      .then((r) => setDigest(r?.data ?? r ?? null))
+      .catch(() => setDigest(null));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -206,14 +216,22 @@ function LiveInsights() {
           />
         </section>
 
-        <section>
-          <div className="glass-card rounded-xl px-5 py-5">
-            <h2 className="text-sm font-semibold tracking-tight text-slate-100">Sentiment & Weekly Digest</h2>
-            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-400">
-              Message-sentiment classification and the auto-generated weekly digest require the
-              conversation-analysis pipeline, which isn’t deployed yet. These panels will activate
-              when it ships — everything above is live data from your pipeline.
-            </p>
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+          <div className="lg:col-span-3">
+            {digest?.bullets?.length ? (
+              <DigestBox bullets={digest.bullets} live />
+            ) : (
+              <CollectingCard title="Weekly Insights Digest"
+                text="The digest builds itself from classified conversations. As new WhatsApp messages arrive, the AI tags each one and this panel fills in — check back after a day of traffic." />
+            )}
+          </div>
+          <div className="lg:col-span-2">
+            {sentiment?.sampleSize > 0 ? (
+              <SentimentChart data={sentiment.trend} />
+            ) : (
+              <CollectingCard title="Sentiment (last 7 days)"
+                text="Collecting data — every new inbound message is now classified positive / neutral / negative. The trend appears as messages come in." />
+            )}
           </div>
         </section>
       </div>
@@ -443,20 +461,33 @@ function Legend({ color, label }) {
 // ─────────────────────────────────────────────────────────────
 // Weekly insights digest (demo mode only until the pipeline ships)
 // ─────────────────────────────────────────────────────────────
-function DigestBox({ bullets }) {
+function CollectingCard({ title, text }) {
+  return (
+    <div className="glass-card flex h-full flex-col rounded-xl px-5 py-5">
+      <h2 className="text-sm font-semibold tracking-tight text-slate-100">{title}</h2>
+      <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{text}</p>
+    </div>
+  );
+}
+
+function DigestBox({ bullets, live = false }) {
   return (
     <div className="glass-card rounded-xl">
       <div className="flex items-center justify-between border-b border-slate-800/60 px-5 py-4">
         <div>
           <h2 className="text-sm font-semibold tracking-tight text-slate-100">Weekly Insights Digest</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Auto-generated every Monday 9 AM PKT. Here's what AI noticed last week.</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {live ? 'Built from your classified conversations — last 7 days.' : "Auto-generated every Monday 9 AM PKT. Here's what AI noticed last week."}
+          </p>
         </div>
-        <button
-          onClick={() => alert('Demo: would email digest to team')}
-          className="rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1.5 text-[11px] font-medium text-accent hover:bg-accent/20"
-        >
-          Email digest →
-        </button>
+        {!live && (
+          <button
+            onClick={() => alert('Demo: would email digest to team')}
+            className="rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1.5 text-[11px] font-medium text-accent hover:bg-accent/20"
+          >
+            Email digest →
+          </button>
+        )}
       </div>
       <ul className="space-y-2.5 px-5 py-4">
         {bullets.map((b, i) => (

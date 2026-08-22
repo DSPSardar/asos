@@ -400,6 +400,10 @@ model Message {
   // Raw AI response stored for analytics
   aiRawResponse    Json?            @map("ai_raw_response")
 
+  // Qualifier classification (inbound messages only)
+  sentiment        String?                                    // POSITIVE | NEUTRAL | NEGATIVE
+  signalType       String?          @map("signal_type")       // PRICING | INSTALLMENT | ... (see claude.service SIGNAL_TYPES)
+
   sentAt           DateTime         @default(now()) @map("sent_at")
   deliveredAt      DateTime?        @map("delivered_at")
   readAt           DateTime?        @map("read_at")
@@ -409,6 +413,7 @@ model Message {
 
   @@index([tenantId, conversationId])
   @@index([waMessageId])
+  @@index([tenantId, direction, sentAt])
   @@map("messages")
 }
 

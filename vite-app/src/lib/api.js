@@ -155,6 +155,12 @@ export const authAPI = {
   changeEmail:    (newEmail, currentPassword) => api.post('/auth/change-email', { newEmail, currentPassword }),
 };
 
+export const insightsAPI = {
+  sentiment: () => api.get('/insights/sentiment'),
+  signals:   (limit = 20) => api.get('/insights/signals', { params: { limit } }),
+  digest:    () => api.get('/insights/digest'),
+};
+
 export const leadsAPI = {
   list:        (params) => api.get('/leads', { params }),
   pipeline:    (params) => api.get('/leads/pipeline', { params: params || {} }),

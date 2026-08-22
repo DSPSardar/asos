@@ -25,6 +25,7 @@ const conversationsRoutes = require('./modules/conversations/conversations.route
 const campaignsRoutes    = require('./modules/campaigns/campaigns.routes');
 const analyticsRoutes    = require('./modules/analytics/analytics.routes');
 const usersRoutes        = require('./modules/users/users.routes');
+const insightsRoutes     = require('./modules/insights/insights.routes');
 const settingsRoutes     = require('./modules/settings/settings.routes');
 const aiConfigRoutes     = require('./modules/ai-config/aiConfig.routes');
 const knowledgeGapsRoutes = require('./modules/knowledge-gaps/knowledge-gaps.routes');
@@ -216,6 +217,7 @@ const createApp = () => {
   app.use(`${v1}/conversations`,  conversationsRoutes);
   app.use(`${v1}/campaigns`,      campaignsRoutes);
   app.use(`${v1}/analytics`,      analyticsRoutes);
+  app.use(`${v1}/insights`,       insightsRoutes);
   app.use(`${v1}/users`,          usersRoutes);
   app.use(`${v1}/settings`,       settingsRoutes);
   app.use(`${v1}/ai`,             aiConfigRoutes);

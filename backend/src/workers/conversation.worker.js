@@ -721,6 +721,18 @@ const handleInboundMessage = async (job) => {
     return;
   }
 
+  // ── 9b. Persist Qualifier classification on the inbound message ────
+  // Powers /insights sentiment + signal endpoints. Best-effort: a failure
+  // here must never block the reply pipeline.
+  try {
+    await prisma.message.update({
+      where: { id: inboundMessage.id },
+      data: { sentiment: aiResult.sentiment || null, signalType: aiResult.signalType || null },
+    });
+  } catch (clsErr) {
+    logger.warn({ clsErr, messageId: inboundMessage.id }, 'Failed to save message classification');
+  }
+
   // ── 10. Update CRM with AI results (v1.5 — Qualifier + Closer outputs) ──
   const prevStage = lead.stage;
 

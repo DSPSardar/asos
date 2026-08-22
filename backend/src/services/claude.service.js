@@ -59,6 +59,12 @@ const createResponse = async ({ model, maxOutputTokens, instructions, input, jso
 // understands. Kept in sync with the schema text below.
 const NEXT_ACTIONS = ['continue_qualifying', 'send_proposal', 'nurture', 'close_deal'];
 
+// Enum guards for the classification fields — hallucinated values must never
+// reach the DB (same policy as next_action above).
+const SENTIMENTS   = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
+const SIGNAL_TYPES = ['PRICING', 'INSTALLMENT', 'BATCH', 'CAREER', 'PAYMENT',
+  'TRACK_RECORD', 'CONSULTATION', 'CORPORATE', 'ENROLLMENT', 'RISK', 'NONE'];
+
 const QUALIFIER_SCHEMA = `
 Respond with ONLY a valid JSON object using this EXACT schema. No prose, no markdown.
 
@@ -70,7 +76,9 @@ Respond with ONLY a valid JSON object using this EXACT schema. No prose, no mark
   "next_action": "continue_qualifying" | "send_proposal" | "nurture" | "close_deal",
   "is_price_objection": <true | false>,
   "is_enrollment_confirmed": <true | false>,
-  "business_unit": "DSP" | "SDC" | "UNKNOWN"
+  "business_unit": "DSP" | "SDC" | "UNKNOWN",
+  "sentiment": "POSITIVE" | "NEUTRAL" | "NEGATIVE",
+  "signal_type": "PRICING" | "INSTALLMENT" | "BATCH" | "CAREER" | "PAYMENT" | "TRACK_RECORD" | "CONSULTATION" | "CORPORATE" | "ENROLLMENT" | "RISK" | "NONE"
 }
 
 SCORING RULES:
@@ -91,6 +99,24 @@ is_price_objection RULES:
   "expensive", "mehnga", "afford nai", "fee zyada hai", "thoda kam", "discount", "budget nahi",
   "too much", "installment", "easy payment", "concession", "kam karo", "can't pay".
   Set to false for everything else.
+
+sentiment RULES (about the LATEST message only, any language / Roman Urdu):
+  POSITIVE — enthusiasm, agreement, gratitude, readiness ("great", "zabardast", "kar lete hain", "shukriya")
+  NEGATIVE — frustration, complaint, anger, distrust, firm refusal ("bakwas", "abhi tak nahi kiya", "not interested")
+  NEUTRAL  — questions, factual asks, greetings, everything else
+
+signal_type RULES — classify the LATEST message's dominant intent (any language):
+  PRICING       — fee amount, cost, discount asks
+  INSTALLMENT   — installments, payment plan, partial payment
+  BATCH         — batch dates, schedule, class timings
+  CAREER        — jobs, freelancing, clients, earning outcomes after the course
+  PAYMENT       — payment sent/proof/confirmation, receipt, not-yet-processed issues
+  TRACK_RECORD  — trainer credentials, certificates, credibility questions
+  CONSULTATION  — asks for a call, meeting, or live discussion
+  CORPORATE     — team/company training, multiple seats, B2B
+  ENROLLMENT    — explicitly ready to enroll / pay / reserve a seat
+  RISK          — objection or disengagement threatening the deal (too expensive + walking away, going elsewhere)
+  NONE          — greetings, small talk, anything that fits no category
 
 is_enrollment_confirmed — THE ONLY HANDOFF TRIGGER:
   Set to TRUE ONLY if the lead has given an UNAMBIGUOUS, EXPLICIT confirmation to enroll.
@@ -231,6 +257,8 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
     is_enrollment_confirmed: parsed.is_enrollment_confirmed === true,
     is_price_objection: parsed.is_price_objection === true,
     business_unit:      ['DSP','SDC','UNKNOWN'].includes(parsed.business_unit) ? parsed.business_unit : 'UNKNOWN',
+    sentiment:          SENTIMENTS.includes(parsed.sentiment) ? parsed.sentiment : 'NEUTRAL',
+    signal_type:        SIGNAL_TYPES.includes(parsed.signal_type) ? parsed.signal_type : 'NONE',
     _tokens:            tokens,
     _model:             QUALIFIER_MODEL,
     _ms:                Date.now() - t0,
@@ -606,6 +634,8 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
       next_action:             'continue_qualifying',
       is_price_objection:      false,
       is_enrollment_confirmed: false,
+      sentiment:               'NEUTRAL',
+      signal_type:             'NONE',
       _tokens: 0, _model: QUALIFIER_MODEL, _ms: 0,
     };
   }
@@ -807,6 +837,9 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     problemSummary:    qualifierOutput.problem_summary,
     nextAction:        qualifierOutput.next_action,
     businessUnit:      qualifierOutput.business_unit,
+    sentiment:         qualifierOutput.sentiment || 'NEUTRAL',
+    signalType:        (qualifierOutput.signal_type && qualifierOutput.signal_type !== 'NONE')
+                         ? qualifierOutput.signal_type : null,
     qualifierOutput,
     closerOutput,
 
