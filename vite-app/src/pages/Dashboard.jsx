@@ -86,10 +86,11 @@ export default function Dashboard() {
   const [handoff,     setHandoff]     = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [activeTab,   setActiveTab]   = useState('hot');   // 'hot' | 'handoff'
-  const [filter,      setFilter]      = useState({ score: '', source: '', assigned: '' });
+  const [filter,      setFilter]      = useState({ source: '', assigned: '' });
   const [drawer,      setDrawer]      = useState(null);    // lead object
   const [toasts,      setToasts]      = useState([]);
   const [agents,      setAgents]      = useState([]);
+  const [apiError,    setApiError]    = useState(false);   // last fetch failed
   const prevHotIds    = useRef(new Set());
 
   const addToast = useCallback((msg, type = 'hot') => {
@@ -122,8 +123,11 @@ export default function Dashboard() {
 
       setHotLeads(hot);
       setHandoff(hq);
+      setApiError(false);
     } catch {
-      // silently fail — don't disrupt dashboard on API errors
+      // Keep showing the last known data, but surface the failure — a silent
+      // catch here used to render "No HOT leads" while the API was down.
+      setApiError(true);
     } finally {
       setLoading(false);
     }
@@ -142,7 +146,6 @@ export default function Dashboard() {
   }, [fetchData, isDemo]);
 
   const filteredHot = hotLeads.filter(l => {
-    if (filter.score    && l.scoreLabel !== filter.score)          return false;
     if (filter.source   && l.campaign?.name !== filter.source)     return false;
     if (filter.assigned && l.agent?.id !== filter.assigned)        return false;
     return true;
@@ -185,6 +188,18 @@ export default function Dashboard() {
 
       <div className="space-y-6 p-6">
 
+        {/* ── API error banner ── */}
+        {apiError && (
+          <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            <span>⚠</span>
+            <span>Couldn’t refresh data — showing the last known state. Retrying every {POLL_MS / 1000}s.</span>
+            <button onClick={() => fetchData(false)}
+                    className="ml-auto rounded-lg border border-amber-500/30 px-3 py-1 text-xs text-amber-300 transition hover:bg-amber-500/20">
+              Retry now
+            </button>
+          </div>
+        )}
+
         {/* ── KPI row ── */}
         <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiTile label="HOT Leads"      value={hotLeads.length}           delta="Live" deltaTone="hot"     subtitle="needs action now" />
@@ -216,13 +231,6 @@ export default function Dashboard() {
               {/* Filters */}
               {activeTab === 'hot' && (
                 <div className="flex items-center gap-2">
-                  <select value={filter.score} onChange={e => setFilter(f => ({ ...f, score: e.target.value }))}
-                          className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-300 outline-none">
-                    <option value="">All scores</option>
-                    <option value="HOT">🔥 HOT</option>
-                    <option value="WARM">🟡 WARM</option>
-                    <option value="COLD">🔵 COLD</option>
-                  </select>
                   <select value={filter.source} onChange={e => setFilter(f => ({ ...f, source: e.target.value }))}
                           className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-300 outline-none">
                     <option value="">All sources</option>
