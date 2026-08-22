@@ -48,8 +48,8 @@ const DEMO_HOT_LEADS = [
     dealValue: 4200000, currency: 'PKR', updatedAt: new Date().toISOString(),
     contact: { name: 'Hassan Raza', phone: '+92 300 7654129' },
     campaign: { name: 'WhatsApp Ads' }, agent: DEMO_AGENTS[0],
-    activities: [{ content: 'Ready for a payment-plan consultation.' }],
-    conversations: [{ status: 'AI_HANDLING' }],
+    activities: [{ id: 'demo-act-1', type: 'AI_NOTE', createdAt: new Date().toISOString(), content: 'Ready for a payment-plan consultation.' }],
+    conversations: [{ id: 'demo-conv-1', status: 'AI_HANDLING', aiEnabled: true, lastMessageAt: new Date().toISOString() }],
     qualificationData: { budget: 'PKR 4.2M', timeline: 'This week', authority: 'Decision maker' },
   },
   {
@@ -57,8 +57,8 @@ const DEMO_HOT_LEADS = [
     dealValue: 2500000, currency: 'PKR', updatedAt: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
     contact: { name: 'Ayesha Malik', phone: '+92 321 9870034' },
     campaign: { name: 'Facebook Ads' }, agent: DEMO_AGENTS[1],
-    activities: [{ content: 'Requested a consultation tomorrow at 3 PM.' }],
-    conversations: [{ status: 'AI_HANDLING' }],
+    activities: [{ id: 'demo-act-2', type: 'AI_NOTE', createdAt: new Date().toISOString(), content: 'Requested a consultation tomorrow at 3 PM.' }],
+    conversations: [{ id: 'demo-conv-2', status: 'AI_HANDLING', aiEnabled: true, lastMessageAt: new Date().toISOString() }],
     qualificationData: { budget: 'PKR 2.5M', timeline: 'This month', authority: 'Decision maker' },
   },
   {
@@ -66,8 +66,8 @@ const DEMO_HOT_LEADS = [
     dealValue: 6000000, currency: 'PKR', updatedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
     contact: { name: 'Maryam Ali', phone: '+92 308 1122334' },
     campaign: { name: 'Instagram' }, agent: DEMO_AGENTS[0],
-    activities: [{ content: 'Asked for booking documents and next steps.' }],
-    conversations: [{ status: 'NEEDS_HUMAN' }],
+    activities: [{ id: 'demo-act-3', type: 'AI_NOTE', createdAt: new Date().toISOString(), content: 'Asked for booking documents and next steps.' }],
+    conversations: [{ id: 'demo-conv-3', status: 'NEEDS_HUMAN', aiEnabled: false, lastMessageAt: new Date().toISOString() }],
     qualificationData: { budget: 'PKR 6M', timeline: 'Today', authority: 'Decision maker' },
   },
 ];
@@ -94,7 +94,7 @@ export default function Dashboard() {
   const prevHotIds    = useRef(new Set());
 
   const addToast = useCallback((msg, type = 'hot') => {
-    const id = Date.now();
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setToasts(t => [...t, { id, msg, type }]);
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 5000);
   }, []);
@@ -141,8 +141,20 @@ export default function Dashboard() {
     }
 
     usersAPI.list().then(r => setAgents(r?.data ?? r ?? [])).catch(() => {});
-    const t = setInterval(() => fetchData(false), POLL_MS);
-    return () => clearInterval(t);
+
+    // Poll only while the tab is visible — no point hammering the API from a
+    // background tab. Refresh immediately when the user comes back.
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchData(false);
+    }, POLL_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') fetchData(false);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [fetchData, isDemo]);
 
   const filteredHot = hotLeads.filter(l => {
@@ -267,7 +279,9 @@ export default function Dashboard() {
                 <ul className="divide-y divide-slate-800/50">
                   {handoff.map(conv => (
                     <HandoffRow key={conv.id} conv={conv} agents={agents}
-                                onAssign={(agentId) => leadsAPI.assign(conv.lead?.id, agentId).then(() => fetchData())} />
+                                onAssign={(agentId) => conv.lead?.id
+                                  ? leadsAPI.assign(conv.lead.id, agentId).then(() => fetchData())
+                                  : Promise.resolve()} />
                   ))}
                 </ul>
               )
