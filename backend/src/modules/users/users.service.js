@@ -11,6 +11,16 @@ const listUsers = async (tenantId) => {
   });
 };
 
+// Minimal directory for non-admin roles — just enough to populate "assign
+// to" dropdowns, without exposing emails, roles, or login metadata.
+const listAgentDirectory = async (tenantId) => {
+  return prisma.user.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true, fullName: true },
+    orderBy: { fullName: 'asc' },
+  });
+};
+
 const inviteUser = async (tenantId, { email, fullName, role, password }) => {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw Object.assign(new Error('Email already registered'), { statusCode: 409, expose: true });
@@ -47,4 +57,4 @@ const updateProfile = async (userId, { fullName, password }) => {
   });
 };
 
-module.exports = { listUsers, inviteUser, updateRole, removeUser, updateProfile };
+module.exports = { listUsers, listAgentDirectory, inviteUser, updateRole, removeUser, updateProfile };
