@@ -208,6 +208,12 @@ const updateStage = async (tenantId, leadId, stage, userId, lostReason, { fee, c
     },
   });
 
+  if (lead.stage !== stage) {
+    await prisma.leadStageHistory.create({
+      data: { tenantId, leadId, fromStage: lead.stage, toStage: stage, changedBy: userId || null },
+    }).catch(() => {}); // history is telemetry, never blocks the update
+  }
+
   return updated;
 };
 

@@ -273,6 +273,10 @@ const confirmPayment = async (tenantId, conversationId, userId, { fee, currency 
       data: { stage: 'CLOSED_WON', closedAt: now,
               enrollmentFee: amount, dealValue: amount, currency: cur },
     });
+    await tx.leadStageHistory.create({
+      data: { tenantId, leadId: conv.leadId, fromStage: conv.lead?.stage || null,
+              toStage: 'CLOSED_WON', changedBy: userId },
+    });
     // STAGE_CHANGE, not AI_ACTION: this is a lifecycle transition made by a
     // human, and analytics separates the two by type.
     await tx.activity.create({

@@ -241,6 +241,26 @@ const handleInboundMessage = async (job) => {
     }
   }
 
+  // A contact whose latest lead is CLOSED_WON is an enrolled student, not a
+  // fresh prospect. Creating a new lead here is what produced 12 leads for one
+  // contact in production — every new conversation opened one and each got
+  // marked won again, inflating Won 2x. Reuse the won lead instead: the
+  // Qualifier cannot downgrade it (deriveStage is monotonic and CLOSED_WON is
+  // terminal), no Meta "Lead" event fires, and the admin is not notified that
+  // an enrolled student is a "new lead". A CLOSED_LOST contact coming back
+  // still gets a fresh lead — that genuinely is a new opportunity.
+  if (!lead) {
+    const wonLead = await prisma.lead.findFirst({
+      where: { tenantId, contactId: contact.id, stage: 'CLOSED_WON' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (wonLead) {
+      lead = wonLead;
+      logger.info({ leadId: lead.id, contactId: contact.id },
+        '🎓 Returning enrolled student — reusing CLOSED_WON lead instead of opening a new one');
+    }
+  }
+
   const isNewLead = !lead;
 
   if (!lead) {
@@ -260,6 +280,10 @@ const handleInboundMessage = async (job) => {
         ...adAttribution,
       },
     });
+
+    await prisma.leadStageHistory.create({
+      data: { tenantId, leadId: lead.id, fromStage: null, toStage: 'NEW', changedBy: null },
+    }).catch(() => {});
 
     // Create ads tracking record
     if (adAttribution.metaCampaignId || adAttribution.metaAdId) {
@@ -777,6 +801,9 @@ const handleInboundMessage = async (job) => {
         metadata: { fromStage: prevStage, toStage: aiResult.stage, aiScore: aiResult.score },
       },
     });
+    await prisma.leadStageHistory.create({
+      data: { tenantId, leadId: lead.id, fromStage: prevStage, toStage: aiResult.stage, changedBy: null },
+    }).catch(() => {}); // history is telemetry, never blocks message processing
   }
 
   // Log AI action activity
@@ -917,6 +944,9 @@ const handleInboundMessage = async (job) => {
       where: { id: lead.id },
       data: { stage: 'CLOSED_LOST', closedAt: new Date() },
     });
+    await prisma.leadStageHistory.create({
+      data: { tenantId, leadId: lead.id, fromStage: aiResult.stage || lead.stage, toStage: 'CLOSED_LOST', changedBy: null },
+    }).catch(() => {});
 
     await prisma.activity.create({
       data: {

@@ -308,12 +308,35 @@ model Lead {
   conversations       Conversation[]
   activities          Activity[]
   adsTracking         AdsTracking[]
+  stageHistory        LeadStageHistory[]
 
   @@index([tenantId, stage])
   @@index([tenantId, scoreLabel])
   @@index([tenantId, createdAt])
   @@index([tenantId, humanFollowupRequired])
   @@map("leads")
+}
+
+// ─────────────────────────────────────────────
+// LEAD STAGE HISTORY — one row per stage transition
+// Lets analytics answer "where did lost leads drop?"
+// and measure real time-in-stage / sales cycle.
+// ─────────────────────────────────────────────
+
+model LeadStageHistory {
+  id        String     @id @default(uuid())
+  tenantId  String     @map("tenant_id")
+  leadId    String     @map("lead_id")
+  fromStage LeadStage? @map("from_stage")   // null on lead creation
+  toStage   LeadStage  @map("to_stage")
+  changedBy String?    @map("changed_by")   // user id; null when AI/system moved it
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  lead      Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId])
+  @@index([leadId, createdAt])
+  @@map("lead_stage_history")
 }
 
 // ─────────────────────────────────────────────
