@@ -23,7 +23,7 @@ const { toDbMessageType } = require('../utils/messageType');
 const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
-const { publishStatusUpdate } = require('../queues/message.queue');
+const { publishStatusUpdate, registerWeeklyDigest } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
 
@@ -1290,5 +1290,41 @@ setTimeout(() => {
   const { runInsightsBackfill } = require('../services/insightsBackfill.service');
   runInsightsBackfill().catch((err) => logger.warn({ err }, '📊 Insights backfill failed'));
 }, 30_000);
+
+// ─────────────────────────────────────────────────────────────────────
+// SCHEDULER WORKER
+// ─────────────────────────────────────────────────────────────────────
+// The scheduler queue had no consumer until now — scheduleFollowUp() was
+// enqueuing jobs nothing ever picked up. This worker drains it and runs the
+// Monday 09:00 PKT digest.
+//
+// concurrency 1: these are low-volume, time-based jobs; serialising them
+// keeps the weekly fan-out from contending with the message worker.
+const digestService = require('../services/digest.service');
+
+const schedulerWorker = new Worker(
+  QUEUE_NAMES.SCHEDULER_QUEUE,
+  (job) => requestContext.run(
+    { requestId: job.id, tenantId: job.data?.tenantId || '' },
+    () => {
+      if (job.name === 'weekly-digest') return digestService.runWeeklyDigestForAllTenants();
+      // 'follow-up' intentionally unhandled for now: returning cleanly drains
+      // the backlog these accumulated instead of failing them in a loop.
+      logger.warn({ jobName: job.name, jobId: job.id }, 'Scheduler job has no handler — draining');
+      return null;
+    }
+  ),
+  { connection: redis, concurrency: 1 }
+);
+
+schedulerWorker.on('failed', (job, err) => {
+  logger.error({ err, jobId: job?.id, name: job?.name }, 'Scheduler job failed');
+  Sentry.captureException(err);
+});
+
+// Idempotent — safe to call on every boot.
+registerWeeklyDigest()
+  .then(() => logger.info('🗓  Weekly digest scheduled — Mondays 09:00 Asia/Karachi'))
+  .catch((err) => logger.warn({ err }, 'Could not register weekly digest schedule'));
 
 module.exports = worker;

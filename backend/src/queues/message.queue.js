@@ -77,6 +77,29 @@ const scheduleFollowUp = async (leadId, tenantId, delayMs) => {
   });
 };
 
+// Register (or re-register) the Monday 09:00 Asia/Karachi weekly digest.
+// BullMQ keys a repeatable job by name+pattern+tz, so calling this on every
+// worker boot is idempotent — it won't stack duplicates. Old schedules with a
+// different pattern are cleared first so changing the time here actually
+// takes effect instead of leaving the previous cron running alongside it.
+const WEEKLY_DIGEST_PATTERN = '0 9 * * 1';
+const WEEKLY_DIGEST_TZ = 'Asia/Karachi';
+
+const registerWeeklyDigest = async () => {
+  const existing = await schedulerQueue.getRepeatableJobs();
+  await Promise.all(
+    existing
+      .filter((j) => j.name === 'weekly-digest'
+        && (j.pattern !== WEEKLY_DIGEST_PATTERN || j.tz !== WEEKLY_DIGEST_TZ))
+      .map((j) => schedulerQueue.removeRepeatableByKey(j.key))
+  );
+
+  return schedulerQueue.add('weekly-digest', {}, {
+    repeat: { pattern: WEEKLY_DIGEST_PATTERN, tz: WEEKLY_DIGEST_TZ },
+    jobId: 'weekly-digest',
+  });
+};
+
 module.exports = {
   messageQueue,
   metaEventsQueue,
@@ -85,5 +108,6 @@ module.exports = {
   publishStatusUpdate,
   publishMetaEvent,
   scheduleFollowUp,
+  registerWeeklyDigest,
   QUEUE_NAMES: { MESSAGE_QUEUE, META_EVENTS_QUEUE, SCHEDULER_QUEUE },
 };
