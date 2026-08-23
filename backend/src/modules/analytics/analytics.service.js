@@ -91,6 +91,11 @@ const getFunnel = async (tenantId, { from, to } = {}) => {
     stageValue[l.stage] = (stageValue[l.stage] || 0) + parseFloat(l.dealValue || 0);
     const c = contacts.get(l.contactId) || { rank: -1, lost: false, fee: false };
     if (l.stage === 'CLOSED_LOST') c.lost = true;
+    else if (l.stage === 'CLOSED_WON' && l.dealValue == null && l.enrollmentFee == null) {
+      // Won claimed but no payment recorded — not a student. Counts as
+      // Proposed until a fee lands, so the Won bar = paid enrollments only.
+      c.rank = Math.max(c.rank, RANK.PROPOSED);
+    }
     else c.rank = Math.max(c.rank, RANK[l.stage]);
     if (l.stage === 'CLOSED_WON' && (l.dealValue != null || l.enrollmentFee != null)) c.fee = true;
     contacts.set(l.contactId, c);
