@@ -302,6 +302,27 @@ export default function AdminPanel() {
     }
   };
 
+  const handlePlanChange = async (tenant, plan) => {
+    if (plan === tenant.plan) return;
+    const limits = {
+      FREE:       '100 contacts · 100K AI tokens · 1K messages',
+      PRO:        '5K contacts · 5M AI tokens · 50K messages',
+      ENTERPRISE: 'unlimited contacts · 100M AI tokens · unlimited messages',
+    };
+    if (!window.confirm(`Change "${tenant.name}" from ${tenant.plan} to ${plan}?\n\nNew limits: ${limits[plan]}\n\nThis takes effect immediately.`)) { load(); return; }
+    setActing(tenant.id);
+    try {
+      await adminAPI.updateTenant(tenant.id, { plan });
+      showToast(`✅ "${tenant.name}" moved to ${plan}`);
+      load();
+    } catch (e) {
+      showToast(e.message || 'Plan change failed', true);
+      load(); // restore the select to the real value
+    } finally {
+      setActing(null);
+    }
+  };
+
   return (
     <div className="min-h-full bg-bg p-6 space-y-6">
 
@@ -415,6 +436,7 @@ export default function AdminPanel() {
                   onReject={()  => handleReject(t.id, t.name)}
                   onEdit={()    => setEditTenant(t)}
                   onDelete={()  => setDeleteTenant(t)}
+                  onPlanChange={(plan) => handlePlanChange(t, plan)}
                 />
               ))}
             </tbody>
@@ -433,7 +455,7 @@ export default function AdminPanel() {
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-function TenantRow({ tenant, acting, onApprove, onReject, onEdit, onDelete }) {
+function TenantRow({ tenant, acting, onApprove, onReject, onEdit, onDelete, onPlanChange }) {
   const adminUser = tenant.users?.[0];
   const isPending = tenant.status === 'PENDING_APPROVAL';
 
@@ -447,7 +469,21 @@ function TenantRow({ tenant, acting, onApprove, onReject, onEdit, onDelete }) {
         <div className="text-slate-300 text-xs">{adminUser?.fullName || '—'}</div>
         <div className="text-slate-500 text-xs">{adminUser?.email || ''}</div>
       </td>
-      <td className="px-4 py-3 text-slate-400">{tenant.plan}</td>
+      <td className="px-4 py-3">
+        {/* Plan is editable in place. Changing it also resets the tenant's
+            subscription limits server-side (contacts / AI tokens / messages),
+            hence the confirm in onPlanChange. */}
+        <select
+          value={tenant.plan}
+          disabled={acting}
+          onChange={e => onPlanChange(e.target.value)}
+          className="rounded-lg border border-slate-700/50 bg-surface2/60 px-2 py-1 text-xs text-slate-300 focus:border-indigo-500/50 focus:outline-none disabled:opacity-50"
+        >
+          <option value="FREE">FREE</option>
+          <option value="PRO">PRO</option>
+          <option value="ENTERPRISE">ENTERPRISE</option>
+        </select>
+      </td>
       <td className="px-4 py-3"><StatusBadge status={tenant.status} /></td>
       <td className="px-4 py-3 text-slate-400">{tenant._count?.leads ?? 0}</td>
       <td className="px-4 py-3 text-slate-400">{timeAgo(tenant.createdAt)}</td>
