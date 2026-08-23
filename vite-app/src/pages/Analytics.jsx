@@ -154,8 +154,8 @@ export default function Analytics() {
       if (ov) {
         setKpis([
           { label:'Total Leads',     value:(ov.leads?.total||0).toLocaleString(),    delta:null, tone:'neutral', sub:`${ov.leads?.hot||0} hot leads this period` },
-          { label:'Conversion Rate', value:ov.conversionRate||'0%',                  delta:null, tone:'up',      sub:'lead → booking confirmed' },
-          { label:'Bookings Won',    value:(ov.leads?.closedWon||0).toLocaleString(), delta:null, tone:'up',      sub:'confirmed bookings' },
+          { label:'Conversion Rate', value:ov.conversionRate||'0%',                  delta:null, tone:'up',      sub:'lead → enrolled' },
+          { label:'Enrolled',        value:(ov.leads?.enrolled ?? ov.leads?.closedWon ?? 0).toLocaleString(), delta:null, tone:'up', sub:'fee recorded' },
           { label:'AI Handle Rate',  value:ov.messages?.aiHandlingRate||'0%',        delta:null, tone:'up',      sub:'no human takeover needed' },
           { label:'AI Tokens Used',  value:fmtTokens(ov.usage?.aiTokensUsed),        delta:null, tone:'neutral', sub:`of ${fmtTokens(ov.usage?.aiTokensLimit)} limit` },
         ]);

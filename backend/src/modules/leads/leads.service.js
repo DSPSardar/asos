@@ -103,7 +103,15 @@ const getPipeline = async (tenantId, { fromDsp } = {}) => {
     _sum: { dealValue: true },
   });
 
-  return { pipeline, stats };
+  // Enrolled students, reported separately from the CLOSED_WON stage count.
+  // The stage count is correct as "deals won" — it just isn't the student
+  // roster, because the AI marks conversations won without a fee ever being
+  // recorded.
+  const enrolled = await prisma.lead.count({
+    where: { ...statsWhere, stage: 'CLOSED_WON', dealValue: { not: null } },
+  });
+
+  return { pipeline, stats, enrolled };
 };
 
 // ── Get single lead with full detail ─────────────────────────────────

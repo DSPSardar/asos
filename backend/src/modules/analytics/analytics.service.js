@@ -18,6 +18,7 @@ const getOverview = async (tenantId, { from, to } = {}) => {
     hotLeads,
     closedWon,
     closedLost,
+    enrolled,
     totalMessages,
     aiMessages,
     totalContacts,
@@ -28,6 +29,12 @@ const getOverview = async (tenantId, { from, to } = {}) => {
     prisma.lead.count({ where: { ...where, scoreLabel: 'HOT' } }),
     prisma.lead.count({ where: { ...where, stage: 'CLOSED_WON' } }),
     prisma.lead.count({ where: { ...where, stage: 'CLOSED_LOST' } }),
+    // "Enrolled" is a recorded fee, not a stage. The AI closes conversations
+    // won on its own, so CLOSED_WON also holds bot-closed leads and internal
+    // test threads — 133 of them here. Those are legitimately "won deals" but
+    // they are not students, and reporting them as enrollments overstated the
+    // roster by ~48%.
+    prisma.lead.count({ where: { ...where, stage: 'CLOSED_WON', dealValue: { not: null } } }),
     prisma.message.count({ where: { tenantId, sentAt: range } }),
     prisma.message.count({ where: { tenantId, sender: 'AI', sentAt: range } }),
     prisma.contact.count({ where }),
@@ -39,11 +46,13 @@ const getOverview = async (tenantId, { from, to } = {}) => {
   ]);
 
   const totalRevenue   = parseFloat(revenueData._sum.dealValue || 0);
-  const conversionRate = totalLeads > 0 ? ((closedWon / totalLeads) * 100).toFixed(1) : 0;
+  // Conversion is enrollment over leads — the number that means "how many
+  // inquiries became paying students", not how many the bot marked won.
+  const conversionRate = totalLeads > 0 ? ((enrolled / totalLeads) * 100).toFixed(1) : 0;
   const aiHandlingRate = totalMessages > 0 ? ((aiMessages / totalMessages) * 100).toFixed(1) : 0;
 
   return {
-    leads:          { total: totalLeads, hot: hotLeads, closedWon, closedLost },
+    leads:          { total: totalLeads, hot: hotLeads, closedWon, closedLost, enrolled },
     revenue:        { total: totalRevenue, currency: 'PKR' },
     messages:       { total: totalMessages, aiHandled: aiMessages, aiHandlingRate: `${aiHandlingRate}%` },
     contacts:       { total: totalContacts },
@@ -68,6 +77,14 @@ const getFunnel = async (tenantId, { from, to } = {}) => {
     _sum:   { dealValue: true },
   });
 
+  // Reported alongside the stage funnel rather than folded into it: the funnel
+  // measures stage transitions and CLOSED_WON genuinely means "won", but only
+  // a lead with a recorded fee is an enrolled student. Callers that mean
+  // students should read this, not the CLOSED_WON bucket.
+  const enrolled = await prisma.lead.count({
+    where: { tenantId, createdAt: range, stage: 'CLOSED_WON', dealValue: { not: null } },
+  });
+
   const order = ['NEW','QUALIFYING','DIAGNOSED','PROPOSED','CLOSED_WON','CLOSED_LOST'];
   const stageMap = {};
   stages.forEach(s => { stageMap[s.stage] = { count: s._count.id, value: parseFloat(s._sum.dealValue || 0) }; });
@@ -79,7 +96,7 @@ const getFunnel = async (tenantId, { from, to } = {}) => {
     return { stage, count: current, dealValue: stageMap[stage]?.value || 0, conversionRate: rate };
   });
 
-  return { funnel };
+  return { funnel, enrolled };
 };
 
 // ── Revenue over time ─────────────────────────────────────────────────

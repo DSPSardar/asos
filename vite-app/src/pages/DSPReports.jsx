@@ -144,11 +144,14 @@ export default function DSPReports() {
         if (ov) {
           const total   = ov.leads?.total   || 0;
           const won     = ov.leads?.closedWon || 0;
-          const convPct = total > 0 ? ((won / total) * 100).toFixed(1) + '%' : '0%';
+          // Enrolled = fee recorded. Falls back to won only if the API predates
+          // the split, so an older backend doesn't blank the KPI.
+          const enrolled = ov.leads?.enrolled ?? won;
+          const convPct = total > 0 ? ((enrolled / total) * 100).toFixed(1) + '%' : '0%';
           setKpiData([
             { label: 'Total Leads',     value: total.toLocaleString(),            sub: `${ov.leads?.hot||0} hot`,           icon: '👥', color: 'indigo'  },
-            { label: 'Enrolled / Won',  value: won.toLocaleString(),              sub: `${convPct} conversion`,             icon: '🎓', color: 'violet'  },
-            { label: 'Revenue',         value: fmtPKR(ov.revenue?.total || 0),   sub: `${won} bookings`,                   icon: '💰', color: 'emerald' },
+            { label: 'Enrolled',        value: enrolled.toLocaleString(),         sub: `${convPct} conversion`,             icon: '🎓', color: 'violet'  },
+            { label: 'Revenue',         value: fmtPKR(ov.revenue?.total || 0),   sub: `${enrolled} enrolled`,              icon: '💰', color: 'emerald' },
             { label: 'Hot Leads',       value: (ov.leads?.hot||0).toLocaleString(), sub: 'ready to close',                  icon: '🔥', color: 'rose'    },
             { label: 'AI Handle Rate',  value: ov.messages?.aiHandlingRate||'0%', sub: 'no human takeover needed',          icon: '🤖', color: 'sky'     },
             { label: 'Messages Sent',   value: (ov.messages?.total||0).toLocaleString(), sub: `${ov.messages?.aiHandled||0} by AI`, icon: '💬', color: 'amber' },
@@ -159,11 +162,18 @@ export default function DSPReports() {
       // Enrollment funnel from API funnel
       if (fnRes.status === 'fulfilled') {
         const arr = fnRes.value.data?.data?.funnel || fnRes.value.data?.funnel || [];
-        const STAGE_LABEL = { NEW:'New Leads', QUALIFYING:'Contacted', DIAGNOSED:'Interested', PROPOSED:'Proposed', CLOSED_WON:'Enrolled' };
+        const enrolledCount = fnRes.value.data?.data?.enrolled ?? fnRes.value.data?.enrolled ?? null;
+        // CLOSED_WON is "Won", not "Enrolled" — the AI closes conversations won
+        // on its own, so that bucket includes deals with no fee behind them.
+        // Enrolled is appended as its own final step when the API reports it.
+        const STAGE_LABEL = { NEW:'New Leads', QUALIFYING:'Contacted', DIAGNOSED:'Interested', PROPOSED:'Proposed', CLOSED_WON:'Won' };
         const STAGE_FILL  = { NEW: COLORS.indigo, QUALIFYING: COLORS.violet, DIAGNOSED: COLORS.sky, PROPOSED: COLORS.amber, CLOSED_WON: COLORS.emerald };
         const mapped = arr
           .filter(f => f.stage !== 'CLOSED_LOST')
           .map(f => ({ name: STAGE_LABEL[f.stage]||f.stage, value: f.count, fill: STAGE_FILL[f.stage]||COLORS.slate }));
+        if (enrolledCount !== null) {
+          mapped.push({ name: 'Enrolled', value: enrolledCount, fill: COLORS.emerald });
+        }
         if (mapped.some(f => f.value > 0)) setFunnelData(mapped);
       }
 
