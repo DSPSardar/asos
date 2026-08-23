@@ -14,27 +14,22 @@ const getOverview = async (tenantId, { from, to } = {}) => {
   const where = { tenantId, createdAt: range };
 
   const [
-    totalLeads,
-    hotLeads,
-    closedWon,
-    closedLost,
-    enrolled,
+    leadRows,
     totalMessages,
     aiMessages,
     totalContacts,
     revenueData,
     subscription,
   ] = await Promise.all([
-    prisma.lead.count({ where }),
-    prisma.lead.count({ where: { ...where, scoreLabel: 'HOT' } }),
-    prisma.lead.count({ where: { ...where, stage: 'CLOSED_WON' } }),
-    prisma.lead.count({ where: { ...where, stage: 'CLOSED_LOST' } }),
-    // "Enrolled" is a recorded fee, not a stage. The AI closes conversations
-    // won on its own, so CLOSED_WON also holds bot-closed leads and internal
-    // test threads — 133 of them here. Those are legitimately "won deals" but
-    // they are not students, and reporting them as enrollments overstated the
-    // roster by ~48%.
-    prisma.lead.count({ where: { ...where, stage: 'CLOSED_WON', dealValue: { not: null } } }),
+    // People, not lead rows — the same rule as getFunnel, so the KPI cards
+    // and the funnel under them can never disagree. WhatsApp flows open a
+    // fresh lead per conversation, so raw lead.count() double-counted
+    // returning contacts (Aug 2026 audit: 994 rows vs 868 people, which
+    // made the KPI conversion 28.2% while the funnel showed 32%).
+    prisma.lead.findMany({
+      where,
+      select: { contactId: true, stage: true, scoreLabel: true, dealValue: true, enrollmentFee: true },
+    }),
     prisma.message.count({ where: { tenantId, sentAt: range } }),
     prisma.message.count({ where: { tenantId, sender: 'AI', sentAt: range } }),
     prisma.contact.count({ where }),
@@ -45,9 +40,26 @@ const getOverview = async (tenantId, { from, to } = {}) => {
     prisma.subscription.findUnique({ where: { tenantId } }),
   ]);
 
+  const people = new Map(); // contactId -> { hot, paid, lost }
+  for (const l of leadRows) {
+    const p = people.get(l.contactId) || { hot: false, paid: false, lost: false };
+    if (l.scoreLabel === 'HOT') p.hot = true;
+    if (l.stage === 'CLOSED_LOST') p.lost = true;
+    // Won means PAID — a won lead with no recorded fee is not a student and
+    // does not count here, matching the funnel and the CLOSED_WON guards.
+    if (l.stage === 'CLOSED_WON' && (l.dealValue != null || l.enrollmentFee != null)) p.paid = true;
+    people.set(l.contactId, p);
+  }
+  const all        = [...people.values()];
+  const totalLeads = people.size;
+  const hotLeads   = all.filter((p) => p.hot).length;
+  const enrolled   = all.filter((p) => p.paid).length;
+  const closedWon  = enrolled;
+  const closedLost = all.filter((p) => p.lost && !p.paid).length;
+
   const totalRevenue   = parseFloat(revenueData._sum.dealValue || 0);
-  // Conversion is enrollment over leads — the number that means "how many
-  // inquiries became paying students", not how many the bot marked won.
+  // Conversion is paying students over people who entered the funnel — the
+  // same numerator and denominator the funnel's Won bar shows.
   const conversionRate = totalLeads > 0 ? ((enrolled / totalLeads) * 100).toFixed(1) : 0;
   const aiHandlingRate = totalMessages > 0 ? ((aiMessages / totalMessages) * 100).toFixed(1) : 0;
 
