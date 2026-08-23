@@ -4,6 +4,7 @@ const prisma = require('../../config/database');
 const logger = require('../../utils/logger');
 const mysql = require('mysql2/promise');
 const env = require('../../config/env');
+const whatsappService = require('../../services/whatsapp.service');
 
 // ── List leads with filters + pagination ──────────────────────────────
 
@@ -302,11 +303,13 @@ const getHandoffQueue = async (tenantId) => {
   return convs;
 };
 
-const normalizePhone = (value = '') => {
-  if (!value) return '';
-  if (value.startsWith('+')) return `+${value.slice(1).replace(/\D/g, '')}`;
-  return value.replace(/\D/g, '');
-};
+// Canonical phone form across the whole system is digits-only, because that
+// is what the WhatsApp pipeline writes when it creates a contact from an
+// inbound message. This used to preserve a leading '+', which meant any
+// contact created here (DSP CRM sync, student import) could never match the
+// same person's existing WhatsApp contact — it silently made a second one.
+// Delegates to the WhatsApp service so there is exactly one definition.
+const normalizePhone = (value = '') => whatsappService.normalizePhone(String(value || ''));
 
 const pickContactName = (name, email, phone) => {
   if (name && name.trim()) return name.trim();
@@ -549,12 +552,7 @@ const importStudents = async (tenantId, students = [], requestingUserId = null) 
   let invalid = 0;
 
   for (const row of students) {
-    // Digits-only, matching whatsapp.service.normalizePhone — contacts created
-    // by the WhatsApp pipeline are stored that way. The local normalizePhone()
-    // above preserves a leading '+', which silently created a SECOND contact
-    // for every student who already existed in ASOS (68 of them on the first
-    // real import) instead of matching and upgrading their record.
-    const phone = String(row.phone || '').replace(/\D/g, '').replace(/^0+/, '');
+    const phone = normalizePhone(row.phone);
     if (!phone) { invalid += 1; continue; }
 
     const name  = String(row.name || '').trim() || phone;
