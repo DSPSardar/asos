@@ -22,80 +22,22 @@ const PIE_COLORS = [COLORS.indigo, COLORS.violet, COLORS.emerald, COLORS.amber, 
 const fmtPKR  = (v) => `Rs. ${Number(v).toLocaleString('en-PK')}`;
 const fmtK    = (v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v;
 
-// ── Static mock data (derived from seed) ─────────────────────────────────────
-const FUNNEL_DATA = [
-  { name: 'New Leads',   value: 300, fill: COLORS.indigo  },
-  { name: 'Contacted',   value: 240, fill: COLORS.violet  },
-  { name: 'Interested',  value: 170, fill: COLORS.sky     },
-  { name: 'Enrolled',    value: 90,  fill: COLORS.amber   },
-  { name: 'Paid',        value: 40,  fill: COLORS.emerald },
-];
+// ── Empty-state defaults ─────────────────────────────────────────────────────
+// These start empty and are filled from the API. They are deliberately NOT
+// seeded with plausible-looking numbers: this page is meant to be shown to
+// other people, and a chart that silently falls back to invented data is worse
+// than one that says it has none.
+const FUNNEL_DATA = [];
 
-const SOURCE_DATA = [
-  { name: 'Facebook Ads', value: 35, color: COLORS.indigo  },
-  { name: 'Instagram Ads',value: 25, color: COLORS.violet  },
-  { name: 'WhatsApp',     value: 20, color: COLORS.emerald },
-  { name: 'Referral',     value: 12, color: COLORS.amber   },
-  { name: 'Organic',      value: 8,  color: COLORS.sky     },
-];
+const REVENUE_TREND = [];
 
-const CITY_DATA = [
-  { city: 'Karachi',    leads: 90,  enrolled: 12 },
-  { city: 'Lahore',     leads: 75,  enrolled: 10 },
-  { city: 'Islamabad',  leads: 60,  enrolled: 9  },
-  { city: 'Rawalpindi', leads: 30,  enrolled: 4  },
-  { city: 'Faisalabad', leads: 21,  enrolled: 3  },
-  { city: 'Peshawar',   leads: 15,  enrolled: 1  },
-  { city: 'Multan',     leads: 9,   enrolled: 1  },
-];
-
-const AGE_DATA = [
-  { group: '18-24', count: 120, pct: 40 },
-  { group: '25-30', count: 105, pct: 35 },
-  { group: '31-35', count: 45,  pct: 15 },
-  { group: '36+',   count: 30,  pct: 10 },
-];
-
-// Build 90-day revenue trend
-const REVENUE_TREND = (() => {
-  const days = [];
-  let cum = 0;
-  for (let i = 89; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 86400 * 1000);
-    const label = d.toLocaleDateString('en-PK', { day:'2-digit', month:'short' });
-    // 0-2 enrollments per day randomly seeded
-    const daily = [0,0,0,1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,0,0,0,0,1,0,0,0,1,0,
-                   0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,0,
-                   0,1,0,0,0,0,2,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,1,0,0,0,0,1,0][i] || 0;
-    cum += daily * 10000;
-    if (i % 7 === 0 || i === 0) days.push({ date: label, revenue: cum, enrollments: daily });
-  }
-  return days;
-})();
-
-const WEEKLY_ENROLL = [
-  { week: 'Wk 1', enrollments: 2 },
-  { week: 'Wk 2', enrollments: 4 },
-  { week: 'Wk 3', enrollments: 3 },
-  { week: 'Wk 4', enrollments: 5 },
-  { week: 'Wk 5', enrollments: 4 },
-  { week: 'Wk 6', enrollments: 6 },
-  { week: 'Wk 7', enrollments: 4 },
-  { week: 'Wk 8', enrollments: 7 },
-  { week: 'Wk 9', enrollments: 5 },
-  { week: 'Wk10', enrollments: 8 },
-  { week: 'Wk11', enrollments: 6 },
-  { week: 'Wk12', enrollments: 9 },
-];
-
-// ── KPI data ──────────────────────────────────────────────────────────────────
 const KPI_DATA = [
-  { label: 'Total Leads',      value: '300',           sub: '+12% vs last month', icon: '👥', color: 'indigo' },
-  { label: 'Enrolled',         value: '40',            sub: '13.3% conversion',   icon: '🎓', color: 'violet' },
-  { label: 'Revenue',          value: 'Rs. 4,00,000',  sub: '40 × Rs. 10,000',    icon: '💰', color: 'emerald'},
-  { label: 'Active Students',  value: '40',            sub: 'Learn 24 · Build 10 · Earn 6', icon: '📚', color: 'sky' },
-  { label: 'Cost per Lead',    value: 'Rs. 1,858',     sub: 'Blended all sources', icon: '📊', color: 'amber' },
-  { label: 'ROI (paid ads)',   value: '242%',          sub: 'Spend Rs. 1.60L → Rev Rs. 4L', icon: '📈', color: 'rose' },
+  { label: 'Total Leads',      value: '—', sub: 'loading…', icon: '👥', color: 'indigo' },
+  { label: 'Enrolled',         value: '—', sub: 'loading…', icon: '🎓', color: 'violet' },
+  { label: 'Revenue',          value: '—', sub: 'loading…', icon: '💰', color: 'emerald'},
+  { label: 'Hot Leads',        value: '—', sub: 'loading…', icon: '🔥', color: 'rose' },
+  { label: 'AI Handle Rate',   value: '—', sub: 'loading…', icon: '🤖', color: 'sky' },
+  { label: 'Messages Sent',    value: '—', sub: 'loading…', icon: '💬', color: 'amber' },
 ];
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
@@ -125,6 +67,8 @@ export default function DSPReports() {
   const [kpiData,     setKpiData]   = useState(KPI_DATA);
   const [funnelData,  setFunnelData]  = useState(FUNNEL_DATA);
   const [revTrend,    setRevTrend]    = useState(REVENUE_TREND);
+  const [sourceData,  setSourceData]  = useState([]);
+  const [convData,    setConvData]    = useState([]);
 
   useEffect(() => {
     const days = Number(period) || 90;
@@ -136,7 +80,9 @@ export default function DSPReports() {
       analyticsAPI.overview({ from, to }),
       analyticsAPI.funnel({ from, to }),
       analyticsAPI.revenue({ from, to }),
-    ]).then(([ovRes, fnRes, revRes]) => {
+      analyticsAPI.sources({ from, to }),
+      analyticsAPI.conversions({ from, to }),
+    ]).then(([ovRes, fnRes, revRes, srcRes, convRes]) => {
 
       // KPIs from overview
       if (ovRes.status === 'fulfilled') {
@@ -188,6 +134,25 @@ export default function DSPReports() {
           });
           setRevTrend(trend);
         }
+      }
+
+      // Lead sources — real campaign attribution from /analytics/sources.
+      // Leads with no campaign are reported as 'Direct / Organic' by the API
+      // rather than being guessed into an ad channel.
+      if (srcRes?.status === 'fulfilled') {
+        const list = srcRes.value.data?.data?.sources || srcRes.value.data?.sources || [];
+        setSourceData(list.map((s, i) => ({
+          name: s.name,
+          value: s.value,
+          count: s.count,
+          color: PIE_COLORS[i % PIE_COLORS.length],
+        })));
+      }
+
+      // Enrollments over time — real daily conversions.
+      if (convRes?.status === 'fulfilled') {
+        const list = convRes.value.data?.data?.conversions || convRes.value.data?.conversions || [];
+        setConvData(list.map(c => ({ date: (c.date || '').slice(5) || c.date, count: c.count })));
       }
     }).catch(console.error).finally(() => setLoading(false));
   }, [period]);
@@ -286,7 +251,7 @@ export default function DSPReports() {
                       }}
                     >
                       <span className="text-[10px] text-white font-semibold">
-                        {Math.round((item.value / FUNNEL_DATA[0].value) * 100)}%
+                        {funnelData[0]?.value ? Math.round((item.value / funnelData[0].value) * 100) : 0}%
                       </span>
                     </div>
                   </div>
@@ -298,11 +263,19 @@ export default function DSPReports() {
           {/* Lead source donut */}
           <div className="bg-surface/60 border border-slate-800/60 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-slate-200 mb-4">Lead Sources</h3>
+            {sourceData.length === 0 ? (
+              <div className="flex h-[140px] items-center justify-center text-center">
+                <p className="text-xs text-slate-500">
+                  No campaign attribution yet.<br />
+                  Sources appear once leads arrive via a tracked campaign.
+                </p>
+              </div>
+            ) : (
             <div className="flex items-center gap-4">
               <ResponsiveContainer width={140} height={140}>
                 <PieChart>
-                  <Pie data={SOURCE_DATA} cx="50%" cy="50%" innerRadius={42} outerRadius={62} paddingAngle={3} dataKey="value">
-                    {SOURCE_DATA.map((entry, i) => (
+                  <Pie data={sourceData} cx="50%" cy="50%" innerRadius={42} outerRadius={62} paddingAngle={3} dataKey="value">
+                    {sourceData.map((entry, i) => (
                       <Cell key={i} fill={entry.color} />
                     ))}
                   </Pie>
@@ -310,7 +283,7 @@ export default function DSPReports() {
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                {SOURCE_DATA.map((s, i) => (
+                {sourceData.map((s, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs">
                     <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: s.color }} />
                     <span className="text-slate-400 truncate">{s.name}</span>
@@ -319,6 +292,7 @@ export default function DSPReports() {
                 ))}
               </div>
             </div>
+            )}
           </div>
         </div>
 
@@ -336,98 +310,33 @@ export default function DSPReports() {
           </ResponsiveContainer>
         </div>
 
-        {/* ── Row 3: City + Age ────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* City breakdown */}
-          <div className="bg-surface/60 border border-slate-800/60 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-slate-200 mb-4">City-wise Distribution</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={CITY_DATA} layout="vertical" barCategoryGap="20%">
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
-                <XAxis type="number" tick={CHART_STYLE} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="city" tick={CHART_STYLE} axisLine={false} tickLine={false} width={70} />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="leads" fill={COLORS.indigo} name="Leads" radius={[0,4,4,0]} opacity={0.8} />
-                <Bar dataKey="enrolled" fill={COLORS.emerald} name="Enrolled" radius={[0,4,4,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Age group split */}
-          <div className="bg-surface/60 border border-slate-800/60 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-slate-200 mb-4">Age Group Distribution</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={AGE_DATA}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                <XAxis dataKey="group" tick={CHART_STYLE} axisLine={false} tickLine={false} />
-                <YAxis tick={CHART_STYLE} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="count" name="Leads" radius={[4,4,0,0]}>
-                  {AGE_DATA.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-            <div className="flex gap-3 mt-2 flex-wrap">
-              {AGE_DATA.map((a, i) => (
-                <span key={i} className="flex items-center gap-1 text-[11px] text-slate-400">
-                  <span className="w-2 h-2 rounded-sm" style={{ background: PIE_COLORS[i] }} />
-                  {a.group} ({a.pct}%)
-                </span>
-              ))}
+        {/* ── Row 3: Enrollments over time ──────────────────────────── */}
+        {/* City and age charts were removed, not rewired: contacts carry no age
+            field at all and city is empty for every contact (0 of 888), so any
+            such chart could only ever show invented numbers. They belong back
+            here once that data is actually captured. The old "ROI by Source"
+            table was likewise hardcoded — including a revenue column computed
+            as enrolled x 10000 — and is replaced by the real conversions
+            series below. */}
+        <div className="bg-surface/60 border border-slate-800/60 rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-slate-200 mb-4">Enrollments Over Time</h3>
+          {convData.length === 0 ? (
+            <div className="flex h-[180px] items-center justify-center text-center">
+              <p className="text-xs text-slate-500">
+                No enrollments recorded in this period.
+              </p>
             </div>
-          </div>
-        </div>
-
-        {/* ── Row 4: Weekly enrollment + Source ROI ─────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Weekly enrollment */}
-          <div className="bg-surface/60 border border-slate-800/60 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-slate-200 mb-4">Weekly Enrollments</h3>
+          ) : (
             <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={WEEKLY_ENROLL}>
+              <BarChart data={convData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                <XAxis dataKey="week" tick={CHART_STYLE} axisLine={false} tickLine={false} />
+                <XAxis dataKey="date" tick={CHART_STYLE} axisLine={false} tickLine={false} />
                 <YAxis tick={CHART_STYLE} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="enrollments" fill={COLORS.violet} radius={[4,4,0,0]} name="Enrollments" />
+                <Bar dataKey="count" fill={COLORS.violet} radius={[4,4,0,0]} name="Enrollments" />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-
-          {/* Source ROI table */}
-          <div className="bg-surface/60 border border-slate-800/60 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-slate-200 mb-4">ROI by Source</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-slate-500 border-b border-slate-800/60">
-                    <th className="pb-2 font-medium">Source</th>
-                    <th className="pb-2 font-medium text-right">Leads</th>
-                    <th className="pb-2 font-medium text-right">Enrolled</th>
-                    <th className="pb-2 font-medium text-right">Revenue</th>
-                    <th className="pb-2 font-medium text-right">CPL</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/40">
-                  {[
-                    { source: 'Facebook Ads', leads: 105, enrolled: 14, spend: 98500  },
-                    { source: 'Instagram Ads',leads: 75,  enrolled: 10, spend: 61200  },
-                    { source: 'WhatsApp',     leads: 60,  enrolled: 9,  spend: 12000  },
-                    { source: 'Referral',     leads: 36,  enrolled: 5,  spend: 0      },
-                    { source: 'Organic',      leads: 24,  enrolled: 2,  spend: 0      },
-                  ].map(r => (
-                    <tr key={r.source} className="text-slate-300">
-                      <td className="py-2 text-slate-400">{r.source}</td>
-                      <td className="py-2 text-right">{r.leads}</td>
-                      <td className="py-2 text-right text-emerald-400 font-medium">{r.enrolled}</td>
-                      <td className="py-2 text-right">Rs.{(r.enrolled * 10000).toLocaleString()}</td>
-                      <td className="py-2 text-right">{r.spend > 0 ? `Rs.${Math.round(r.spend/r.leads).toLocaleString()}` : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
 
       </div>{/* /p-6 */}
