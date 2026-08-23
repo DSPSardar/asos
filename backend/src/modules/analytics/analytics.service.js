@@ -89,9 +89,25 @@ const getFunnel = async (tenantId, { from, to } = {}) => {
   const stageMap = {};
   stages.forEach(s => { stageMap[s.stage] = { count: s._count.id, value: parseFloat(s._sum.dealValue || 0) }; });
 
-  const funnel = order.map((stage, i) => {
-    const current  = stageMap[stage]?.count || 0;
-    const previous = i > 0 ? (stageMap[order[i - 1]]?.count || 0) : null;
+  // Cumulative funnel: a stage counts every lead that REACHED it — leads
+  // currently at that stage or any later active stage. A lead now in
+  // CLOSED_WON has necessarily passed Qualified/Diagnosed/Proposed. The old
+  // current-stage snapshot made later bars bigger than earlier ones, which
+  // is not a funnel. Limitation: with no stage-history table we can't tell
+  // how far a CLOSED_LOST lead got before losing, so lost leads count only
+  // at the top stage (they entered the funnel) and in their own bucket.
+  const active = ['NEW','QUALIFYING','DIAGNOSED','PROPOSED','CLOSED_WON'];
+  const reachedCount = (i) =>
+    active.slice(i).reduce((n, s) => n + (stageMap[s]?.count || 0), 0) +
+    (i === 0 ? (stageMap.CLOSED_LOST?.count || 0) : 0);
+
+  const funnel = order.map((stage) => {
+    if (stage === 'CLOSED_LOST') {
+      return { stage, count: stageMap.CLOSED_LOST?.count || 0, dealValue: stageMap.CLOSED_LOST?.value || 0, conversionRate: null };
+    }
+    const i = active.indexOf(stage);
+    const current  = reachedCount(i);
+    const previous = i > 0 ? reachedCount(i - 1) : null;
     const rate     = previous > 0 ? ((current / previous) * 100).toFixed(1) : null;
     return { stage, count: current, dealValue: stageMap[stage]?.value || 0, conversionRate: rate };
   });

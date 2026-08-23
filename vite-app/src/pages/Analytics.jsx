@@ -367,7 +367,7 @@ function Funnel({ data = [] }) {
       <div className="flex items-center justify-between border-b border-slate-800/60 px-5 py-4">
         <div>
           <h2 className="text-sm font-semibold tracking-tight text-slate-100">Conversion Funnel</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Lead → Qualified → Proposal → Won (selected period).</p>
+          <p className="mt-0.5 text-xs text-slate-500">Leads that reached each stage in the selected period (cumulative).</p>
         </div>
         <span className="text-xs tabular-nums text-slate-500">{data[0]?.count || 0} → {data[data.length-1]?.count || 0}</span>
       </div>
