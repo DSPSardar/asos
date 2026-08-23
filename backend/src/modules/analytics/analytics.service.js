@@ -70,46 +70,50 @@ const getOverview = async (tenantId, { from, to } = {}) => {
 const getFunnel = async (tenantId, { from, to } = {}) => {
   const range = dateRange(from, to);
 
-  const stages = await prisma.lead.groupBy({
-    by: ['stage'],
+  // The funnel counts PEOPLE, not lead rows. WhatsApp flows open a fresh
+  // lead per conversation, so one contact can accumulate several CLOSED_WON
+  // leads (prod audit 2026-08-23: 141 won leads across only 71 contacts).
+  // Each contact counts once, at the furthest stage any of their leads
+  // reached in the period, and stages are cumulative — a contact who is Won
+  // has necessarily passed Qualified/Diagnosed/Proposed. Limitation: with no
+  // stage-history table we can't tell where a lost contact dropped, so lost
+  // contacts count at the top stage (they entered) plus the CLOSED_LOST
+  // bucket; a contact with both won and lost leads counts as won.
+  const leads = await prisma.lead.findMany({
     where: { tenantId, createdAt: range },
-    _count: { id: true },
-    _sum:   { dealValue: true },
+    select: { contactId: true, stage: true, dealValue: true, enrollmentFee: true },
   });
 
-  // Reported alongside the stage funnel rather than folded into it: the funnel
-  // measures stage transitions and CLOSED_WON genuinely means "won", but only
-  // a lead with a recorded fee is an enrolled student. Callers that mean
-  // students should read this, not the CLOSED_WON bucket.
-  const enrolled = await prisma.lead.count({
-    where: { tenantId, createdAt: range, stage: 'CLOSED_WON', dealValue: { not: null } },
-  });
+  const RANK = { NEW: 0, QUALIFYING: 1, DIAGNOSED: 2, PROPOSED: 3, CLOSED_WON: 4 };
+  const contacts   = new Map(); // contactId -> { rank, lost, fee }
+  const stageValue = {};        // stage -> summed dealValue (API shape kept)
+  for (const l of leads) {
+    stageValue[l.stage] = (stageValue[l.stage] || 0) + parseFloat(l.dealValue || 0);
+    const c = contacts.get(l.contactId) || { rank: -1, lost: false, fee: false };
+    if (l.stage === 'CLOSED_LOST') c.lost = true;
+    else c.rank = Math.max(c.rank, RANK[l.stage]);
+    if (l.stage === 'CLOSED_WON' && (l.dealValue != null || l.enrollmentFee != null)) c.fee = true;
+    contacts.set(l.contactId, c);
+  }
+
+  const all       = [...contacts.values()];
+  const reached   = (i) => all.filter((c) => c.rank >= i || (i === 0 && c.lost)).length;
+  const lostCount = all.filter((c) => c.lost && c.rank < RANK.CLOSED_WON).length;
+
+  // Won ≠ enrolled: only a contact with a recorded fee on a won lead is an
+  // enrolled student. Callers that mean students read this, not CLOSED_WON.
+  const enrolled = all.filter((c) => c.fee).length;
 
   const order = ['NEW','QUALIFYING','DIAGNOSED','PROPOSED','CLOSED_WON','CLOSED_LOST'];
-  const stageMap = {};
-  stages.forEach(s => { stageMap[s.stage] = { count: s._count.id, value: parseFloat(s._sum.dealValue || 0) }; });
-
-  // Cumulative funnel: a stage counts every lead that REACHED it — leads
-  // currently at that stage or any later active stage. A lead now in
-  // CLOSED_WON has necessarily passed Qualified/Diagnosed/Proposed. The old
-  // current-stage snapshot made later bars bigger than earlier ones, which
-  // is not a funnel. Limitation: with no stage-history table we can't tell
-  // how far a CLOSED_LOST lead got before losing, so lost leads count only
-  // at the top stage (they entered the funnel) and in their own bucket.
-  const active = ['NEW','QUALIFYING','DIAGNOSED','PROPOSED','CLOSED_WON'];
-  const reachedCount = (i) =>
-    active.slice(i).reduce((n, s) => n + (stageMap[s]?.count || 0), 0) +
-    (i === 0 ? (stageMap.CLOSED_LOST?.count || 0) : 0);
-
   const funnel = order.map((stage) => {
     if (stage === 'CLOSED_LOST') {
-      return { stage, count: stageMap.CLOSED_LOST?.count || 0, dealValue: stageMap.CLOSED_LOST?.value || 0, conversionRate: null };
+      return { stage, count: lostCount, dealValue: stageValue.CLOSED_LOST || 0, conversionRate: null };
     }
-    const i = active.indexOf(stage);
-    const current  = reachedCount(i);
-    const previous = i > 0 ? reachedCount(i - 1) : null;
+    const i = RANK[stage];
+    const current  = reached(i);
+    const previous = i > 0 ? reached(i - 1) : null;
     const rate     = previous > 0 ? ((current / previous) * 100).toFixed(1) : null;
-    return { stage, count: current, dealValue: stageMap[stage]?.value || 0, conversionRate: rate };
+    return { stage, count: current, dealValue: stageValue[stage] || 0, conversionRate: rate };
   });
 
   return { funnel, enrolled };
