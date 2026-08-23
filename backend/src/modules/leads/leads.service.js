@@ -167,15 +167,32 @@ const createLead = async (tenantId, { contactId, campaignId, stage, dealValue, c
 
 // ── Update lead stage ─────────────────────────────────────────────────
 
-const updateStage = async (tenantId, leadId, stage, userId, lostReason) => {
+const updateStage = async (tenantId, leadId, stage, userId, lostReason, { fee, currency } = {}) => {
   const lead = await prisma.lead.findFirst({ where: { id: leadId, tenantId } });
   if (!lead) throw Object.assign(new Error('Lead not found'), { statusCode: 404, expose: true });
+
+  // Won means PAID — same rule as confirmPayment. A manual drag to CLOSED_WON
+  // must carry a fee (or the lead must already have one), otherwise unpaid
+  // "wins" creep back into the funnel and enrollment counts.
+  let feeData = {};
+  if (stage === 'CLOSED_WON') {
+    const amount = fee != null && !Number.isNaN(parseFloat(fee))
+      ? parseFloat(fee)
+      : (lead.dealValue != null ? parseFloat(lead.dealValue)
+        : (lead.enrollmentFee != null ? parseFloat(lead.enrollmentFee) : null));
+    if (amount == null || amount <= 0) {
+      throw Object.assign(new Error('Enrollment fee is required to mark a lead as Won'),
+        { statusCode: 422, expose: true });
+    }
+    feeData = { enrollmentFee: amount, dealValue: amount,
+                currency: currency || lead.currency || 'PKR' };
+  }
 
   const updated = await prisma.lead.update({
     where: { id: leadId },
     data: {
       stage,
-      ...(stage === 'CLOSED_WON'  && { closedAt: new Date() }),
+      ...(stage === 'CLOSED_WON'  && { closedAt: new Date(), ...feeData }),
       ...(stage === 'CLOSED_LOST' && { closedAt: new Date(), lostReason }),
     },
   });

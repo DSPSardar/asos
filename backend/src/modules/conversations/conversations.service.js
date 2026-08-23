@@ -233,7 +233,7 @@ const closeConversation = async (tenantId, conversationId, userId) => {
 //
 // Idempotency key is the lead's own stage — deriveStage() is monotonic and
 // CLOSED_WON is terminal, so a double-click cannot double-count.
-const confirmPayment = async (tenantId, conversationId, userId) => {
+const confirmPayment = async (tenantId, conversationId, userId, { fee, currency } = {}) => {
   const conv = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
     include: { lead: true, contact: true, tenant: true },
@@ -249,6 +249,19 @@ const confirmPayment = async (tenantId, conversationId, userId) => {
 
   if (conv.lead?.stage === 'CLOSED_WON') return conv;
 
+  // Won means PAID: a fee must land with the stage change, or the funnel and
+  // enrollment counts drift from reality again (prod 2026-08-23: 47 contacts
+  // sat at "won" with no fee). Amount comes from the confirm dialog, falling
+  // back to whatever dealValue the lead already carries.
+  const amount = fee != null && !Number.isNaN(parseFloat(fee))
+    ? parseFloat(fee)
+    : (conv.lead?.dealValue != null ? parseFloat(conv.lead.dealValue) : null);
+  if (amount == null || amount <= 0) {
+    throw Object.assign(new Error('Enrollment fee is required to confirm a payment'),
+      { statusCode: 422, expose: true });
+  }
+  const cur = currency || conv.lead?.currency || 'PKR';
+
   const now = new Date();
   const updated = await prisma.$transaction(async (tx) => {
     const updatedConv = await tx.conversation.update({
@@ -257,7 +270,8 @@ const confirmPayment = async (tenantId, conversationId, userId) => {
     });
     await tx.lead.update({
       where: { id: conv.leadId },
-      data: { stage: 'CLOSED_WON', closedAt: now },
+      data: { stage: 'CLOSED_WON', closedAt: now,
+              enrollmentFee: amount, dealValue: amount, currency: cur },
     });
     // STAGE_CHANGE, not AI_ACTION: this is a lifecycle transition made by a
     // human, and analytics separates the two by type.

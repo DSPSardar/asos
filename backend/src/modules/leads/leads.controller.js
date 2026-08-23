@@ -42,9 +42,9 @@ const create = async (req, res, next) => {
 
 const updateStage = async (req, res, next) => {
   try {
-    const { stage, lostReason } = req.body;
+    const { stage, lostReason, fee, currency } = req.body;
     if (!stage) return require('../../utils/response').error(res, 'stage is required', 400);
-    const lead = await leadsService.updateStage(req.tenantId, req.params.id, stage, req.user.id, lostReason);
+    const lead = await leadsService.updateStage(req.tenantId, req.params.id, stage, req.user.id, lostReason, { fee, currency });
     return success(res, lead, 'Stage updated');
   } catch (err) { next(err); }
 };

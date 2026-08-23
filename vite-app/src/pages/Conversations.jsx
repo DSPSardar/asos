@@ -284,11 +284,14 @@ export default function Conversations() {
 
   const handleConfirmPayment = async (id) => {
     // Books revenue and is terminal for the lead, so it asks first. The backend
-    // rejects a conversation with no proof on file (409) — this is the second
-    // line, not the only one.
-    if (!window.confirm('Confirm this payment? The lead will be marked CLOSED_WON and the conversation closed.')) return;
+    // rejects a conversation with no proof on file (409) and refuses to book
+    // without a fee (422) — Won always means paid.
+    const raw = window.prompt('Enrollment fee received (PKR)?\nThe lead will be marked CLOSED_WON and the conversation closed.', '10000');
+    if (raw === null) return;
+    const fee = parseFloat(raw.replace(/[^\d.]/g, ''));
+    if (!fee || fee <= 0) { alert('Enter the fee amount to confirm the payment.'); return; }
     try {
-      await conversationsAPI.confirmPayment(id);
+      await conversationsAPI.confirmPayment(id, fee, 'PKR');
       setThreads((prev) => prev.map((t) =>
         t.id === id ? { ...t, status: 'CLOSED', stage: 'CLOSED_WON', handler: 'Human', aiEnabled: false } : t));
     } catch (e) {

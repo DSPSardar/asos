@@ -354,8 +354,24 @@ export default function Pipeline() {
       <DetailPanel
         lead={active}
         onClose={() => setActiveId(null)}
-        onStageChange={(leadId, nextStage) => updateLead(leadId, (apiId) => leadsAPI.updateStage(apiId, nextStage))}
-        onMarkWon={(leadId) => updateLead(leadId, (apiId) => leadsAPI.updateStage(apiId, 'CLOSED_WON'))}
+        onStageChange={(leadId, nextStage) => {
+          // Won means PAID — the backend rejects CLOSED_WON without a fee (422).
+          if (nextStage === 'CLOSED_WON') {
+            const raw = window.prompt('Enrollment fee received (PKR)?', '10000');
+            if (raw === null) return;
+            const fee = parseFloat(raw.replace(/[^\d.]/g, ''));
+            if (!fee || fee <= 0) { alert('Enter the fee amount to mark this lead Won.'); return; }
+            return updateLead(leadId, (apiId) => leadsAPI.updateStage(apiId, 'CLOSED_WON', undefined, fee, 'PKR'));
+          }
+          return updateLead(leadId, (apiId) => leadsAPI.updateStage(apiId, nextStage));
+        }}
+        onMarkWon={(leadId) => {
+          const raw = window.prompt('Enrollment fee received (PKR)?', '10000');
+          if (raw === null) return;
+          const fee = parseFloat(raw.replace(/[^\d.]/g, ''));
+          if (!fee || fee <= 0) { alert('Enter the fee amount to mark this lead Won.'); return; }
+          return updateLead(leadId, (apiId) => leadsAPI.updateStage(apiId, 'CLOSED_WON', undefined, fee, 'PKR'));
+        }}
         onAddNote={(leadId, content) => updateLead(leadId, (apiId) => leadsAPI.addNote(apiId, content))}
         onUpdateValue={(leadId, value) => updateLead(leadId, (apiId) => leadsAPI.updateDeal(apiId, Number(value), 'PKR'))}
         onDelete={async (leadId) => {

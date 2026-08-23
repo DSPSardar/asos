@@ -58,7 +58,8 @@ const close = async (req, res, next) => {
 
 const confirmPayment = async (req, res, next) => {
   try {
-    const conv = await svc.confirmPayment(req.tenantId, req.params.id, req.user.id);
+    const conv = await svc.confirmPayment(req.tenantId, req.params.id, req.user.id,
+      { fee: req.body?.fee, currency: req.body?.currency });
     return success(res, conv, 'Payment confirmed — seat booked');
   } catch (err) { next(err); }
 };

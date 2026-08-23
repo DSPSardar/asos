@@ -298,7 +298,18 @@ export default function Dashboard() {
         <LeadDrawer lead={drawer} agents={agents}
                     onClose={() => setDrawer(null)}
                     onAssign={(agentId) => leadsAPI.assign(drawer.id, agentId).then(() => { fetchData(); setDrawer(null); })}
-                    onStage={(stage) => leadsAPI.updateStage(drawer.id, stage).then(() => { fetchData(); setDrawer(null); })} />
+                    onStage={(stage) => {
+                      // Won means PAID — backend rejects CLOSED_WON without a fee (422).
+                      let fee, cur;
+                      if (stage === 'CLOSED_WON') {
+                        const raw = window.prompt('Enrollment fee received (PKR)?', '10000');
+                        if (raw === null) return;
+                        fee = parseFloat(raw.replace(/[^\d.]/g, ''));
+                        if (!fee || fee <= 0) { alert('Enter the fee amount to mark this lead Won.'); return; }
+                        cur = 'PKR';
+                      }
+                      leadsAPI.updateStage(drawer.id, stage, undefined, fee, cur).then(() => { fetchData(); setDrawer(null); });
+                    }} />
       )}
     </>
   );
