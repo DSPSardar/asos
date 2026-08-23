@@ -28,13 +28,18 @@ const contactClause = (fromDsp, search) => {
   return { contact: { AND: parts } };
 };
 
-const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, fromDsp, businessUnit, page = 1, limit = 20 }) => {
+const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, fromDsp, businessUnit, enrolledOnly, page = 1, limit = 20 }) => {
   const where = {
     tenantId,
     ...(stage       && { stage }),
     ...(scoreLabel  && { scoreLabel }),
     ...(assignedTo  && { assignedTo }),
     ...(businessUnit && { businessUnit }),
+    // An enrolled student is one with a recorded fee. CLOSED_WON alone is not
+    // enrollment — the AI marks conversations won on its own, so that stage
+    // also holds bot-closed leads and internal test threads. Counting those as
+    // students inflated the roster by 143.
+    ...(enrolledOnly && { dealValue: { not: null } }),
     ...contactClause(fromDsp, search),
   };
 
@@ -544,7 +549,12 @@ const importStudents = async (tenantId, students = [], requestingUserId = null) 
   let invalid = 0;
 
   for (const row of students) {
-    const phone = normalizePhone(String(row.phone || ''));
+    // Digits-only, matching whatsapp.service.normalizePhone — contacts created
+    // by the WhatsApp pipeline are stored that way. The local normalizePhone()
+    // above preserves a leading '+', which silently created a SECOND contact
+    // for every student who already existed in ASOS (68 of them on the first
+    // real import) instead of matching and upgrading their record.
+    const phone = String(row.phone || '').replace(/\D/g, '').replace(/^0+/, '');
     if (!phone) { invalid += 1; continue; }
 
     const name  = String(row.name || '').trim() || phone;

@@ -127,7 +127,10 @@ export default function Students() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await leadsAPI.list({ stage: 'CLOSED_WON', limit: 500 });
+      // enrolledOnly: a student is someone with a recorded fee. CLOSED_WON on
+      // its own also contains AI-closed leads and test threads, which is why
+      // this page used to claim 422 students against 279 real enrollments.
+      const res = await leadsAPI.list({ stage: 'CLOSED_WON', enrolledOnly: true, limit: 500 });
       const raw = res?.data?.data ?? res?.data ?? [];
       setStudents(raw);
     } catch {
