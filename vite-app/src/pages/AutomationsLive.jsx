@@ -220,6 +220,9 @@ function RuleCard({ rule, isAdmin, busy, isSelected, onSelect, onToggle }) {
             <span className="text-slate-600">→</span>
             <span className="bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 px-2 py-0.5 rounded font-mono">THEN</span>
             <span className="text-slate-300">{ACTION_LABEL[rule.action?.type] || rule.action?.type}</span>
+            {rule.action?.waTemplate?.name && (
+              <span className="text-[10px] font-mono bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 px-1.5 py-0.5 rounded" title="Approved Meta template used outside the 24h window">tpl: {rule.action.waTemplate.name}</span>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -242,11 +245,13 @@ function RuleCard({ rule, isAdmin, busy, isSelected, onSelect, onToggle }) {
 // ── RuleDetail (edit + runs + dry-run preview) ────────────────────────────────
 function RuleDetail({ rule, isAdmin, onClose, onSaved, onDelete, onError }) {
   const [template, setTemplate] = useState(rule.action?.template || '');
+  const [waName, setWaName]     = useState(rule.action?.waTemplate?.name || '');
   const [saving, setSaving]     = useState(false);
   const [runs, setRuns]         = useState(null);
   const [preview, setPreview]   = useState(null);
   const [previewing, setPreviewing] = useState(false);
-  const dirty = template !== (rule.action?.template || '');
+  const dirty = template !== (rule.action?.template || '') || waName.trim() !== (rule.action?.waTemplate?.name || '');
+  const waNameOk = waName.trim() === '' || /^[a-z0-9_]+$/.test(waName.trim());
 
   useEffect(() => {
     automationsAPI.runs(rule.id, 30).then((r) => setRuns(unwrap(r) || [])).catch(() => setRuns([]));
@@ -255,7 +260,8 @@ function RuleDetail({ rule, isAdmin, onClose, onSaved, onDelete, onError }) {
   const save = async () => {
     setSaving(true);
     try {
-      onSaved(unwrap(await automationsAPI.update(rule.id, { action: { type: 'send_whatsapp', template } })));
+      const waTemplate = waName.trim() ? { name: waName.trim(), language: 'en', bodyParams: ['{name}'] } : null;
+      onSaved(unwrap(await automationsAPI.update(rule.id, { action: { type: 'send_whatsapp', template, waTemplate } })));
     } catch (e) { onError(errMsg(e)); } finally { setSaving(false); }
   };
 
@@ -296,11 +302,28 @@ function RuleDetail({ rule, isAdmin, onClose, onSaved, onDelete, onError }) {
           rows={5}
           className="w-full bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500/60 disabled:opacity-70"
         />
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-[11px] text-slate-500 italic">{'{name}'} → lead's first name</span>
+        <div className="text-[11px] text-slate-500 italic mt-1.5">{'{name}'} → lead's first name · sent as free text when the lead messaged you in the last 24h</div>
+
+        <div className="mt-3">
+          <label className="text-[11px] font-bold text-indigo-400/80 uppercase tracking-wider block mb-1">Meta template (outside 24h window)</label>
+          <input
+            value={waName}
+            onChange={(e) => setWaName(e.target.value)}
+            disabled={!isAdmin}
+            placeholder="e.g. dsp_no_reply_followup"
+            className={`w-full bg-slate-800/60 border rounded-lg px-3 py-1.5 text-xs text-slate-100 font-mono placeholder-slate-600 focus:outline-none disabled:opacity-70 ${waNameOk ? 'border-slate-700/60 focus:border-indigo-500/60' : 'border-rose-500/60'}`}
+          />
+          <div className="text-[11px] text-slate-500 italic mt-1">
+            {waName.trim()
+              ? <>Approved template name from WhatsApp Manager. {'{{1}}'} = first name. Leads outside the 24h window get this instead of being skipped.</>
+              : <>Empty → leads outside the 24h window are skipped (logged as <span className="font-mono">outside_24h_window</span>).</>}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end mt-2">
           {isAdmin && dirty && (
-            <button onClick={save} disabled={saving || template.trim().length < 5} className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-semibold rounded-md">
-              {saving ? 'Saving…' : 'Save message'}
+            <button onClick={save} disabled={saving || template.trim().length < 5 || !waNameOk} className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-semibold rounded-md">
+              {saving ? 'Saving…' : 'Save'}
             </button>
           )}
         </div>
@@ -355,7 +378,7 @@ function RuleDetail({ rule, isAdmin, onClose, onSaved, onDelete, onError }) {
               <li key={r.id} className="text-xs flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="text-slate-200 truncate">{r.lead?.contact?.name || r.lead?.contact?.phone || r.leadId}</div>
-                  <div className="text-[11px] text-slate-500">{relTime(r.createdAt)}{r.reason ? ` · ${REASON_LABEL[r.reason] || r.reason}` : ''}</div>
+                  <div className="text-[11px] text-slate-500">{relTime(r.createdAt)}{r.reason ? ` · ${REASON_LABEL[r.reason] || (r.reason.startsWith('template:') ? `via template ${r.reason.slice(9)}` : r.reason)}` : ''}</div>
                 </div>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded border flex-shrink-0 ${
                   r.status === 'SENT' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'

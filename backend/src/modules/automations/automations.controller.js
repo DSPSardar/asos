@@ -23,6 +23,13 @@ const ruleSchema = z.object({
   action:    z.object({
     type:     z.literal('send_whatsapp'),
     template: z.string().trim().min(5).max(1000),
+    // Approved Meta template used when the lead is outside the 24h window.
+    // name must match WhatsApp Manager exactly; bodyParams fill {{1}}, {{2}}…
+    waTemplate: z.object({
+      name:       z.string().trim().regex(/^[a-z0-9_]{1,512}$/, 'lowercase letters, digits and underscores only'),
+      language:   z.string().trim().min(2).max(10).default('en'),
+      bodyParams: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
+    }).nullable().optional(),
   }),
   tags:      z.array(z.string().trim().min(1).max(24)).max(6).default([]),
 });

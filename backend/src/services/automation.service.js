@@ -150,13 +150,30 @@ const executeMatch = async (tenant, rule, match) => {
   const { lead, conversationId, insideWindow } = match;
   const phone = lead.contact?.phone;
   if (!phone) return recordRun(rule, lead.id, 'SKIPPED', 'no_phone');
-  if (!insideWindow) return recordRun(rule, lead.id, 'SKIPPED', 'outside_24h_window');
+
+  // Outside Meta's 24h customer-service window only an approved template
+  // delivers. If the rule names one (action.waTemplate), use it; otherwise
+  // record the skip so the admin can see exactly why nothing went out.
+  const tpl = rule.action?.waTemplate;
+  const useTemplate = !insideWindow && tpl?.name;
+  if (!insideWindow && !useTemplate) return recordRun(rule, lead.id, 'SKIPPED', 'outside_24h_window');
 
   const content = renderTemplate(rule.action?.template, lead);
   let waMessageId = null;
   let sendError = null;
   try {
-    waMessageId = await whatsappService.sendText(tenant, phone, content);
+    if (useTemplate) {
+      // Body params map 1:1 to {{1}}, {{2}}… in the approved template.
+      // Default is a single {{1}} = first name, matching the DSP templates.
+      const params = (tpl.bodyParams?.length ? tpl.bodyParams : ['{name}'])
+        .map((p) => ({ type: 'text', text: renderTemplate(p, lead) }));
+      waMessageId = await whatsappService.sendTemplate(
+        tenant, phone, tpl.name, tpl.language || 'en',
+        [{ type: 'body', parameters: params }]
+      );
+    } else {
+      waMessageId = await whatsappService.sendText(tenant, phone, content);
+    }
   } catch (err) {
     sendError = err?.response?.data?.error?.message || err?.message || 'send_failed';
   }
@@ -175,18 +192,18 @@ const executeMatch = async (tenant, rule, match) => {
   await prisma.message.create({
     data: {
       tenantId: rule.tenantId, conversationId, waMessageId,
-      direction: 'OUTBOUND', sender: 'SYSTEM', type: 'TEXT', content, status: 'SENT',
+      direction: 'OUTBOUND', sender: 'SYSTEM', type: useTemplate ? 'TEMPLATE' : 'TEXT', content, status: 'SENT',
     },
   }).catch((err) => logger.warn({ err }, 'Automation: could not persist outbound message'));
   await prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date() } }).catch(() => {});
   await prisma.activity.create({
     data: {
       tenantId: rule.tenantId, leadId: lead.id, type: 'SYSTEM',
-      content: `🤖 Automation "${rule.name}" sent WhatsApp message`,
+      content: `🤖 Automation "${rule.name}" sent WhatsApp ${useTemplate ? `template ${tpl.name}` : 'message'}`,
       metadata: { ruleId: rule.id, preview: content.slice(0, 120) },
     },
   }).catch(() => {});
-  return recordRun(rule, lead.id, 'SENT', null);
+  return recordRun(rule, lead.id, 'SENT', useTemplate ? `template:${tpl.name}` : null);
 };
 
 // Evaluate + execute every enabled rule for ONE tenant. Runs inside that

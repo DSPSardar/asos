@@ -146,6 +146,12 @@ const sendAudioByMediaId = async (tenant, to, mediaId) => {
 // ── Send template message ─────────────────────────────────────────────
 
 const sendTemplate = async (tenant, to, templateName, languageCode = 'pt_BR', components = []) => {
+  if (isMockMode(tenant)) {
+    const mockId = `mock_tpl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    logger.info({ to, tenantId: tenant.id, templateName, mockId }, '[MOCK] WA template suppressed — would have been sent');
+    return mockId;
+  }
+
   try {
     const client = getClient(tenant);
     const res = await client.post('/messages', {

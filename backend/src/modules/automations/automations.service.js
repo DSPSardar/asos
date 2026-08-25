@@ -9,14 +9,22 @@ const notFound = () => Object.assign(new Error('Rule not found'), { statusCode: 
 // the old mock page displayed so nothing "disappears" on upgrade — the admin
 // just has to switch each one on deliberately. Templates support {name}.
 const DEFAULT_RULES = [
+  // The two "quiet lead" rules almost always fire outside Meta's 24h window,
+  // so they carry the approved marketing templates (WhatsApp Manager → Asos).
+  // The free-text template is what goes out if the lead IS in-window, and is
+  // kept in sync with the approved wording.
   { name: 'No-Reply Follow-up', trigger: { type: 'no_reply', delay: 24, unit: 'hours' }, condition: { stage: 'any' }, tags: ['follow-up', 'whatsapp'],
-    action: { type: 'send_whatsapp', template: 'Assalamualaikum {name}! Aap ke sath share karna chahta tha ke DSP ka next batch starting soon hai. Kya aap ka AI course ke baare mein koi sawaal hai? 😊' } },
+    action: { type: 'send_whatsapp',
+      template: 'Assalamualaikum {name}! Ye DSP (Digital Services Program) se hai. Aap ne humare AI Agents course ke baare mein pucha tha aur hum aap ke jawab ka intezaar kar rahe hain. Next batch jald start ho raha hai. Kya aap ka koi sawaal hai? Bas reply karein, hum foran madad karenge.',
+      waTemplate: { name: 'dsp_no_reply_followup', language: 'en', bodyParams: ['{name}'] } } },
   { name: 'Unpaid Enrollment Reminder', trigger: { type: 'stage_entered', stage: 'PROPOSED', delay: 48, unit: 'hours' }, condition: { stage: 'PROPOSED' }, tags: ['payment', 'whatsapp'],
     action: { type: 'send_whatsapp', template: 'Salam {name}! Aap ne enrollment ka faisla kiya — great decision! Seat confirm karne ke liye fee submit karein aur screenshot yahin bhej dein. Koi mushkil ho to batayen.' } },
   { name: 'Enrollment Welcome Sequence', trigger: { type: 'stage_entered', stage: 'CLOSED_WON', delay: 0, unit: 'minutes' }, condition: { stage: 'CLOSED_WON' }, tags: ['welcome', 'onboarding'],
     action: { type: 'send_whatsapp', template: '🎉 Mubarak ho {name}! Aap DSP Agentic AI Mastery family mein shamil ho gaye! WhatsApp group invite aap ko jald milega. Pehla session ki details bhi share ki jayengi.' } },
   { name: 'Cold Lead Re-engage (7d)', trigger: { type: 'no_activity', delay: 7, unit: 'days' }, condition: { stage: 'QUALIFYING' }, tags: ['re-engagement', 'cold'],
-    action: { type: 'send_whatsapp', template: 'Salam {name}! Aap ne AI course mein interest dikhaya tha. Humara next batch mein sirf kuch seats bachi hain. Kya aap ab bhi interested hain?' } },
+    action: { type: 'send_whatsapp',
+      template: 'Salam {name}! Ye DSP (Digital Services Program) se hai. Aap ne kuch din pehle humare AI Agents course mein interest dikhaya tha. Next batch mein sirf kuch seats bachi hain. Kya aap ab bhi join karna chahte hain? Reply karein aur hum details bhej denge.',
+      waTemplate: { name: 'dsp_cold_reengage', language: 'en', bodyParams: ['{name}'] } } },
   { name: 'Certificate Issued Notification', trigger: { type: 'dsp_phase_changed', phase: 'BUILD', delay: 0, unit: 'minutes' }, condition: {}, tags: ['certificate', 'milestone'],
     action: { type: 'send_whatsapp', template: '🏆 {name}, aap ka DSP AI Mastery certificate issue ho gaya! LinkedIn pe add karein aur clients tak apni skills pahunchayen.' } },
   { name: 'Earning Milestone Congratulations', trigger: { type: 'dsp_phase_changed', phase: 'EARN', delay: 0, unit: 'minutes' }, condition: {}, tags: ['earn', 'milestone'],
