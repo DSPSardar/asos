@@ -580,6 +580,7 @@ const importStudents = async (tenantId, students = [], requestingUserId = null) 
   const VALID_PHASES = ['LEARN', 'BUILD', 'EARN'];
   let created = 0;
   let updated = 0;
+  let phaseChanged = 0;
   let invalid = 0;
 
   for (const row of students) {
@@ -613,10 +614,13 @@ const importStudents = async (tenantId, students = [], requestingUserId = null) 
       const existingLead = await tx.lead.findFirst({
         where: { tenantId, contactId: contact.id },
         orderBy: { createdAt: 'desc' },
-        select: { id: true, stage: true },
+        select: { id: true, stage: true, dspPhase: true },
       });
 
       if (existingLead) {
+        // Only stamp dspPhaseChangedAt on a real move. Re-importing the same
+        // roster must not look like a phase change to the automation engine.
+        const phaseMoved = (existingLead.dspPhase || 'LEARN') !== phase;
         await tx.lead.update({
           where: { id: existingLead.id },
           data: {
@@ -625,10 +629,15 @@ const importStudents = async (tenantId, students = [], requestingUserId = null) 
             currency: 'PKR',
             closedAt: enrolledAt,
             dspPhase: phase,
+            ...(phaseMoved ? { dspPhaseChangedAt: new Date() } : {}),
           },
         });
+        if (phaseMoved) phaseChanged += 1;
         updated += 1;
       } else {
+        // A brand-new import is an initial state, not a phase change —
+        // dspPhaseChangedAt stays null so bulk onboarding never fires
+        // milestone automations for the whole batch.
         const lead = await tx.lead.create({
           data: {
             tenantId, contactId: contact.id,
@@ -651,7 +660,7 @@ const importStudents = async (tenantId, students = [], requestingUserId = null) 
     });
   }
 
-  return { received: students.length, created, updated, invalid };
+  return { received: students.length, created, updated, phaseChanged, invalid };
 };
 
 module.exports = { listLeads, getPipeline, getLead, createLead, updateStage, assignLead, addNote, updateDealValue, getHotLeads, getHandoffQueue, syncFromDsp, sendDailyHotLeadDigest, deleteLead, importStudents };

@@ -297,6 +297,10 @@ model Lead {
 
   // ── DSP EdTech fields ──
   dspPhase            String?    @map("dsp_phase")      // LEARN | BUILD | EARN
+  // Set only when dspPhase actually moves (importStudents). Automation
+  // dsp_phase_changed triggers key off this, not updatedAt — a roster
+  // re-import or an AI score bump must never look like 280 phase changes.
+  dspPhaseChangedAt   DateTime?  @map("dsp_phase_changed_at")
   enrollmentFee       Decimal?   @db.Decimal(12,2) @map("enrollment_fee")
 
   closedAt            DateTime?  @map("closed_at")

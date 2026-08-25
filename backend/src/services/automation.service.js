@@ -100,11 +100,12 @@ const findMatches = async (rule, { limit = MAX_SENDS_PER_RULE_PER_TICK, ignoreEn
   }
 
   if (t.type === 'dsp_phase_changed') {
-    // No phase history table; updatedAt >= floor approximates "changed since
-    // the rule was enabled" and the once-per-lead guard makes it exact-enough.
+    // dspPhaseChangedAt is stamped only when importStudents sees the phase
+    // actually move (never on initial import, never on unrelated updates),
+    // so a roster re-import can't masquerade as 280 phase changes.
     const leads = await prisma.lead.findMany({
-      where: { ...baseLeadWhere(rule), dspPhase: t.phase, updatedAt: { gte: floor, lte: cutoff } },
-      orderBy: { updatedAt: 'asc' }, take: limit * 2, select: leadSelect,
+      where: { ...baseLeadWhere(rule), dspPhase: t.phase, dspPhaseChangedAt: { gte: floor, lte: cutoff } },
+      orderBy: { dspPhaseChangedAt: 'asc' }, take: limit * 2, select: leadSelect,
     });
     for (const lead of leads) { if (out.length >= limit) break; await push(lead); } // eslint-disable-line no-await-in-loop
     return out;
