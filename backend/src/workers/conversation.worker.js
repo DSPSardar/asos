@@ -23,7 +23,7 @@ const { toDbMessageType } = require('../utils/messageType');
 const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
-const { publishStatusUpdate, registerWeeklyDigest } = require('../queues/message.queue');
+const { publishStatusUpdate, registerWeeklyDigest, registerAutomationTick } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
 
@@ -1331,6 +1331,7 @@ setTimeout(() => {
 // concurrency 1: these are low-volume, time-based jobs; serialising them
 // keeps the weekly fan-out from contending with the message worker.
 const digestService = require('../services/digest.service');
+const automationService = require('../services/automation.service');
 
 const schedulerWorker = new Worker(
   QUEUE_NAMES.SCHEDULER_QUEUE,
@@ -1338,6 +1339,7 @@ const schedulerWorker = new Worker(
     { requestId: job.id, tenantId: job.data?.tenantId || '' },
     () => {
       if (job.name === 'weekly-digest') return digestService.runWeeklyDigestForAllTenants();
+      if (job.name === 'automation-tick') return automationService.runTick();
       // 'follow-up' intentionally unhandled for now: returning cleanly drains
       // the backlog these accumulated instead of failing them in a loop.
       logger.warn({ jobName: job.name, jobId: job.id }, 'Scheduler job has no handler — draining');
@@ -1356,5 +1358,9 @@ schedulerWorker.on('failed', (job, err) => {
 registerWeeklyDigest()
   .then(() => logger.info('🗓  Weekly digest scheduled — Mondays 09:00 Asia/Karachi'))
   .catch((err) => logger.warn({ err }, 'Could not register weekly digest schedule'));
+
+registerAutomationTick()
+  .then(() => logger.info(`🤖 Automation tick scheduled — every ${automationService.TICK_MINUTES} min`))
+  .catch((err) => logger.warn({ err }, 'Could not register automation tick schedule'));
 
 module.exports = worker;

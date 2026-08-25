@@ -100,6 +100,27 @@ const registerWeeklyDigest = async () => {
   });
 };
 
+// Automation engine tick (services/automation.service.js). Same idempotent
+// register-on-boot pattern as the digest; changing the interval here takes
+// effect on the next worker boot because stale schedules are cleared first.
+const AUTOMATION_TICK_PATTERN = '*/10 * * * *';
+
+const registerAutomationTick = async () => {
+  const existing = await schedulerQueue.getRepeatableJobs();
+  await Promise.all(
+    existing
+      .filter((j) => j.name === 'automation-tick' && j.pattern !== AUTOMATION_TICK_PATTERN)
+      .map((j) => schedulerQueue.removeRepeatableByKey(j.key))
+  );
+
+  return schedulerQueue.add('automation-tick', {}, {
+    repeat: { pattern: AUTOMATION_TICK_PATTERN },
+    jobId: 'automation-tick',
+    removeOnComplete: 20,
+    removeOnFail: 50,
+  });
+};
+
 module.exports = {
   messageQueue,
   metaEventsQueue,
@@ -109,5 +130,6 @@ module.exports = {
   publishMetaEvent,
   scheduleFollowUp,
   registerWeeklyDigest,
+  registerAutomationTick,
   QUEUE_NAMES: { MESSAGE_QUEUE, META_EVENTS_QUEUE, SCHEDULER_QUEUE },
 };

@@ -177,6 +177,16 @@ export const leadsAPI = {
   deleteLead:  (id) => api.delete(`/leads/${id}`),
 };
 
+export const automationsAPI = {
+  list:    () => api.get('/automations'),
+  runs:    (ruleId, limit = 50) => api.get(ruleId ? `/automations/${ruleId}/runs` : '/automations/runs', { params: { limit } }),
+  create:  (data) => api.post('/automations', data),
+  update:  (id, data) => api.patch(`/automations/${id}`, data),
+  toggle:  (id, enabled) => api.patch(`/automations/${id}/toggle`, { enabled }),
+  remove:  (id) => api.delete(`/automations/${id}`),
+  preview: (id) => api.post(`/automations/${id}/preview`),
+};
+
 export const contactsAPI = {
   list:   (params) => api.get('/contacts', { params }),
   get:    (id) => api.get(`/contacts/${id}`),

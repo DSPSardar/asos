@@ -188,6 +188,8 @@ model Tenant {
   clientReports   ClientReport[]
   knowledgeGaps   KnowledgeGap[]
   manualPayments  ManualPayment[]
+  automationRules AutomationRule[]
+  automationRuns  AutomationRun[]
 
   @@map("tenants")
 }
@@ -309,6 +311,7 @@ model Lead {
   activities          Activity[]
   adsTracking         AdsTracking[]
   stageHistory        LeadStageHistory[]
+  automationRuns      AutomationRun[]
 
   @@index([tenantId, stage])
   @@index([tenantId, scoreLabel])
@@ -810,4 +813,65 @@ model ManualPayment {
   @@index([tenantId, status])
   @@index([status, createdAt])
   @@map("manual_payments")
+}
+
+// ─────────────────────────────────────────────
+// AUTOMATION RULES — IF/THEN follow-up engine
+// Evaluated by the scheduler worker every few minutes. A rule fires at most
+// once per lead (enforced by the unique on automation_runs), and only for
+// events that happened after the rule was last enabled, so flipping a rule
+// on never blasts historical leads.
+// ─────────────────────────────────────────────
+
+enum AutomationRunStatus {
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model AutomationRule {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  name        String
+  enabled     Boolean   @default(false)
+  // Set every time the rule flips to enabled. Only events at/after this
+  // timestamp are eligible — see automation.service evaluateRule().
+  enabledAt   DateTime? @map("enabled_at")
+
+  // { type: 'no_reply'|'no_activity'|'stage_entered'|'dsp_phase_changed',
+  //   delay: Number, unit: 'minutes'|'hours'|'days', stage?, phase? }
+  trigger     Json
+  // { stage?: LeadStage | 'any' }  — optional extra filter on the lead
+  condition   Json      @default("{}")
+  // { type: 'send_whatsapp', template: String }  — template supports {name}
+  action      Json
+  tags        String[]  @default([])
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  runs        AutomationRun[]
+
+  @@index([tenantId, enabled])
+  @@map("automation_rules")
+}
+
+model AutomationRun {
+  id        String              @id @default(uuid())
+  tenantId  String              @map("tenant_id")
+  ruleId    String              @map("rule_id")
+  leadId    String              @map("lead_id")
+  status    AutomationRunStatus
+  // Why it was skipped / failed (e.g. outside_24h_window, wa_send_failed)
+  reason    String?
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rule      AutomationRule      @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  lead      Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, leadId])
+  @@index([tenantId, ruleId, createdAt])
+  @@map("automation_runs")
 }
