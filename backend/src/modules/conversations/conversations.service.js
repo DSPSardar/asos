@@ -1,6 +1,7 @@
 // src/modules/conversations/conversations.service.js
 
 const prisma = require('../../config/database');
+const masteryService = require('../../services/mastery.service');
 const whatsappService = require('../../services/whatsapp.service');
 const claudeService = require('../../services/claude.service');
 const metaService = require('../../services/meta.service');
@@ -291,6 +292,9 @@ const confirmPayment = async (tenantId, conversationId, userId, { fee, currency 
     });
     return updatedConv;
   });
+
+  // Paid Mastery lead → create their course account (async, never blocks confirmation).
+  masteryService.enrolIfMasteryAsync({ tenantId, leadId: conv.leadId, userId });
 
   // Purchase fires here rather than when the AI hears "yes": this is the first
   // point at which money has actually been verified, so it is the only honest

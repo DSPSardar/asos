@@ -1,0 +1,16 @@
+═══ DSP AI AGENT MASTERY — ZERO TO MASTER (self-paced program) ═══
+What it is: DSP's recorded, self-paced program. 15 modules in 5 phases (Foundations → Builder → Agent Engineer → Production → Seller). About 30 hours of the same live classes Sardar teaches, cut and put in order, plus new lessons on MCP, APIs, multi-agent systems and selling AI solutions.
+Who it is for: people who CANNOT attend the 9 pm live bootcamp — overseas (UAE, UK, Saudi, Canada), working hours, or who want recordings and their own pace. Beginners, non-coders, teachers, freelancers, marketers, business owners.
+Price: PKR 28,000 one-time (USD 100). No subscription. No hidden fees.
+Access: LIFETIME, including every future update.
+Support: 12 months FREE in the DSP WhatsApp group + weekly live Q&A (recorded). Group support, not private 1:1.
+Certificate: DSP AI Agent Mastery — Master certificate with a public verification link, issued when all 15 modules are complete and the capstone project is approved by the DSP team. Milestone badges: Builder, Agent Engineer, Production-Ready, AI Solutions Seller.
+What they build: one real AI Employee (a café ordering agent) from an empty folder to a live URL — website, agent, memory, tools, tested, secured, deployed — then their own original agent as the capstone.
+Language: taught in Urdu-English mix. Templates and downloads in English. Subtitles provided.
+Requirements: laptop (Mac or Windows), internet. No coding background. Claude account + small API budget (about $5-10 for the whole program) + free GitHub and Vercel accounts.
+Refund: 7 days, no questions.
+How to enrol: (1) pay PKR 28,000 to the DSP bank account (the system sends the details), (2) send the payment screenshot here OR use digitalservicesprogram.com/mastery/enrol, (3) give the EMAIL they will sign in with — the sign-in link goes to that email; there is no password.
+How they sign in: digitalservicesprogram.com/app — enter the enrolled email, receive a sign-in link by email, click it. Works on phone and laptop.
+Do NOT say: that it is live, that it has batch dates, that it includes 1:1 mentoring, which AI vendor powers this assistant, or any income promise.
+Difference from the 7-Day Live Bootcamp: bootcamp = live on Zoom, PKR 10,000, new batch every Monday, 4 certificates (3 Anthropic + 1 DSP). Mastery = recorded, PKR 28,000, lifetime, 15 modules, DSP certificate. Recommend Mastery when the lead cannot attend live; recommend the bootcamp when they can and want accountability.
+Public info page: digitalservicesprogram.com/mastery
