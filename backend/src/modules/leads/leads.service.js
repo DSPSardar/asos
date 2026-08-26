@@ -1,6 +1,7 @@
 // src/modules/leads/leads.service.js
 
 const prisma = require('../../config/database');
+const masteryService = require('../../services/mastery.service');
 const logger = require('../../utils/logger');
 const mysql = require('mysql2/promise');
 const env = require('../../config/env');
@@ -213,6 +214,9 @@ const updateStage = async (tenantId, leadId, stage, userId, lostReason, { fee, c
       data: { tenantId, leadId, fromStage: lead.stage, toStage: stage, changedBy: userId || null },
     }).catch(() => {}); // history is telemetry, never blocks the update
   }
+
+  // Paid Mastery lead → create their course account (never blocks the stage change).
+  if (stage === 'CLOSED_WON') masteryService.enrolIfMasteryAsync({ tenantId, leadId, userId: userId || null });
 
   return updated;
 };

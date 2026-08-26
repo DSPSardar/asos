@@ -36,6 +36,11 @@ const envSchema = z.object({
 
   // OpenAI powers the customer-facing WhatsApp sales agent.
   OPENAI_API_KEY:          z.string().startsWith('sk-'),
+  // ── DSP AI Agent Mastery (self-paced course on digitalservicesprogram.com) ──
+  MASTERY_ENROL_URL:       z.string().url().optional(),      // https://digitalservicesprogram.com/api/mastery/enrol
+  MASTERY_ENROL_SECRET:    z.string().optional(),            // shared secret (x-mastery-secret) for the enrol API
+  MASTERY_EVENTS_SECRET:   z.string().optional(),            // shared secret the site sends to POST /webhooks/mastery
+  MASTERY_TENANT_ID:       z.string().optional(),            // the DSP tenant that owns Mastery leads/automations
   OPENAI_MODEL:            z.string().default('gpt-5.4-mini'),
   OPENAI_QUALIFIER_MODEL:  z.string().optional(),
   OPENAI_CLOSER_MODEL:     z.string().optional(),

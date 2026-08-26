@@ -138,6 +138,34 @@ const findMatches = async (rule, { limit = MAX_SENDS_PER_RULE_PER_TICK, ignoreEn
     return out;
   }
 
+  if (t.type === 'mastery_event') {
+    // Learning events from the AI Agent Mastery dashboard arrive as SYSTEM
+    // activities (metadata.masteryEvent, see webhooks/mastery.webhook.js).
+    // Optional trigger.badge / trigger.module narrow the match. Enrolled
+    // students' conversations are usually CLOSED with AI off, so this branch
+    // deliberately does NOT require an AI-enabled conversation — any
+    // conversation with a phone is enough to send a nudge.
+    const meta = { path: ['masteryEvent'], equals: t.event };
+    const acts = await prisma.activity.findMany({
+      where: { tenantId: rule.tenantId, type: 'SYSTEM', metadata: meta, createdAt: { gte: floor, lte: cutoff } },
+      orderBy: { createdAt: 'asc' }, take: limit * 3, select: { leadId: true, metadata: true },
+    });
+    const ids = [...new Set(acts
+      .filter((a) => (!t.badge || a.metadata?.badge === t.badge) && (!t.module || a.metadata?.module === t.module))
+      .map((a) => a.leadId).filter(Boolean))];
+    if (!ids.length) return out;
+    const leads = await prisma.lead.findMany({ where: { ...baseLeadWhere(rule), id: { in: ids } }, select: leadSelect });
+    for (const lead of leads) {
+      if (out.length >= limit) break;
+      const conv = lead.conversations?.[0];
+      if (!conv) continue;
+      const facts = await conversationFacts(conv.id); // eslint-disable-line no-await-in-loop
+      const insideWindow = !!facts.lastInboundAt && (now - facts.lastInboundAt) < WA_WINDOW_MS;
+      out.push({ lead, conversationId: conv.id, insideWindow, facts });
+    }
+    return out;
+  }
+
   logger.warn({ ruleId: rule.id, type: t.type }, 'Automation rule has unknown trigger type');
   return out;
 };

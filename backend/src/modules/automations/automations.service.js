@@ -2,6 +2,7 @@
 // CRUD for automation rules + run history. The engine that evaluates and
 // sends lives in services/automation.service.js.
 const prisma = require('../../config/database');
+const env = require('../../config/env');
 
 const notFound = () => Object.assign(new Error('Rule not found'), { statusCode: 404, expose: true });
 
@@ -31,12 +32,48 @@ const DEFAULT_RULES = [
     action: { type: 'send_whatsapp', template: '💰 Incredible, {name}! Aap Earn phase mein enter ho gaye. Aap ab AI services sell karne ke ready hain. Team aap ke pehle client mein madad ke liye available hai!' } },
 ];
 
+
+// ── DSP AI Agent Mastery nudges ─────────────────────────────────────────────
+// Only seeded for the tenant named in MASTERY_TENANT_ID (the DSP EdTech tenant);
+// every other tenant never sees these. Triggered by learning events the course
+// dashboard posts to /webhooks/mastery. All start paused — flip on in /automations.
+const MASTERY_RULES = [
+  { name: 'Mastery: Welcome to the dashboard', trigger: { type: 'mastery_event', event: 'enrolled', delay: 5, unit: 'minutes' }, condition: { stage: 'any' }, tags: ['mastery', 'onboarding'],
+    action: { template: 'Welcome to DSP AI Agent Mastery, {name}! 🎓 Your sign-in link is in your email — start with Module 1, Lesson 1 today. Setup checklist is in Module 3 — do it the same day. Stuck? Ask here any time, support is free for a year.' } },
+  { name: 'Mastery: Day-3 setup nudge', trigger: { type: 'mastery_event', event: 'enrolled', delay: 3, unit: 'days' }, condition: { stage: 'any' }, tags: ['mastery', 'onboarding'],
+    action: { template: '{name}, quick check — did you finish the setup checklist in Module 3 (Claude, Console, Claude Code, GitHub, Vercel)? Nothing after Module 3 works without it. If anything is stuck, send a screenshot here.' } },
+  { name: 'Mastery: Builder badge', trigger: { type: 'mastery_event', event: 'badge_earned', badge: 'Builder', delay: 0, unit: 'minutes' }, condition: { stage: 'any' }, tags: ['mastery', 'milestone'],
+    action: { template: '🏅 Builder badge, {name}! You have a website on GitHub — most people never get here. Phase 2 turns it into an agent. Post a screenshot in the group.' } },
+  { name: 'Mastery: Agent Engineer badge', trigger: { type: 'mastery_event', event: 'badge_earned', badge: 'Agent Engineer', delay: 0, unit: 'minutes' }, condition: { stage: 'any' }, tags: ['mastery', 'milestone'],
+    action: { template: '🏅 Agent Engineer, {name}! Your agent acts, remembers and connects to real tools. Send me the demo — I want to see it.' } },
+  { name: 'Mastery: Production-Ready badge', trigger: { type: 'mastery_event', event: 'badge_earned', badge: 'Production-Ready', delay: 0, unit: 'minutes' }, condition: { stage: 'any' }, tags: ['mastery', 'milestone'],
+    action: { template: '🏅 It\'s live, {name}! Send the URL to three people today and tell me what they said.' } },
+  { name: 'Mastery: Seller badge', trigger: { type: 'mastery_event', event: 'badge_earned', badge: 'AI Solutions Seller', delay: 0, unit: 'minutes' }, condition: { stage: 'any' }, tags: ['mastery', 'milestone'],
+    action: { template: '🏅 AI Solutions Seller, {name}. You have a proposal — send it to the business you wrote it for, and tell the group what happens. Capstone next.' } },
+  { name: 'Mastery: Capstone received', trigger: { type: 'mastery_event', event: 'capstone_submitted', delay: 0, unit: 'minutes' }, condition: { stage: 'any' }, tags: ['mastery', 'capstone'],
+    action: { template: 'Got your capstone, {name} — the DSP team will review it within a few days. If anything needs fixing you\'ll get specific notes and can resubmit any time.' } },
+  { name: 'Mastery: Certificate issued', trigger: { type: 'mastery_event', event: 'capstone_approved', delay: 0, unit: 'minutes' }, condition: { stage: 'any' }, tags: ['mastery', 'certificate'],
+    action: { template: '🎉 Approved, {name}! Your DSP AI Agent Mastery certificate is issued — the verification link is in your dashboard. Add it to LinkedIn and tag DSP. One ask: a 60-second video about your experience?' } },
+  { name: 'Mastery: Inactive 7 days', trigger: { type: 'mastery_event', event: 'inactive', delay: 0, unit: 'minutes' }, condition: { stage: 'any' }, tags: ['mastery', 're-engagement'],
+    action: { template: '{name}, your progress is saved — lifetime access means no pressure. But the students who finish are the ones who come back in week two. What got in the way? Reply here, I read these.' } },
+];
+
 const ensureDefaults = async (tenantId) => {
   const count = await prisma.automationRule.count({ where: { tenantId } });
   if (count > 0) return;
   await prisma.automationRule.createMany({
     data: DEFAULT_RULES.map((r) => ({ ...r, tenantId, enabled: false })),
   });
+};
+
+// Idempotent: adds any Mastery rule (by name) the DSP tenant doesn't have yet.
+// Called from listRules so the rules appear in /automations without a migration.
+const ensureMasteryRules = async (tenantId) => {
+  if (!env.MASTERY_TENANT_ID || tenantId !== env.MASTERY_TENANT_ID) return;
+  const existing = await prisma.automationRule.findMany({ where: { tenantId, name: { startsWith: 'Mastery:' } }, select: { name: true } });
+  const have = new Set(existing.map((r) => r.name));
+  const missing = MASTERY_RULES.filter((r) => !have.has(r.name));
+  if (missing.length) await prisma.automationRule.createMany({ data: missing.map((r) => ({ ...r, tenantId, enabled: false })) });
 };
 
 // Per-rule run stats folded into the list so the page needs one request.
@@ -62,6 +99,7 @@ const withStats = async (tenantId, rules) => {
 };
 
 const listRules = async (tenantId) => {
+  await ensureMasteryRules(tenantId);
   await ensureDefaults(tenantId);
   const rules = await prisma.automationRule.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
   return withStats(tenantId, rules);
@@ -112,4 +150,4 @@ const listRuns = async (tenantId, ruleId, limit) => prisma.automationRun.findMan
   },
 });
 
-module.exports = { listRules, getRule, createRule, updateRule, toggleRule, deleteRule, listRuns, ensureDefaults, DEFAULT_RULES };
+module.exports = { listRules, getRule, createRule, updateRule, toggleRule, deleteRule, listRuns, ensureDefaults, ensureMasteryRules, DEFAULT_RULES, MASTERY_RULES };
