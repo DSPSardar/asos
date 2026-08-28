@@ -114,6 +114,11 @@ const csvToStudents = (text) => {
   }).filter((o) => o.phone || o.name);
 };
 
+// The backend clamps a page at 200 rows; request exactly that and paginate.
+const PAGE_SIZE = 200;
+// Upper bound so a runaway roster can't spin forever.
+const MAX_STUDENTS = 5000;
+
 export default function Students() {
   const [students, setStudents]   = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -122,6 +127,7 @@ export default function Students() {
   const [selected, setSelected]   = useState(null);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
+  const [totalEnrolled, setTotalEnrolled] = useState(null);
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -130,11 +136,38 @@ export default function Students() {
       // enrolledOnly: a student is someone with a recorded fee. CLOSED_WON on
       // its own also contains AI-closed leads and test threads, which is why
       // this page used to claim 422 students against 279 real enrollments.
-      const res = await leadsAPI.list({ stage: 'CLOSED_WON', enrolledOnly: true, limit: 500 });
-      const raw = res?.data?.data ?? res?.data ?? [];
-      setStudents(raw);
+      //
+      // The API clamps limit at 200 (leads.controller). Asking for 500 returned
+      // one clamped page, and the header counted the rows it happened to receive
+      // — so a roster of 306 displayed as "200" with revenue short by every
+      // student past the cap. Page through until the roster is complete, the
+      // same way Pipeline does.
+      const collected = [];
+      let page = 1;
+      let total = 0;
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const res = await leadsAPI.list({
+          stage: 'CLOSED_WON', enrolledOnly: true, limit: PAGE_SIZE, page,
+        });
+        const batch = res?.data ?? [];
+        total = res?.pagination?.total ?? batch.length;
+        collected.push(...batch);
+
+        // Render rows as they arrive so a large roster isn't a blank screen.
+        setStudents([...collected]);
+
+        const pages = res?.pagination?.pages ?? 1;
+        if (batch.length === 0 || page >= pages || collected.length >= MAX_STUDENTS) break;
+        page += 1;
+      }
+
+      setStudents(collected);
+      setTotalEnrolled(total);
     } catch {
       setStudents([]);
+      setTotalEnrolled(null);
     } finally {
       setLoading(false);
     }
@@ -193,7 +226,7 @@ export default function Students() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400">Total enrolled:</span>
-            <span className="text-sm font-bold text-slate-100">{students.length}</span>
+            <span className="text-sm font-bold text-slate-100">{totalEnrolled ?? students.length}</span>
             <span className="ml-3 text-xs text-slate-400">Revenue:</span>
             <span className="text-sm font-bold text-emerald-400">{fmtPKR(totalRevenue)}</span>
             <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
