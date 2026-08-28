@@ -3,6 +3,7 @@
 const prisma = require('../../config/database');
 const masteryService = require('../../services/mastery.service');
 const sheetsSyncService = require('../../services/sheetsSync.service');
+const realtimeService = require('../../services/realtime.service');
 const { resolveCurrency } = require('../../utils/currency');
 const logger = require('../../utils/logger');
 const mysql = require('mysql2/promise');
@@ -205,31 +206,40 @@ const updateStage = async (tenantId, leadId, stage, userId, lostReason, { fee, c
                 currency: resolveCurrency({ explicit: currency, existing: lead.currency, tenant }) };
   }
 
-  const updated = await prisma.lead.update({
-    where: { id: leadId },
-    data: {
-      stage,
-      ...(stage === 'CLOSED_WON'  && { closedAt: new Date(), ...feeData }),
-      ...(stage === 'CLOSED_LOST' && { closedAt: new Date(), lostReason }),
-    },
+  // ATOMIC TRANSACTION: All or nothing
+  const updated = await prisma.$transaction(async (tx) => {
+    const updatedLead = await tx.lead.update({
+      where: { id: leadId },
+      data: {
+        stage,
+        ...(stage === 'CLOSED_WON'  && { closedAt: new Date(), ...feeData }),
+        ...(stage === 'CLOSED_LOST' && { closedAt: new Date(), lostReason }),
+      },
+    });
+
+    await tx.activity.create({
+      data: {
+        tenantId,
+        leadId,
+        userId: userId || null,
+        type: 'STAGE_CHANGE',
+        content: `Stage updated from ${lead.stage} → ${stage}`,
+        metadata: { fromStage: lead.stage, toStage: stage, lostReason },
+      },
+    });
+
+    if (lead.stage !== stage) {
+      await tx.leadStageHistory.create({
+        data: { tenantId, leadId, fromStage: lead.stage, toStage: stage, changedBy: userId || null },
+      }).catch(() => {}); // history is telemetry, never blocks the update
+    }
+
+    return updatedLead;
   });
 
-  await prisma.activity.create({
-    data: {
-      tenantId,
-      leadId,
-      userId: userId || null,
-      type: 'STAGE_CHANGE',
-      content: `Stage updated from ${lead.stage} → ${stage}`,
-      metadata: { fromStage: lead.stage, toStage: stage, lostReason },
-    },
-  });
-
-  if (lead.stage !== stage) {
-    await prisma.leadStageHistory.create({
-      data: { tenantId, leadId, fromStage: lead.stage, toStage: stage, changedBy: userId || null },
-    }).catch(() => {}); // history is telemetry, never blocks the update
-  }
+  // After transaction commits, broadcast and trigger side effects
+  await realtimeService.broadcastLeadStageChange(tenantId, leadId, lead.stage, stage);
+  await realtimeService.broadcastLeadsRefresh(tenantId);
 
   // Paid Mastery lead → create their course account (never blocks the stage change).
   if (stage === 'CLOSED_WON') masteryService.enrolIfMasteryAsync({ tenantId, leadId, userId: userId || null });
@@ -242,7 +252,7 @@ const updateStage = async (tenantId, leadId, stage, userId, lostReason, { fee, c
 // ── Assign lead to agent ──────────────────────────────────────────────
 
 const assignLead = async (tenantId, leadId, agentId, requestingUserId) => {
-  const agent = await prisma.user.findFirst({ where: { id: agentId, tenantId, isActive: true } });
+  const agent = await prisma.user.findFirst({ where: { id: agentId, tenantId, isActive: true }, select: { id: true, fullName: true } });
   if (!agent) throw Object.assign(new Error('Agent not found'), { statusCode: 404, expose: true });
 
   // The agent check above scopes the assignee, not the lead — the lead id
@@ -250,21 +260,29 @@ const assignLead = async (tenantId, leadId, agentId, requestingUserId) => {
   const lead = await prisma.lead.findFirst({ where: { id: leadId, tenantId }, select: { id: true } });
   if (!lead) throw Object.assign(new Error('Lead not found'), { statusCode: 404, expose: true });
 
-  const updated = await prisma.lead.update({
-    where: { id: leadId },
-    data: { assignedTo: agentId },
+  // ATOMIC TRANSACTION
+  const updated = await prisma.$transaction(async (tx) => {
+    const assignedLead = await tx.lead.update({
+      where: { id: leadId },
+      data: { assignedTo: agentId },
+    });
+
+    await tx.activity.create({
+      data: {
+        tenantId,
+        leadId,
+        userId: requestingUserId,
+        type: 'SYSTEM',
+        content: `Lead assigned to ${agent.fullName}`,
+        metadata: { assignedTo: agentId, agentName: agent.fullName },
+      },
+    });
+
+    return assignedLead;
   });
 
-  await prisma.activity.create({
-    data: {
-      tenantId,
-      leadId,
-      userId: requestingUserId,
-      type: 'SYSTEM',
-      content: `Lead assigned to ${agent.fullName}`,
-      metadata: { assignedTo: agentId, agentName: agent.fullName },
-    },
-  });
+  // Broadcast the change
+  await realtimeService.broadcastLeadUpdate(tenantId, updated);
 
   return updated;
 };
@@ -277,17 +295,25 @@ const addNote = async (tenantId, leadId, userId, content) => {
   const lead = await prisma.lead.findFirst({ where: { id: leadId, tenantId }, select: { id: true } });
   if (!lead) throw Object.assign(new Error('Lead not found'), { statusCode: 404, expose: true });
 
-  return prisma.activity.create({
-    data: {
-      tenantId,
-      leadId,
-      userId,
-      type: 'NOTE',
-      content,
-      metadata: {},
-    },
-    include: { user: { select: { fullName: true } } },
+  // ATOMIC TRANSACTION
+  const activity = await prisma.$transaction(async (tx) => {
+    return await tx.activity.create({
+      data: {
+        tenantId,
+        leadId,
+        userId,
+        type: 'NOTE',
+        content,
+        metadata: {},
+      },
+      include: { user: { select: { fullName: true } } },
+    });
   });
+
+  // Broadcast note added
+  await realtimeService.broadcast(tenantId, 'lead:note-added', { leadId, activity });
+
+  return activity;
 };
 
 // ── Update deal value ─────────────────────────────────────────────────
@@ -296,10 +322,18 @@ const updateDealValue = async (tenantId, leadId, dealValue, currency) => {
   const lead = await prisma.lead.findFirst({ where: { id: leadId, tenantId }, select: { id: true } });
   if (!lead) throw Object.assign(new Error('Lead not found'), { statusCode: 404, expose: true });
 
-  return prisma.lead.update({
-    where: { id: leadId },
-    data: { dealValue, currency },
+  // ATOMIC TRANSACTION
+  const updated = await prisma.$transaction(async (tx) => {
+    return await tx.lead.update({
+      where: { id: leadId },
+      data: { dealValue, currency },
+    });
   });
+
+  // Broadcast the change
+  await realtimeService.broadcastLeadUpdate(tenantId, updated);
+
+  return updated;
 };
 
 // ── HOT leads feed (newest first, last 24h) ───────────────────────────
