@@ -3,6 +3,7 @@
 const prisma = require('../../config/database');
 const masteryService = require('../../services/mastery.service');
 const sheetsSyncService = require('../../services/sheetsSync.service');
+const { resolveCurrency } = require('../../utils/currency');
 const logger = require('../../utils/logger');
 const mysql = require('mysql2/promise');
 const env = require('../../config/env');
@@ -160,6 +161,8 @@ const createLead = async (tenantId, { contactId, campaignId, stage, dealValue, c
   const contact = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
   if (!contact) throw Object.assign(new Error('Contact not found'), { statusCode: 404, expose: true });
 
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+
   sheetsSyncService.scheduleSync(tenantId);
 
   return prisma.lead.create({
@@ -169,7 +172,7 @@ const createLead = async (tenantId, { contactId, campaignId, stage, dealValue, c
       campaignId: campaignId || null,
       stage: stage || 'NEW',
       dealValue: dealValue || null,
-      currency: currency || 'BRL',
+      currency: resolveCurrency({ explicit: currency, tenant }),
       // Manually-created leads (e.g. marketing DM handoff) can declare their business unit;
       // otherwise the schema default (UNKNOWN) applies and the Qualifier AI classifies later.
       ...(VALID_BUSINESS_UNITS.includes(businessUnit) && { businessUnit }),
@@ -197,8 +200,9 @@ const updateStage = async (tenantId, leadId, stage, userId, lostReason, { fee, c
       throw Object.assign(new Error('Enrollment fee is required to mark a lead as Won'),
         { statusCode: 422, expose: true });
     }
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
     feeData = { enrollmentFee: amount, dealValue: amount,
-                currency: currency || lead.currency || 'PKR' };
+                currency: resolveCurrency({ explicit: currency, existing: lead.currency, tenant }) };
   }
 
   const updated = await prisma.lead.update({

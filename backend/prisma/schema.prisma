@@ -273,7 +273,10 @@ model Lead {
   scoreLabel          LeadScore  @default(COLD) @map("score_label")
   aiScore             Int        @default(0) @map("ai_score")   // 0-100
   dealValue           Decimal?   @map("deal_value") @db.Decimal(12, 2)
-  currency            String     @default("BRL")
+  // Rows written outside the service layer fall back to this. The real default
+  // is tenant.settings.defaultCurrency (see utils/currency.js) — this only has
+  // to be somewhere sane rather than another country's money.
+  currency            String     @default("PKR")
   lostReason          String?    @map("lost_reason")
 
   // AI-extracted qualification data (BANT + problem diagnosis)

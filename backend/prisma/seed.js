@@ -168,7 +168,7 @@ Responda sempre em português brasileiro.`,
         scoreLabel:  demo.scoreLabel,
         aiScore:     demo.score,
         dealValue:   demo.scoreLabel === 'HOT' ? 4500 : demo.scoreLabel === 'WARM' ? 2200 : 0,
-        currency:    'BRL',
+        currency:    'PKR',
         closedAt:    demo.stage === 'CLOSED_WON' ? new Date() : null,
         qualificationData: {
           need:      'Aumentar conversão de leads',

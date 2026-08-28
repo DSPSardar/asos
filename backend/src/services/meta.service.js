@@ -5,14 +5,20 @@ const axios = require('axios');
 const env = require('../config/env');
 const logger = require('../utils/logger');
 const { hashPhone } = require('../utils/crypto');
+const { resolveCurrency } = require('../utils/currency');
 
 // ── Fire a server-side event to Meta CAPI ────────────────────────────
 
-const sendEvent = async ({ tenant, eventName, phone, leadId, value, currency = 'BRL', customData = {} }) => {
+const sendEvent = async ({ tenant, eventName, phone, leadId, value, currency, customData = {} }) => {
   if (!tenant.metaPixelId || !tenant.metaAccessToken) {
     logger.warn({ tenantId: tenant.id }, 'Meta CAPI not configured — skipping event');
     return null;
   }
+
+  // Meta optimises on the value it is told. A wrong currency code here does not
+  // error — it quietly misprices every conversion, so resolve it rather than
+  // defaulting to a constant.
+  const eventCurrency = resolveCurrency({ explicit: currency, tenant });
 
   const eventTime = Math.floor(Date.now() / 1000);
   const eventId = `${leadId}_${eventName}_${eventTime}`;
@@ -27,7 +33,7 @@ const sendEvent = async ({ tenant, eventName, phone, leadId, value, currency = '
         ph: [hashPhone(phone)], // SHA-256 hashed phone for matching
       },
       custom_data: {
-        currency,
+        currency: eventCurrency,
         value: value || 0,
         lead_id: leadId,
         ...customData,

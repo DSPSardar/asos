@@ -5,6 +5,7 @@ const { encrypt, decrypt } = require('../../utils/crypto');
 const whatsappService = require('../../services/whatsapp.service');
 const googleSheets = require('../../services/googleSheets.service');
 const sheetsSyncService = require('../../services/sheetsSync.service');
+const { isValidCode } = require('../../utils/currency');
 const logger = require('../../utils/logger');
 
 const META_GRAPH = 'https://graph.facebook.com/v21.0';
@@ -49,7 +50,23 @@ const updateSettings = async (tenantId, data) => {
       where: { id: tenantId },
       select: { settings: true },
     });
-    update.settings = { ...(current?.settings || {}), ...data.settings };
+    const incoming = { ...data.settings };
+
+    // defaultCurrency reaches the Meta Conversions API, where a wrong code
+    // silently misprices conversions rather than erroring. Reject it here
+    // instead of letting it through as free-form text.
+    if (incoming.defaultCurrency !== undefined) {
+      const code = String(incoming.defaultCurrency).trim().toUpperCase();
+      if (!isValidCode(code)) {
+        throw Object.assign(
+          new Error('defaultCurrency must be a three-letter ISO 4217 code, e.g. PKR'),
+          { statusCode: 422, expose: true }
+        );
+      }
+      incoming.defaultCurrency = code;
+    }
+
+    update.settings = { ...(current?.settings || {}), ...incoming };
   }
 
   return prisma.tenant.update({
