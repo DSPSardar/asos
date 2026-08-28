@@ -14,6 +14,7 @@
 
 const prisma = require('../config/database');
 const sheets = require('./googleSheets.service');
+const { requestContext, runWithSystemScope } = require('../middleware/requestContext.middleware');
 const logger = require('../utils/logger');
 
 const TAB_NAME = 'Leads';
@@ -89,15 +90,36 @@ const syncTenant = async (tenantId) => {
   }
 
   try {
-    const leads = await prisma.lead.findMany({
-      where: { tenantId },
-      take: MAX_ROWS,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        contact: { select: { name: true, phone: true, email: true, customFields: true } },
-        agent: { select: { fullName: true } },
-      },
-    });
+    // Every query here is subject to row-level security, which reads the tenant
+    // from the async request context. A scheduler job has no request, so
+    // without this the policies match nothing, findMany returns zero rows, and
+    // the "mirror" faithfully mirrors an empty database over a full sheet.
+    const leads = await requestContext.run(
+      { requestId: `sheets-sync:${tenantId}`, tenantId },
+      () => prisma.lead.findMany({
+        where: { tenantId },
+        take: MAX_ROWS,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          contact: { select: { name: true, phone: true, email: true, customFields: true } },
+          agent: { select: { fullName: true } },
+        },
+      })
+    );
+
+    // A full-mirror rewrite is only safe while the read is trustworthy. Zero
+    // rows is far more likely to mean "the read was blocked" than "this tenant
+    // genuinely has no leads", and the cost of guessing wrong is destroying the
+    // customer's sheet. A tenant with no leads has nothing to write anyway, so
+    // refusing to clear costs nothing and removes the failure mode entirely.
+    if (leads.length === 0) {
+      logger.warn({ tenantId }, 'Sheet sync read returned no leads — leaving the sheet untouched');
+      await writeConfig(tenantId, {
+        lastError: 'Sync skipped: the lead query returned no rows, so the sheet was left as it was.',
+        lastErrorAt: new Date().toISOString(),
+      }).catch(() => {});
+      return { ok: false, skipped: true, reason: 'No leads readable' };
+    }
 
     await sheets.ensureTab(config.spreadsheetId, TAB_NAME);
     const rows = [HEADERS, ...leads.map(rowFor)];
@@ -123,7 +145,10 @@ const syncTenant = async (tenantId) => {
 };
 
 // Every tenant with the integration switched on. Used by the hourly tick.
-const syncAllTenants = async () => {
+// System scope for the fan-out (reading across tenants), then syncTenant
+// re-enters per-tenant scope for the rows themselves — the same shape the
+// digest and automation ticks use.
+const syncAllTenants = async () => runWithSystemScope(async () => {
   if (!sheets.isConfigured()) return { skipped: true };
 
   const tenants = await prisma.tenant.findMany({ select: { id: true, settings: true } });
@@ -141,7 +166,7 @@ const syncAllTenants = async () => {
 
   if (targets.length) logger.info({ ok, failed, total: targets.length }, 'Sheet sync tick complete');
   return { ok, failed, total: targets.length };
-};
+});
 
 // Fire-and-forget nudge from the lead write paths. Never throws, never blocks a
 // sale: the worst case is the row waits for the hourly tick.
