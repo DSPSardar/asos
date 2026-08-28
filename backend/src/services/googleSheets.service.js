@@ -41,16 +41,29 @@ const normalisePrivateKey = (raw) => {
   // Literal backslash-n escapes → real newlines; normalise CRLF.
   key = key.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  const match = key.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
-  if (!match) return key.trim() ? `${key.trim()}\n` : '';
+  // Re-wrap the body at 64 chars regardless of how it arrived. A no-op for a
+  // correctly formatted key; the repair for a flattened one.
+  const rebuild = (label, rawBody) => {
+    const body = rawBody.replace(/-----(BEGIN|END)[A-Z ]*-----/g, '').replace(/\s+/g, '');
+    if (!body) return '';
+    const lines = body.match(/.{1,64}/g) || [];
+    return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----\n`;
+  };
 
-  const label = match[1];
-  // Re-wrap the body at 64 chars regardless of how it arrived. This is a no-op
-  // for a correctly formatted key and the repair for a flattened one.
-  const body = match[2].replace(/\s+/g, '');
-  const lines = body.match(/.{1,64}/g) || [];
+  const full = key.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+  if (full) return rebuild(full[1], full[2]);
 
-  return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----\n`;
+  // Selecting a PEM by dragging from the first base64 character is easy to do
+  // and drops the BEGIN line, which leaves OpenSSL reporting only "DECODER
+  // routines::unsupported". Either marker alone identifies the key type, so
+  // reconstruct the missing one instead of rejecting an otherwise valid body.
+  const endOnly = key.match(/-----END ([A-Z ]+)-----/);
+  if (endOnly) return rebuild(endOnly[1], key.slice(0, key.lastIndexOf('-----END')));
+
+  const beginOnly = key.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*)$/);
+  if (beginOnly) return rebuild(beginOnly[1], beginOnly[2]);
+
+  return key.trim() ? `${key.trim()}\n` : '';
 };
 
 const privateKey = normalisePrivateKey(process.env.GOOGLE_SA_PRIVATE_KEY);
