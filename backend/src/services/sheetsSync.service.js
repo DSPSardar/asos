@@ -156,8 +156,9 @@ const scheduleSync = (tenantId) => {
       { tenantId },
       {
         // One pending sync per tenant: a burst of lead changes coalesces into
-        // a single rewrite instead of one per change.
-        jobId: `sheets-sync:${tenantId}`,
+        // a single rewrite instead of one per change. Hyphen, not colon —
+        // BullMQ rejects a custom job id containing ":".
+        jobId: `sheets-sync-${tenantId}`,
         delay: SYNC_DEBOUNCE_MS,
         removeOnComplete: 20,
         removeOnFail: 50,
