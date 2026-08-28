@@ -12,6 +12,7 @@ const env = require('./config/env');
 const logger = require('./utils/logger');
 const prisma = require('./config/database');
 const redis = require('./config/redis');
+const { initializeWebSocket } = require('./middleware/websocket.middleware');
 
 const PORT = parseInt(env.PORT, 10);
 
@@ -64,10 +65,16 @@ const start = async () => {
       logger.info(`🚀 ASOS API running on port ${PORT} [${env.NODE_ENV}]`);
     });
 
+    // Initialize WebSocket server for real-time sync across tabs
+    await initializeWebSocket(server);
+
     // Graceful shutdown
     const shutdown = async (signal) => {
       logger.info(`${signal} received — shutting down gracefully`);
       server.close(async () => {
+        // The pub/sub connection is a separate client from the main one and
+        // would otherwise hold the process open past the close.
+        await require('./services/realtime.service').closeRedisSubsc();
         await prisma.$disconnect();
         await redis.quit();
         logger.info('Server closed');

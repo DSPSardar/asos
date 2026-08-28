@@ -96,6 +96,13 @@ export default defineConfig({
         target:       'http://localhost:3000',
         changeOrigin: true,
       },
+      // Real-time sync socket. Needs ws:true — without it Vite proxies the
+      // handshake as plain HTTP and the upgrade never completes in dev.
+      '/ws': {
+        target:       'http://localhost:3000',
+        changeOrigin: true,
+        ws:           true,
+      },
       // Proxy uploaded files (content images) to backend in development
       '/uploads': {
         target:       'http://localhost:3000',

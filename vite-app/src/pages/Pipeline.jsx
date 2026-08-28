@@ -4,6 +4,7 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { PageHeader } from '@pages/Layout';
 import { contactsAPI, leadsAPI } from '@lib/api';
 import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeSync';
 
 // ─────────────────────────────────────────────────────────────
 // Lead loading
@@ -315,6 +316,10 @@ export default function Pipeline() {
   useEffect(() => {
     loadDbLeads();
   }, [loadDbLeads]);
+
+  // Another tab (or another user on the team) changed a lead — reload so this
+  // tab never sits on a stale pipeline or a stale revenue total.
+  useRealtimeRefresh(loadDbLeads);
 
   const filtered = useMemo(() => {
     return allLeads.filter((l) => {

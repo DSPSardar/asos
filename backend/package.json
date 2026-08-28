@@ -37,6 +37,7 @@
     "pino": "^9.2.0",
     "pino-pretty": "^11.2.1",
     "twilio": "^6.0.2",
+    "ws": "^8.14.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
