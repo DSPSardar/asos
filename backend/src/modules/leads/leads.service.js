@@ -30,13 +30,22 @@ const contactClause = (fromDsp, search) => {
   return { contact: { AND: parts } };
 };
 
-const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, fromDsp, businessUnit, enrolledOnly, page = 1, limit = 20 }) => {
+const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, fromDsp, businessUnit, enrolledOnly, createdSince, page = 1, limit = 20 }) => {
+  // createdSince: ISO date string. Lets the client filter by recency on the
+  // server instead of slicing an already-paginated page, which used to make
+  // "last 24h" / "last 7d" search only the rows that happened to be loaded.
+  const createdSinceDate = createdSince ? new Date(createdSince) : null;
+  const validCreatedSince = createdSinceDate && !Number.isNaN(createdSinceDate.getTime())
+    ? createdSinceDate
+    : null;
+
   const where = {
     tenantId,
     ...(stage       && { stage }),
     ...(scoreLabel  && { scoreLabel }),
     ...(assignedTo  && { assignedTo }),
     ...(businessUnit && { businessUnit }),
+    ...(validCreatedSince && { createdAt: { gte: validCreatedSince } }),
     // An enrolled student is one with a recorded fee. CLOSED_WON alone is not
     // enrollment — the AI marks conversations won on its own, so that stage
     // also holds bot-closed leads and internal test threads. Counting those as

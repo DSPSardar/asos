@@ -5,16 +5,22 @@ const { success, created, paginated } = require('../../utils/response');
 
 const list = async (req, res, next) => {
   try {
-    const { stage, scoreLabel, assignedTo, search, page = 1, limit = 20, fromDsp, businessUnit, enrolledOnly } = req.query;
+    const { stage, scoreLabel, assignedTo, search, page = 1, limit = 20, fromDsp, businessUnit, enrolledOnly, createdSince } = req.query;
     const fromDspFlag = fromDsp === '1' || fromDsp === 'true';
+
+    // Clamp pagination so a bad or hostile query can't ask for the whole table
+    // in one shot, while still allowing the dashboard's 200-row pages.
+    const safePage  = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.min(200, Math.max(1, parseInt(limit, 10) || 20));
+
     const { leads, total } = await leadsService.listLeads({
       tenantId: req.tenantId,
-      stage, scoreLabel, assignedTo, search, businessUnit,
+      stage, scoreLabel, assignedTo, search, businessUnit, createdSince,
       fromDsp: fromDspFlag,
       enrolledOnly: enrolledOnly === '1' || enrolledOnly === 'true',
-      page: parseInt(page), limit: parseInt(limit),
+      page: safePage, limit: safeLimit,
     });
-    return paginated(res, leads, total, page, limit);
+    return paginated(res, leads, total, safePage, safeLimit);
   } catch (err) { next(err); }
 };
 

@@ -6,6 +6,22 @@ import { contactsAPI, leadsAPI } from '@lib/api';
 import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 
 // ─────────────────────────────────────────────────────────────
+// Lead loading
+// ─────────────────────────────────────────────────────────────
+// Rows per API request. The backend clamps limit at 200.
+const PAGE_SIZE = 200;
+// Hard ceiling so a very large tenant can't lock the browser up. If a tenant
+// ever passes this, the header count still shows the true total.
+const MAX_LEADS = 5000;
+
+// Maps the date filter to an ISO cutoff the API understands.
+const createdSinceFor = (dateFilter) => {
+  if (dateFilter === '24h') return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  if (dateFilter === '7d')  return new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  return null;
+};
+
+// ─────────────────────────────────────────────────────────────
 // Style maps
 // ─────────────────────────────────────────────────────────────
 const STAGES = [
@@ -241,6 +257,7 @@ export default function Pipeline() {
   const [newOpen, setNewOpen] = useState(false);
   const [dbLeads, setDbLeads] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [totalLeads, setTotalLeads] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
 
@@ -249,25 +266,51 @@ export default function Pipeline() {
   const loadDbLeads = useCallback(async () => {
     if (isDemo) {
       setDbLeads([]);
+      setTotalLeads(null);
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
-      const params = { page: 1, limit: 100 };
+      // The API is paginated. This page used to request a single page of 100
+      // and drop the rest, so tenants with more than 100 leads silently saw a
+      // fraction of their pipeline. Page through until we have them all.
+      const params = { limit: PAGE_SIZE };
       if (sourceFilter === 'DSP CRM') params.fromDsp = '1';
       if (search.trim()) params.search = search.trim();
       if (scoreFilter !== 'all') params.scoreLabel = scoreFilter;
-      const res = await leadsAPI.list(params);
-      const mapped = (res.data || []).map(mapApiLeadToUi);
-      setDbLeads(mapped);
+      const since = createdSinceFor(dateFilter);
+      if (since) params.createdSince = since;
+
+      const collected = [];
+      let page = 1;
+      let total = 0;
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const res = await leadsAPI.list({ ...params, page });
+        const batch = res.data || [];
+        total = res.pagination?.total ?? batch.length;
+        collected.push(...batch.map(mapApiLeadToUi));
+
+        // Show rows as they arrive so a big pipeline isn't a blank screen.
+        setDbLeads([...collected]);
+        setTotalLeads(total);
+
+        const pages = res.pagination?.pages ?? 1;
+        if (batch.length === 0 || page >= pages || collected.length >= MAX_LEADS) break;
+        page += 1;
+      }
+
+      setDbLeads(collected);
+      setTotalLeads(total);
     } catch (error) {
       setSyncMessage(error.message);
     } finally {
       setLoading(false);
     }
-  }, [sourceFilter, search, scoreFilter, isDemo]);
+  }, [sourceFilter, search, scoreFilter, dateFilter, isDemo]);
 
   useEffect(() => {
     loadDbLeads();
@@ -277,11 +320,16 @@ export default function Pipeline() {
     return allLeads.filter((l) => {
       if (scoreFilter !== 'all' && l.score !== scoreFilter) return false;
       if (sourceFilter !== 'all' && l.source !== sourceFilter) return false;
-      if (dateFilter === '24h' && !/m$|^\d+h$/.test(l.lastActivity)) return false;
-      if (dateFilter === '7d'  && /^\d+d$/.test(l.lastActivity) && parseInt(l.lastActivity,10) > 7) return false;
+      // Live leads are date-filtered on the server (createdSince), so the whole
+      // pipeline is searched rather than just the rows already loaded. The demo
+      // dataset is static, so it still filters here.
+      if (isDemo) {
+        if (dateFilter === '24h' && !/m$|^\d+h$/.test(l.lastActivity)) return false;
+        if (dateFilter === '7d'  && /^\d+d$/.test(l.lastActivity) && parseInt(l.lastActivity,10) > 7) return false;
+      }
       return true;
     });
-  }, [allLeads, scoreFilter, sourceFilter, dateFilter]);
+  }, [allLeads, scoreFilter, sourceFilter, dateFilter, isDemo]);
 
   const active = activeId ? allLeads.find((l) => l.id === activeId) : null;
 
@@ -311,7 +359,13 @@ export default function Pipeline() {
     <>
       <PageHeader
         title="Leads"
-        subtitle={`${filtered.length} of ${allLeads.length} · ${formatPKR(filtered.reduce((s,l) => s + l.value, 0))} pipeline`}
+        subtitle={
+          `${filtered.length} of ${allLeads.length} shown` +
+          // Surfaces the server-side total so a mismatch between what is loaded
+          // and what exists is visible instead of silent.
+          (totalLeads != null && totalLeads > allLeads.length ? ` (${totalLeads} total)` : '') +
+          ` · ${formatPKR(filtered.reduce((s,l) => s + l.value, 0))} pipeline`
+        }
         action={
           <div className="flex items-center gap-2">
             <button
@@ -342,7 +396,13 @@ export default function Pipeline() {
         />
         {syncMessage && <div className="text-xs text-slate-400">{syncMessage}</div>}
 
-        {loading && <div className="text-xs text-slate-500">Loading leads...</div>}
+        {loading && (
+          <div className="text-xs text-slate-500">
+            {totalLeads != null && totalLeads > 0
+              ? `Loading leads... ${allLeads.length} of ${totalLeads}`
+              : 'Loading leads...'}
+          </div>
+        )}
 
         {/* View body */}
         {view === 'kanban'
