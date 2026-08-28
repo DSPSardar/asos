@@ -10,7 +10,6 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useAuthStore } from '@stores/auth.store';
-import { useRealtimeSync } from '@hooks/useRealtimeSync';
 import { AppRoutes } from './AppRoutes';
 import './index.css';
 
@@ -39,12 +38,6 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// ── WebSocket Initializer — connects to real-time sync ─────────
-function WebSocketInitializer({ children }) {
-  useRealtimeSync();
-  return children;
-}
-
 // ── App initializer — calls /auth/me on boot ───────────────────
 // Blocks ALL rendering until the server confirms the user's role.
 // No JWT parsing. No localStorage role sniffing. Database is the source of truth.
@@ -65,7 +58,7 @@ function AuthInitializer({ children }) {
     );
   }
 
-  return <WebSocketInitializer>{children}</WebSocketInitializer>;
+  return children;
 }
 
 // ── Suspense wrapper ───────────────────────────────────────────

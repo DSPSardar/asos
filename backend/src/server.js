@@ -12,7 +12,6 @@ const env = require('./config/env');
 const logger = require('./utils/logger');
 const prisma = require('./config/database');
 const redis = require('./config/redis');
-const { initializeWebSocket } = require('./middleware/websocket.middleware');
 
 const PORT = parseInt(env.PORT, 10);
 
@@ -64,9 +63,6 @@ const start = async () => {
     const server = app.listen(PORT, () => {
       logger.info(`🚀 ASOS API running on port ${PORT} [${env.NODE_ENV}]`);
     });
-
-    // Initialize WebSocket server for real-time sync across tabs
-    await initializeWebSocket(server);
 
     // Graceful shutdown
     const shutdown = async (signal) => {
