@@ -2,6 +2,7 @@
 
 const prisma = require('../../config/database');
 const masteryService = require('../../services/mastery.service');
+const sheetsSyncService = require('../../services/sheetsSync.service');
 const logger = require('../../utils/logger');
 const mysql = require('mysql2/promise');
 const env = require('../../config/env');
@@ -159,6 +160,8 @@ const createLead = async (tenantId, { contactId, campaignId, stage, dealValue, c
   const contact = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
   if (!contact) throw Object.assign(new Error('Contact not found'), { statusCode: 404, expose: true });
 
+  sheetsSyncService.scheduleSync(tenantId);
+
   return prisma.lead.create({
     data: {
       tenantId,
@@ -226,6 +229,8 @@ const updateStage = async (tenantId, leadId, stage, userId, lostReason, { fee, c
 
   // Paid Mastery lead → create their course account (never blocks the stage change).
   if (stage === 'CLOSED_WON') masteryService.enrolIfMasteryAsync({ tenantId, leadId, userId: userId || null });
+
+  sheetsSyncService.scheduleSync(tenantId);
 
   return updated;
 };

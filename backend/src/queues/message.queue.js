@@ -121,6 +121,27 @@ const registerAutomationTick = async () => {
   });
 };
 
+// Google Sheets lead mirror (services/sheetsSync.service.js). Hourly full
+// reconcile; lead changes also schedule a debounced one-off in between, so this
+// tick is the safety net rather than the only path.
+const SHEETS_SYNC_PATTERN = '5 * * * *';
+
+const registerSheetsSyncTick = async () => {
+  const existing = await schedulerQueue.getRepeatableJobs();
+  await Promise.all(
+    existing
+      .filter((j) => j.name === 'sheets-sync-tick' && j.pattern !== SHEETS_SYNC_PATTERN)
+      .map((j) => schedulerQueue.removeRepeatableByKey(j.key))
+  );
+
+  return schedulerQueue.add('sheets-sync-tick', {}, {
+    repeat: { pattern: SHEETS_SYNC_PATTERN },
+    jobId: 'sheets-sync-tick',
+    removeOnComplete: 20,
+    removeOnFail: 50,
+  });
+};
+
 module.exports = {
   messageQueue,
   metaEventsQueue,
@@ -131,5 +152,6 @@ module.exports = {
   scheduleFollowUp,
   registerWeeklyDigest,
   registerAutomationTick,
+  registerSheetsSyncTick,
   QUEUE_NAMES: { MESSAGE_QUEUE, META_EVENTS_QUEUE, SCHEDULER_QUEUE },
 };

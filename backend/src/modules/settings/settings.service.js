@@ -3,6 +3,8 @@
 const prisma = require('../../config/database');
 const { encrypt, decrypt } = require('../../utils/crypto');
 const whatsappService = require('../../services/whatsapp.service');
+const googleSheets = require('../../services/googleSheets.service');
+const sheetsSyncService = require('../../services/sheetsSync.service');
 const logger = require('../../utils/logger');
 
 const META_GRAPH = 'https://graph.facebook.com/v21.0';
@@ -187,4 +189,95 @@ const testMetaAds = async (tenant) => {
   return { campaigns: data.data || [], total: data.data?.length || 0 };
 };
 
-module.exports = { getSettings, updateSettings, updateWhatsApp, verifyWhatsApp, testWhatsApp, updateMeta, verifyMetaAds, testMetaAds };
+// ── Google Sheets lead mirror ──────────────────────────────────
+//
+// One shared service account writes to every tenant's sheet, so connecting is:
+// tenant shares their Sheet with the service account address as Editor, then
+// pastes the URL here. verifyAccess() proves the share worked before we save,
+// which turns "nothing is syncing" into an error at connect time.
+
+const getSheetsIntegration = async (tenantId) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+  const cfg = sheetsSyncService.readConfig(tenant);
+
+  return {
+    configured: googleSheets.isConfigured(),
+    serviceAccountEmail: googleSheets.serviceAccountEmail(),
+    enabled: !!cfg.enabled,
+    spreadsheetId: cfg.spreadsheetId || null,
+    spreadsheetTitle: cfg.spreadsheetTitle || null,
+    spreadsheetUrl: cfg.spreadsheetId
+      ? `https://docs.google.com/spreadsheets/d/${cfg.spreadsheetId}/edit`
+      : null,
+    lastSyncAt: cfg.lastSyncAt || null,
+    lastSyncedRows: cfg.lastSyncedRows ?? null,
+    lastError: cfg.lastError || null,
+  };
+};
+
+const connectSheets = async (tenantId, { sheetUrl }) => {
+  if (!googleSheets.isConfigured()) {
+    throw Object.assign(
+      new Error('Google Sheets is not configured on this server yet'),
+      { statusCode: 503, expose: true }
+    );
+  }
+
+  const spreadsheetId = googleSheets.extractSpreadsheetId(sheetUrl);
+  if (!spreadsheetId) {
+    throw Object.assign(new Error('That does not look like a Google Sheet URL'),
+      { statusCode: 422, expose: true });
+  }
+
+  let info;
+  try {
+    info = await googleSheets.verifyAccess(spreadsheetId);
+  } catch (err) {
+    const status = err.response?.status;
+    // 403/404 here almost always means the share step was skipped — say so
+    // rather than surfacing Google's opaque wording.
+    if (status === 403 || status === 404) {
+      throw Object.assign(
+        new Error(`Cannot open that sheet. Share it with ${googleSheets.serviceAccountEmail()} as an Editor, then try again.`),
+        { statusCode: 400, expose: true }
+      );
+    }
+    throw Object.assign(new Error(err.response?.data?.error?.message || err.message),
+      { statusCode: 400, expose: true });
+  }
+
+  await sheetsSyncService.writeConfig(tenantId, {
+    enabled: true,
+    spreadsheetId,
+    spreadsheetTitle: info.title,
+    lastError: null,
+  });
+
+  // First sync immediately so the user sees rows rather than an empty sheet.
+  const result = await sheetsSyncService.syncTenant(tenantId);
+  if (!result.ok && result.error) {
+    throw Object.assign(new Error(result.error), { statusCode: 400, expose: true });
+  }
+
+  return { ...(await getSheetsIntegration(tenantId)), syncedRows: result.rows || 0 };
+};
+
+const disconnectSheets = async (tenantId) => {
+  await sheetsSyncService.writeConfig(tenantId, { enabled: false });
+  return getSheetsIntegration(tenantId);
+};
+
+const syncSheetsNow = async (tenantId) => {
+  const result = await sheetsSyncService.syncTenant(tenantId);
+  if (!result.ok) {
+    throw Object.assign(new Error(result.error || result.reason || 'Sync failed'),
+      { statusCode: 400, expose: true });
+  }
+  return { ...(await getSheetsIntegration(tenantId)), syncedRows: result.rows };
+};
+
+module.exports = {
+  getSettings, updateSettings, updateWhatsApp, verifyWhatsApp, testWhatsApp,
+  updateMeta, verifyMetaAds, testMetaAds,
+  getSheetsIntegration, connectSheets, disconnectSheets, syncSheetsNow,
+};

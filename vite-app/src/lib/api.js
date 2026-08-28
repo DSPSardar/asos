@@ -298,6 +298,10 @@ export const settingsAPI = {
   updateMeta:      (data) => api.put('/settings/meta', data),
   verifyMetaAds:   () => api.post('/settings/meta/verify'),
   testMetaAds:     () => api.post('/settings/meta/test'),
+  getSheets:        () => api.get('/settings/sheets'),
+  connectSheets:    (sheetUrl) => api.post('/settings/sheets/connect', { sheetUrl }),
+  disconnectSheets: () => api.post('/settings/sheets/disconnect'),
+  syncSheets:       () => api.post('/settings/sheets/sync'),
 };
 
 export const usersAPI = {

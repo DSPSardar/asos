@@ -12,4 +12,12 @@ const updateMeta     = async (req, res, next) => { try { return success(res, awa
 const verifyMetaAds  = async (req, res, next) => { try { return success(res, await svc.verifyMetaAds(req.tenant)); } catch(e){next(e);} };
 const testMetaAds    = async (req, res, next) => { try { return success(res, await svc.testMetaAds(req.tenant)); } catch(e){next(e);} };
 
-module.exports = { get, update, updateWA, verifyWA, testWA, updateMeta, verifyMetaAds, testMetaAds };
+const getSheets        = async (req, res, next) => { try { return success(res, await svc.getSheetsIntegration(req.tenantId)); } catch(e){next(e);} };
+const connectSheets    = async (req, res, next) => { try { return success(res, await svc.connectSheets(req.tenantId, req.body), 'Google Sheet connected'); } catch(e){next(e);} };
+const disconnectSheets = async (req, res, next) => { try { return success(res, await svc.disconnectSheets(req.tenantId), 'Google Sheet disconnected'); } catch(e){next(e);} };
+const syncSheets       = async (req, res, next) => { try { return success(res, await svc.syncSheetsNow(req.tenantId), 'Sheet synced'); } catch(e){next(e);} };
+
+module.exports = {
+  get, update, updateWA, verifyWA, testWA, updateMeta, verifyMetaAds, testMetaAds,
+  getSheets, connectSheets, disconnectSheets, syncSheets,
+};

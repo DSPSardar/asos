@@ -118,7 +118,7 @@ export default function Settings() {
           {tab === 'ai'            && <AITab            showToast={showToast} />}
           {tab === 'team'          && <TeamTab          onSave={() => showToast('Team updated ✓')} />}
           {tab === 'notifications' && <NotificationsTab />}
-          {tab === 'integrations'  && <IntegrationsTab  onSave={(name) => showToast(`${name} connection demo ✓`)} />}
+          {tab === 'integrations'  && <IntegrationsTab />}
           {tab === 'billing'       && <BillingTab />}
           {tab === 'account'       && <AccountTab showToast={showToast} />}
         </div>
@@ -1527,20 +1527,156 @@ function Checkbox({ on, onChange }) {
 // ─────────────────────────────────────────────────────────────
 // TAB 5 — Integrations
 // ─────────────────────────────────────────────────────────────
+// Everything except Google Sheets is still an unwired placeholder. They stay
+// visible as a roadmap, but are labelled so nobody mistakes one for a working
+// connection the way the Sheets card used to be.
 const INTEGRATIONS = [
-  { name:'Google Sheets', desc:'Sync leads + conversations to a Google Sheet for reporting.', tag:'Productivity' },
   { name:'HubSpot',       desc:'Push qualified leads into HubSpot CRM with full conversation context.', tag:'CRM' },
   { name:'Salesforce',    desc:'Bidirectional sync with Salesforce Lead and Opportunity objects.', tag:'CRM' },
   { name:'Slack',         desc:'Get hot-lead and needs-human alerts in a Slack channel.', tag:'Alerts' },
   { name:'Zapier',        desc:'Trigger 5,000+ apps when leads enter or change stage.', tag:'Automation' },
 ];
 
-function IntegrationsTab({ onSave }) {
+const fmtWhen = (iso) => {
+  if (!iso) return 'never';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? 'never' : d.toLocaleString();
+};
+
+function GoogleSheetsCard() {
+  const [state, setState] = useState(null);
+  const [sheetUrl, setSheetUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const res = await settingsAPI.getSheets();
+      setState(res.data);
+    } catch (e) { setErr(e.message); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const run = async (fn, okMsg) => {
+    setBusy(true); setMsg(''); setErr('');
+    try {
+      const res = await fn();
+      setState(res.data);
+      setMsg(typeof okMsg === 'function' ? okMsg(res.data) : okMsg);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!state) {
+    return (
+      <div className="rounded-lg border border-slate-800/60 bg-surface/30 p-4 text-xs text-slate-500">
+        Loading Google Sheets status...
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-800/60 bg-surface/30 p-4">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-slate-100">Google Sheets</span>
+        <span className="rounded-full border border-slate-700/60 bg-surface px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-500">Productivity</span>
+        {state.enabled && (
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-300">Connected</span>
+        )}
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+        Mirrors every lead into a Google Sheet — updated within a minute of a change, and fully
+        reconciled every hour.
+      </p>
+
+      {!state.configured && (
+        <p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          The server has no Google service account configured yet. Set GOOGLE_SA_CLIENT_EMAIL and
+          GOOGLE_SA_PRIVATE_KEY on the API service, then reload this page.
+        </p>
+      )}
+
+      {state.configured && !state.enabled && (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-slate-400">
+            1. Share your Sheet with{' '}
+            <code className="rounded bg-surface2/60 px-1 py-0.5 text-[11px] text-accent">{state.serviceAccountEmail}</code>{' '}
+            as an <strong>Editor</strong>. 2. Paste the Sheet URL below.
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={sheetUrl}
+              onChange={(e) => setSheetUrl(e.target.value)}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              className="min-w-0 flex-1 rounded-md border border-slate-700/60 bg-surface2/40 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-accent/50"
+            />
+            <button
+              disabled={busy || !sheetUrl.trim()}
+              onClick={() => run(() => settingsAPI.connectSheets(sheetUrl.trim()),
+                (d) => `Connected to "${d.spreadsheetTitle}" — ${d.syncedRows} leads written`)}
+              className="shrink-0 rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
+            >
+              {busy ? 'Connecting...' : 'Connect'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {state.enabled && (
+        <div className="mt-3 space-y-2">
+          <div className="text-xs text-slate-400">
+            <a href={state.spreadsheetUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+              {state.spreadsheetTitle || 'Open sheet'}
+            </a>
+            <span className="text-slate-600"> · </span>
+            last sync {fmtWhen(state.lastSyncAt)}
+            {state.lastSyncedRows != null && <span className="text-slate-600"> · {state.lastSyncedRows} rows</span>}
+          </div>
+          {state.lastError && (
+            <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+              Last sync failed: {state.lastError}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button
+              disabled={busy}
+              onClick={() => run(() => settingsAPI.syncSheets(), (d) => `Synced ${d.syncedRows} leads`)}
+              className="rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
+            >
+              {busy ? 'Syncing...' : 'Sync now'}
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => run(() => settingsAPI.disconnectSheets(), 'Disconnected')}
+              className="rounded-md border border-slate-700/60 bg-surface2/40 px-2.5 py-1.5 text-[11px] font-medium text-slate-300 transition-colors hover:bg-surface2/80 disabled:opacity-50"
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
+      )}
+
+      {msg && <p className="mt-2 text-xs text-emerald-300">{msg}</p>}
+      {err && <p className="mt-2 text-xs text-red-300">{err}</p>}
+    </div>
+  );
+}
+
+function IntegrationsTab() {
   return (
     <Section
       title="Integrations"
-      description="Connect external tools. All connections shown are placeholders — wire them up after launch."
+      description="Connect external tools. Google Sheets is live; the rest are on the roadmap."
     >
+      <div className="mb-3">
+        <GoogleSheetsCard />
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {INTEGRATIONS.map((it) => (
           <div key={it.name} className="flex items-start gap-3 rounded-lg border border-slate-800/60 bg-surface/30 p-4">
@@ -1553,12 +1689,9 @@ function IntegrationsTab({ onSave }) {
                 <span className="rounded-full border border-slate-700/60 bg-surface px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-500">{it.tag}</span>
               </div>
               <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{it.desc}</p>
-              <button
-                onClick={() => onSave(it.name)}
-                className="mt-2 rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1 text-[11px] font-medium text-accent transition-colors hover:bg-accent/20"
-              >
-                Connect
-              </button>
+              <span className="mt-2 inline-block rounded-md border border-slate-700/60 bg-surface2/40 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                Coming soon
+              </span>
             </div>
           </div>
         ))}

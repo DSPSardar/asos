@@ -23,7 +23,7 @@ const { toDbMessageType } = require('../utils/messageType');
 const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
-const { publishStatusUpdate, registerWeeklyDigest, registerAutomationTick } = require('../queues/message.queue');
+const { publishStatusUpdate, registerWeeklyDigest, registerAutomationTick, registerSheetsSyncTick } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
 
@@ -284,6 +284,9 @@ const handleInboundMessage = async (job) => {
     await prisma.leadStageHistory.create({
       data: { tenantId, leadId: lead.id, fromStage: null, toStage: 'NEW', changedBy: null },
     }).catch(() => {});
+
+    // Mirror the new lead into the tenant's Google Sheet (debounced, non-blocking).
+    require('../services/sheetsSync.service').scheduleSync(tenantId);
 
     // Create ads tracking record
     if (adAttribution.metaCampaignId || adAttribution.metaAdId) {
@@ -1339,6 +1342,7 @@ setTimeout(() => {
 // keeps the weekly fan-out from contending with the message worker.
 const digestService = require('../services/digest.service');
 const automationService = require('../services/automation.service');
+const sheetsSyncService = require('../services/sheetsSync.service');
 
 const schedulerWorker = new Worker(
   QUEUE_NAMES.SCHEDULER_QUEUE,
@@ -1347,6 +1351,8 @@ const schedulerWorker = new Worker(
     () => {
       if (job.name === 'weekly-digest') return digestService.runWeeklyDigestForAllTenants();
       if (job.name === 'automation-tick') return automationService.runTick();
+      if (job.name === 'sheets-sync-tick') return sheetsSyncService.syncAllTenants();
+      if (job.name === 'sheets-sync') return sheetsSyncService.syncTenant(job.data?.tenantId);
       // 'follow-up' intentionally unhandled for now: returning cleanly drains
       // the backlog these accumulated instead of failing them in a loop.
       logger.warn({ jobName: job.name, jobId: job.id }, 'Scheduler job has no handler — draining');
@@ -1369,5 +1375,9 @@ registerWeeklyDigest()
 registerAutomationTick()
   .then(() => logger.info(`🤖 Automation tick scheduled — every ${automationService.TICK_MINUTES} min`))
   .catch((err) => logger.warn({ err }, 'Could not register automation tick schedule'));
+
+registerSheetsSyncTick()
+  .then(() => logger.info('📊 Google Sheet lead sync scheduled — hourly'))
+  .catch((err) => logger.warn({ err }, 'Could not register sheet sync schedule'));
 
 module.exports = worker;

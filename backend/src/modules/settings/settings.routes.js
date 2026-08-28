@@ -17,4 +17,10 @@ router.put('/meta',              ctrl.updateMeta);
 router.post('/meta/verify',      ctrl.verifyMetaAds);
 router.post('/meta/test',        ctrl.testMetaAds);
 
+// Google Sheets lead mirror
+router.get('/sheets',            ctrl.getSheets);
+router.post('/sheets/connect',   ctrl.connectSheets);
+router.post('/sheets/disconnect', ctrl.disconnectSheets);
+router.post('/sheets/sync',      ctrl.syncSheets);
+
 module.exports = router;
