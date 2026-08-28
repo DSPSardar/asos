@@ -19,9 +19,41 @@ const logger = require('../utils/logger');
 const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
-const clientEmail = process.env.GOOGLE_SA_CLIENT_EMAIL || '';
-// Railway stores the key with literal "\n"; turn those back into newlines.
-const privateKey = (process.env.GOOGLE_SA_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+const clientEmail = (process.env.GOOGLE_SA_CLIENT_EMAIL || '').trim();
+
+// PEM keys rarely survive a copy-paste through a dashboard intact. Depending on
+// where the value was copied from it can arrive with literal "\n" escapes, with
+// surrounding JSON quotes, with CRLF line endings, or — the case that produces
+// OpenSSL's opaque "DECODER routines::unsupported" — with every newline
+// flattened to a space, leaving the base64 body as one unbroken line. Normalise
+// all of those back into a well-formed PEM rather than making a human re-paste
+// a secret until the formatting happens to be right.
+const normalisePrivateKey = (raw) => {
+  if (!raw) return '';
+
+  let key = String(raw).trim();
+
+  // Strip wrapping quotes if the JSON quoting came along for the ride.
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+
+  // Literal backslash-n escapes → real newlines; normalise CRLF.
+  key = key.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  const match = key.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+  if (!match) return key.trim() ? `${key.trim()}\n` : '';
+
+  const label = match[1];
+  // Re-wrap the body at 64 chars regardless of how it arrived. This is a no-op
+  // for a correctly formatted key and the repair for a flattened one.
+  const body = match[2].replace(/\s+/g, '');
+  const lines = body.match(/.{1,64}/g) || [];
+
+  return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----\n`;
+};
+
+const privateKey = normalisePrivateKey(process.env.GOOGLE_SA_PRIVATE_KEY);
 
 const isConfigured = () => Boolean(clientEmail && privateKey);
 
