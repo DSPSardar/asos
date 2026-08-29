@@ -371,7 +371,23 @@ const getHotLeads = async (tenantId, limit = 20) => {
       conversations: {
         orderBy: { lastMessageAt: 'desc' },
         take: 1,
-        select: { id: true, status: true, aiEnabled: true, lastMessageAt: true },
+        select: {
+          id: true,
+          status: true,
+          aiEnabled: true,
+          lastMessageAt: true,
+          // The customer's own last words, plus the Qualifier's reading of
+          // them. AI Insights was showing lead.activities[0] instead — the
+          // system audit log — so every "buying signal" quoted one of our own
+          // lines back at us: "Agent sent message…", "Conversation handed back
+          // to AI". A buying signal is what the buyer said.
+          messages: {
+            where: { direction: 'INBOUND' },
+            orderBy: { sentAt: 'desc' },
+            take: 1,
+            select: { content: true, sentiment: true, signalType: true, sentAt: true },
+          },
+        },
       },
     },
   });

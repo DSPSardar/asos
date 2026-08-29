@@ -104,18 +104,30 @@ function LiveInsights() {
   const [sentiment, setSentiment] = useState(null); // { trend, sampleSize }
   const [digest, setDigest]       = useState(null); // { bullets, ... }
   const [error, setError]     = useState(false);
+  // Refresh used to be silent: the request fired and returned 200, but nothing
+  // on screen moved, so the button looked dead. These two drive a spinner and
+  // an "updated at" stamp, which is the whole difference between a working
+  // button and one people click five times.
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt, setUpdatedAt]   = useState(null);
 
   const load = useCallback(() => {
-    Promise.all([leadsAPI.hot(50), leadsAPI.handoff()])
+    setRefreshing(true);
+    // A cached round-trip can finish in under 100ms — too fast to see. Hold the
+    // spinner briefly so the click always registers as having done something.
+    const settled = Promise.all([leadsAPI.hot(50), leadsAPI.handoff()])
       .then(([hotRes, hqRes]) => {
         setHot(hotRes?.data ?? hotRes ?? []);
         setHandoff(hqRes?.data ?? hqRes ?? []);
         setError(false);
+        setUpdatedAt(new Date());
       })
       .catch(() => {
         setError(true);
         setHot((h) => h ?? []);
       });
+    Promise.all([settled, new Promise((r) => setTimeout(r, 400))])
+      .finally(() => setRefreshing(false));
     // Classification endpoints are newer — fetched separately so an error
     // here never blanks the lead-based sections above.
     insightsAPI.sentiment()
@@ -139,7 +151,14 @@ function LiveInsights() {
     );
   }
 
-  const needsHuman = hot.filter((l) => l.conversations?.[0]?.status === 'NEEDS_HUMAN').length;
+  // 'NEEDS_HUMAN' is not a ConversationStatus — the enum is ACTIVE,
+  // AI_HANDLING, HUMAN_TAKEOVER, PENDING_VERIFICATION, CLOSED. Filtering on a
+  // string that matches nothing pinned this tile to 0 while the handoff queue
+  // sat at 237. Same definition the handoff queue uses, plus payment proofs
+  // waiting on a human to verify them.
+  const waitingOnHuman = (l) => l.humanFollowupRequired
+    || ['HUMAN_TAKEOVER', 'PENDING_VERIFICATION'].includes(l.conversations?.[0]?.status);
+  const needsHuman = hot.filter(waitingOnHuman).length;
   const avgScore   = hot.length ? Math.round(hot.reduce((s, l) => s + (l.aiScore || 0), 0) / hot.length) : 0;
 
   const kpis = [
@@ -148,7 +167,7 @@ function LiveInsights() {
     { label:'Handoff Queue', value:String(handoff.length), delta: handoff.length ? '⚠ Human' : '', tone:'down',
       sub:'Conversations the AI passed to a human' },
     { label:'Needs Human Now', value:String(needsHuman), delta:'', tone:'neutral',
-      sub:'HOT leads flagged NEEDS_HUMAN' },
+      sub:'HOT leads waiting on a human' },
     { label:'Avg AI Score', value: hot.length ? `${avgScore}/100` : '—', delta:'', tone:'neutral',
       sub:'Across current HOT leads' },
   ];
@@ -157,15 +176,31 @@ function LiveInsights() {
     .slice()
     .sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0))
     .map((l) => {
-      const nh = l.conversations?.[0]?.status === 'NEEDS_HUMAN';
+      const nh = waitingOnHuman(l);
+      const lastInbound = l.conversations?.[0]?.messages?.[0];
+
+      // The Qualifier already tags every inbound message with a signal type
+      // (PRICING, INSTALLMENT, PAYMENT, ENROLLMENT…). Leading with it turns a
+      // wall of quotes into something scannable.
+      const signalType = lastInbound?.signalType && lastInbound.signalType !== 'NONE'
+        ? lastInbound.signalType
+        : null;
+
       return {
         id: l.id,
         name: l.contact?.name || 'Unknown',
         conf: l.aiScore || 0,
-        snippet: l.activities?.[0]?.content || 'No recent activity',
+        snippet: lastInbound?.content?.trim()
+          || l.activities?.[0]?.content
+          || 'No message from this lead yet',
+        // nextAction is written by the Closer. Falling back to the stage
+        // template only when it is genuinely absent, instead of showing the
+        // same sentence to all fifty leads.
         action: nh
-          ? 'AI flagged this conversation for human takeover — open and respond'
-          : `Stage ${l.stage || '—'} — review qualification and push to the next step`,
+          ? 'Waiting on a human — open and respond'
+          : (l.nextAction
+            || `Stage ${l.stage || '—'} — review qualification and push to the next step`),
+        signalType,
         pillLabel: nh ? 'Needs human' : (l.stage || 'HOT'),
         pillCls: STAGE_PILLS[nh ? 'NEEDS_HUMAN' : l.stage] || 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
         phone: l.contact?.phone,
@@ -175,8 +210,11 @@ function LiveInsights() {
   return (
     <>
       <InsightsHeader
-        note={error ? '⚠ refresh failed' : `Live · ${hot.length} HOT leads`}
+        note={error
+          ? '⚠ refresh failed'
+          : `Live · ${hot.length} HOT leads${updatedAt ? ` · updated ${updatedAt.toLocaleTimeString()}` : ''}`}
         onRefresh={load}
+        refreshing={refreshing}
       />
       <div className="space-y-6 p-8">
         {error && (
@@ -289,7 +327,7 @@ function DemoInsights() {
 // ─────────────────────────────────────────────────────────────
 // Shared header
 // ─────────────────────────────────────────────────────────────
-function InsightsHeader({ note, onRefresh }) {
+function InsightsHeader({ note, onRefresh, refreshing = false }) {
   return (
     <PageHeader
       title="AI Insights"
@@ -303,9 +341,13 @@ function InsightsHeader({ note, onRefresh }) {
           {onRefresh && (
             <button
               onClick={onRefresh}
-              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 transition hover:border-indigo-500 hover:text-white"
+              disabled={refreshing}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 transition hover:border-indigo-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
-              ↺ Refresh
+              {refreshing
+                ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-500 border-t-slate-200" />
+                : <span>↺</span>}
+              {refreshing ? 'Refreshing…' : 'Refresh'}
             </button>
           )}
         </div>
@@ -373,7 +415,14 @@ function SignalRow({ signal, renderButtons }) {
             </span>
             <ConfidenceBar pct={signal.conf} />
           </div>
-          <div className="mt-1 truncate text-xs italic text-slate-300">"{signal.snippet}"</div>
+          <div className="mt-1 flex items-center gap-2">
+            {signal.signalType && (
+              <span className="shrink-0 rounded border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-indigo-300">
+                {signal.signalType}
+              </span>
+            )}
+            <span className="truncate text-xs italic text-slate-300">"{signal.snippet}"</span>
+          </div>
           <div className="mt-1.5 text-xs text-slate-400">
             <span className="text-[10px] uppercase tracking-wider text-slate-500">Recommended: </span>
             {signal.action}
