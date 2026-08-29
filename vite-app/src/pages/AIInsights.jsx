@@ -8,6 +8,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@pages/Layout';
 import { insightsAPI, leadsAPI } from '@lib/api';
+import { displayName } from '@lib/displayName';
 import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 
 // ─────────────────────────────────────────────────────────────
@@ -80,6 +81,16 @@ const DEMO_DIGEST_BULLETS = [
 ];
 
 // Live-mode stage pill styles
+// The Qualifier writes next_action as one of four machine tokens
+// (claude.service NEXT_ACTIONS). Rendering the raw value put "close_deal" on
+// screen where a recommendation belongs.
+const NEXT_ACTION_LABELS = {
+  continue_qualifying: 'Keep qualifying — the AI is still gathering details',
+  send_proposal:       'Send the proposal — this lead is ready for pricing',
+  nurture:             'Nurture — interested but not ready, keep it warm',
+  close_deal:          'Lead said yes — confirm payment and close',
+};
+
 const STAGE_PILLS = {
   NEEDS_HUMAN: 'bg-amber-400/15 text-amber-300 border-amber-400/30',
   NEW:         'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
@@ -188,7 +199,7 @@ function LiveInsights() {
 
       return {
         id: l.id,
-        name: l.contact?.name || 'Unknown',
+        name: displayName(l.contact?.name, l.contact?.phone),
         conf: l.aiScore || 0,
         snippet: lastInbound?.content?.trim()
           || l.activities?.[0]?.content
@@ -198,7 +209,7 @@ function LiveInsights() {
         // same sentence to all fifty leads.
         action: nh
           ? 'Waiting on a human — open and respond'
-          : (l.nextAction
+          : (NEXT_ACTION_LABELS[l.nextAction]
             || `Stage ${l.stage || '—'} — review qualification and push to the next step`),
         signalType,
         pillLabel: nh ? 'Needs human' : (l.stage || 'HOT'),

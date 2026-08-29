@@ -1,6 +1,7 @@
 // src/pages/Conversations.jsx — WhatsApp-style two-pane conversations view (live API)
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { conversationsAPI, settingsAPI, resolveUploadUrl } from '@lib/api';
+import { displayName } from '@lib/displayName';
 
 // ─────────────────────────────────────────────────────────────
 // Style maps (covers both real DB stages and legacy labels)
@@ -55,7 +56,7 @@ function mapThread(conv) {
   const unread = lastMsg && lastMsg.direction === 'INBOUND' && lastMsg.status !== 'READ' ? 1 : 0;
   return {
     id:          conv.id,
-    name:        conv.contact?.name || conv.contact?.phone || 'Unknown',
+    name:        displayName(conv.contact?.name, conv.contact?.phone),
     phone:       formatPhone(conv.contact?.phone),
     preview:     lastMsg?.content || '…',
     when:        formatWhen(lastMsg?.sentAt || conv.updatedAt || conv.createdAt),

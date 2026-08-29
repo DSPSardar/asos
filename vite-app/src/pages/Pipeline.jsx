@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { PageHeader } from '@pages/Layout';
 import { contactsAPI, leadsAPI } from '@lib/api';
+import { displayName } from '@lib/displayName';
 import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeSync';
 
@@ -1175,7 +1176,7 @@ function mapApiLeadToUi(lead) {
   return {
     id: `db-${lead.id}`,
     apiId: lead.id,
-    name: lead.contact?.name || 'Unknown',
+    name: displayName(lead.contact?.name, lead.contact?.phone),
     phone: lead.contact?.phone || '-',
     email: lead.contact?.email || '',
     stage: stageMap[lead.stage] || 'NEW',
