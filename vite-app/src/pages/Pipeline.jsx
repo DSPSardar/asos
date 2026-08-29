@@ -618,6 +618,14 @@ function TableView({ leads, onSelect }) {
   const sorted = useMemo(() => {
     const arr = [...leads];
     arr.sort((a, b) => {
+      // lastActivity is a display string — "32d", "5d", "2h". Comparing those
+      // as text put 32d above 5d and 10h above 2h, so the one column people
+      // sort by date with was the one that never sorted by date. Compare the
+      // timestamp behind it instead.
+      if (sortKey === 'lastActivity') {
+        const cmp = (a.createdAtMs || 0) - (b.createdAtMs || 0);
+        return sortDir === 'asc' ? cmp : -cmp;
+      }
       const av = a[sortKey], bv = b[sortKey];
       const cmp = (typeof av === 'number' && typeof bv === 'number')
         ? av - bv
@@ -1175,6 +1183,8 @@ function mapApiLeadToUi(lead) {
     source,
     tags,
     lastActivity: timeAgo(createdAt),
+    // The sortable value behind the "32d ago" label.
+    createdAtMs: createdAt.getTime(),
     value: Number(lead.dealValue || 0),
     owner: lead.agent?.fullName || 'Unassigned',
     notes,

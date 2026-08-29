@@ -61,7 +61,13 @@ const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, from
       where,
       skip: (page - 1) * limit,
       take: limit,
-      orderBy: [{ aiScore: 'desc' }, { createdAt: 'desc' }],
+      // Newest first. Sorting by aiScore first buried every new lead: an
+      // unscored arrival sits at 0, so in a 265-card NEW column it landed
+      // below everything the Qualifier had already scored — the pipeline
+      // looked frozen a month in the past even as leads poured in. Score is
+      // still the tiebreaker within a day, and getHotLeads / AI Insights keep
+      // their own score ordering for the "who do I call" lists.
+      orderBy: [{ createdAt: 'desc' }, { aiScore: 'desc' }],
       include: {
         contact: { select: { id: true, name: true, phone: true, email: true, tags: true, customFields: true } },
         agent:   { select: { id: true, fullName: true, email: true } },
