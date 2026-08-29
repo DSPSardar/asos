@@ -9,6 +9,8 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
+const crypto = require('crypto');
 const Sentry = require('@sentry/node');
 const env = require('./config/env');
 const logger = require('./utils/logger');
@@ -59,6 +61,31 @@ if (env.WHATSAPP_MOCK === 'true' && env.NODE_ENV === 'production') {
   );
 }
 
+// Rate-limit bucket key.
+//
+// Behind Railway's edge every request arrives from a small pool of proxy
+// addresses, so keying purely on IP put every signed-in user — and every open
+// tab — into one shared bucket. The dashboard polls (conversation list every
+// 8s, active thread every 5s, plus the paged leads load), so two tabs were
+// enough to burn a 300/15min allowance and the board started rendering 429s.
+//
+// An authenticated request is keyed by a hash of its bearer token instead:
+// one bucket per session, never shared across users. The token is only hashed,
+// never decoded here — verification stays in auth.middleware.
+// Unauthenticated traffic still falls back to IP, which is what protects the
+// public surface from a flood.
+const limiterKey = (req) => {
+  const header = req.headers.authorization || '';
+  if (header.startsWith('Bearer ')) {
+    const token = header.slice(7).trim();
+    if (token) {
+      return `t:${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}`;
+    }
+  }
+  // ipKeyGenerator normalises IPv6 to a /64; guard in case of an older minor.
+  return typeof ipKeyGenerator === 'function' ? ipKeyGenerator(req.ip) : req.ip;
+};
+
 const createApp = () => {
   const app = express();
 
@@ -103,7 +130,8 @@ const createApp = () => {
   // ── Global rate limiter
   app.use('/api', rateLimit({
     windowMs: 15 * 60 * 1000,   // 15 min
-    max: 300,
+    max: 1200,                  // ~80/min per session — a polling tab sits well under
+    keyGenerator: limiterKey,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Too many requests, please try again later.' },
@@ -118,9 +146,13 @@ const createApp = () => {
     '/api/v1/auth/forgot-password',
     '/api/v1/auth/reset-password',
   ];
+  // Login is unauthenticated, so this one is genuinely per-IP — and behind the
+  // proxy that means per-edge-address. 20 was low enough that a handful of
+  // people signing in around the same time could lock each other out; 60 still
+  // makes credential stuffing impractical.
   app.use(strictAuthPaths, rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 20,
+    max: 60,
     message: { success: false, message: 'Too many auth attempts, please try again later.' },
   }));
 

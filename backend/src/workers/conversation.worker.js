@@ -18,6 +18,7 @@ const elevenlabsService = require('../services/elevenlabs.service');
 const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
+const realtimeService = require('../services/realtime.service');
 const billingService = require('../modules/billing/billing.service');
 const { toDbMessageType } = require('../utils/messageType');
 const { sanitizeHistoryForAI } = require('../utils/aiHistory');
@@ -308,6 +309,12 @@ const handleInboundMessage = async (job) => {
 
     // Notify admin of new lead
     notificationService.notifyAdmin(tenant, 'newLead', { contactName: contact.name, phone: normalizedPhone });
+
+    // Push the new lead to every open dashboard tab. Without this the pipeline
+    // only picks up an inbound lead on a manual page reload — the socket fans
+    // out through Redis, so this worker process reaches the API's clients.
+    realtimeService.broadcastLeadsRefresh(tenantId).catch(() => {});
+    realtimeService.broadcastDashboardUpdate(tenantId).catch(() => {});
 
     logger.info({ leadId: lead.id, contactId: contact.id }, 'New lead created');
   }

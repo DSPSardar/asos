@@ -62,6 +62,7 @@ const handleConnection = (ws, req) => {
     realtimeService.subscribe(tenantId, 'leads:refresh', ws);
     realtimeService.subscribe(tenantId, 'lead:updated', ws);
     realtimeService.subscribe(tenantId, 'lead:stage-changed', ws);
+    realtimeService.subscribe(tenantId, 'lead:note-added', ws);
     realtimeService.subscribe(tenantId, 'dashboard:updated', ws);
 
     // Send connection confirmation

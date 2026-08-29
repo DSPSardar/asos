@@ -166,7 +166,7 @@ const createLead = async (tenantId, { contactId, campaignId, stage, dealValue, c
 
   sheetsSyncService.scheduleSync(tenantId);
 
-  return prisma.lead.create({
+  const created = await prisma.lead.create({
     data: {
       tenantId,
       contactId,
@@ -180,6 +180,13 @@ const createLead = async (tenantId, { contactId, campaignId, stage, dealValue, c
     },
     include: { contact: { select: { name: true, phone: true } } },
   });
+
+  // A creation is as much a pipeline change as a stage move — tell open tabs,
+  // otherwise the board sits stale until someone reloads the page.
+  await realtimeService.broadcastLeadsRefresh(tenantId);
+  await realtimeService.broadcastDashboardUpdate(tenantId);
+
+  return created;
 };
 
 // ── Update lead stage ─────────────────────────────────────────────────
@@ -558,6 +565,11 @@ const syncFromDsp = async (tenantId, requestingUserId) => {
       });
 
       inserted += 1;
+    }
+
+    if (inserted > 0) {
+      await realtimeService.broadcastLeadsRefresh(tenantId);
+      await realtimeService.broadcastDashboardUpdate(tenantId);
     }
 
     return {
