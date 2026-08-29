@@ -34,6 +34,48 @@ let reconnectTimer = null;
 let heartbeatTimer = null;
 let attempt = 0;
 let closedByUs = false;
+let refreshing = null;
+
+// The server closes with these when the token is missing, expired or not
+// tenant-scoped (see websocket.middleware.js).
+const AUTH_CLOSE_CODES = new Set([4001, 4003]);
+
+// An access token outlives a page load but not a long session, and the socket
+// captured the one it was opened with. Reconnecting with the same expired
+// token just gets closed again — a tab parked on the pipeline makes no REST
+// calls, so nothing else was there to trigger the axios 401 refresh and the
+// socket stayed dead for the life of the tab. Refresh here instead: writing
+// the new token to the store re-runs the effect below, which reopens the
+// socket. Deliberately plain fetch — the axios instance's own 401 interceptor
+// would recurse back into this path.
+const refreshAccessToken = () => {
+  if (refreshing) return refreshing;
+
+  const { refreshToken, user, tenant, setAuth } = useAuthStore.getState();
+  if (!refreshToken) return Promise.resolve(false);
+
+  refreshing = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) return false;
+      const body = await res.json();
+      const accessToken = body?.data?.accessToken;
+      if (!accessToken) return false;
+      setAuth({ accessToken, refreshToken, user, tenant });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshing = null;
+    }
+  })();
+
+  return refreshing;
+};
 
 // eventType -> Set<handler>, module-level so mount order never matters.
 const handlers = new Map();
@@ -114,11 +156,27 @@ function openSocket(token) {
     setStatus(true);
   };
 
-  ws.onclose = () => {
+  ws.onclose = (event) => {
     stopHeartbeat();
     if (socket === ws) socket = null;
     setStatus(false);
-    if (!closedByUs) scheduleReconnect(token);
+    if (closedByUs) return;
+
+    if (AUTH_CLOSE_CODES.has(event?.code)) {
+      // Don't reconnect with a token the server just rejected. A successful
+      // refresh updates the store, and the effect reopens the socket for us.
+      closedByUs = true;
+      refreshAccessToken().then((ok) => {
+        if (!ok) {
+          // Refresh is gone too — stay down and let the next REST 401 send the
+          // user to /auth, rather than looping on a dead credential.
+          console.warn('Real-time: session expired, socket stopped');
+        }
+      });
+      return;
+    }
+
+    scheduleReconnect(token);
   };
 
   ws.onerror = () => {
