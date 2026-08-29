@@ -6,7 +6,6 @@ const sheetsSyncService = require('../../services/sheetsSync.service');
 const realtimeService = require('../../services/realtime.service');
 const { resolveCurrency } = require('../../utils/currency');
 const logger = require('../../utils/logger');
-const mysql = require('mysql2/promise');
 const env = require('../../config/env');
 const whatsappService = require('../../services/whatsapp.service');
 
@@ -412,182 +411,192 @@ const pickContactName = (name, email, phone) => {
   return 'DSP CRM Contact';
 };
 
-/** Maps mysql2/network errors to a safe tenant-facing hint (does not expose secrets). */
-const dspMysqlConnectHint = (error) => {
-  const errno = typeof error.errno === 'number' ? error.errno : error.code;
+// ── DSP enrolment sync ────────────────────────────────────────────────
+//
+// This used to read a `users` table out of a local MariaDB (dsp_crm on
+// host.docker.internal). That database was a development fixture — it never
+// existed in production, so the button returned 400 on every click and no lead
+// ever arrived through it.
+//
+// The real source is the DSP site's Supabase Postgres (project dsp-mastery).
+// mastery_enrol_requests is the table that matters: everyone who submitted the
+// PKR enrolment form, with name, email, phone and country. It is the only DSP
+// table carrying phone numbers, and phone is what ASOS keys a contact on —
+// mastery_profiles has no phone column, so it cannot produce a lead at all.
+//
+// Reads go over Supabase's REST endpoint rather than opening a second Postgres
+// pool: same database, one less connection to hold, and no extra dependency.
+const DSP_ENROL_TABLE = 'mastery_enrol_requests';
+const DSP_ENROL_COLUMNS = 'full_name,email,phone,country,status,created_at';
 
-  // mysql2 codes: ER_ACCESS_DENIED_ERROR etc.; Node: ECONNREFUSED, ETIMEDOUT …
-  if (errno === 'ECONNREFUSED' || error.code === 'ECONNREFUSED') {
-    return 'Unable to reach MySQL — connection refused on host/port. Confirm DSP_DB_HOST, DSP_DB_PORT and that mysqld listens (not only on 127.0.0.1).';
-  }
-  if (errno === 'ENOTFOUND' || error.code === 'ENOTFOUND') {
-    return 'Unable to resolve MySQL host — check DSP_DB_HOST.';
-  }
-  if (errno === 'ETIMEDOUT' || error.code === 'ETIMEDOUT') {
-    return 'Timed out reaching MySQL — firewall/security group blocking port 3306 from this server.';
-  }
-  if (
-    errno === 1045
-    || error.code === 'ER_ACCESS_DENIED_ERROR'
-    || (typeof error.sqlMessage === 'string' && error.sqlMessage.includes('Access denied'))
-  ) {
-    return (
-      'MySQL refused login — verify DSP_DB_USER and DSP_DB_PASSWORD, and that the user is granted '
-      + 'from this Docker host (e.g. GRANT SELECT ON your_crm.* TO user@\'172.17.%\' IDENTIFIED BY ...).'
+const dspConfigured = () => Boolean(env.DSP_SUPABASE_URL && env.DSP_SUPABASE_SERVICE_KEY);
+
+const fetchDspEnrolRequests = async () => {
+  const base = String(env.DSP_SUPABASE_URL).replace(/\/+$/, '');
+  const url = `${base}/rest/v1/${DSP_ENROL_TABLE}?select=${DSP_ENROL_COLUMNS}&order=created_at.asc`;
+
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: {
+        apikey: env.DSP_SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${env.DSP_SUPABASE_SERVICE_KEY}`,
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'DSP enrolment fetch failed');
+    throw Object.assign(
+      new Error(`Unable to reach the DSP database (${error.message}) — check DSP_SUPABASE_URL.`),
+      { statusCode: 502, expose: true },
     );
   }
-  if (errno === 1049 || error.code === 'ER_BAD_DB_ERROR') {
-    return `Unknown database "${env.DSP_DB_NAME}" — set DSP_DB_NAME to the CRM schema name on MySQL.`;
+
+  // Deliberately specific: the three failures worth telling an admin apart are
+  // a wrong key, a missing table, and everything else.
+  if (res.status === 401 || res.status === 403) {
+    throw Object.assign(
+      new Error('DSP database rejected the key — DSP_SUPABASE_SERVICE_KEY must be the service_role key, not the anon key.'),
+      { statusCode: 502, expose: true },
+    );
   }
-  if (
-    errno === 'ER_CANT_CREATE'
-    || (typeof error.sqlMessage === 'string'
-      && (error.sqlMessage.includes('doesn\'t exist') || error.sqlMessage.includes("doesn't exist")))
-  ) {
-    return 'MySQL rejected the schema or privileges — verify DSP_DB_NAME and user grants.';
+  if (res.status === 404) {
+    throw Object.assign(
+      new Error(`DSP database has no ${DSP_ENROL_TABLE} table — run supabase/mastery-enrol-requests.sql on the dsp-mastery project.`),
+      { statusCode: 502, expose: true },
+    );
   }
-  if (error.sqlMessage && error.code && String(error.code).startsWith('ER_')) {
-    return `DSP MySQL error: ${error.sqlMessage}`;
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw Object.assign(
+      new Error(`DSP database read failed (${res.status})${body ? `: ${body.slice(0, 200)}` : ''}`),
+      { statusCode: 502, expose: true },
+    );
   }
-  const short = typeof error.message === 'string' ? error.message.split('\n')[0] : 'Unknown error';
-  return `Unable to connect DSP CRM database (${short})`;
+
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows : [];
 };
 
-const syncFromDsp = async (tenantId, requestingUserId) => {
-  if (!env.DSP_DB_USER || !env.DSP_DB_PASSWORD) {
+/**
+ * Pulls DSP enrolment requests into the pipeline as leads.
+ *
+ * dryRun reports exactly what a real run would do and writes nothing — worth
+ * using before the first live sync, because creating leads can trip the
+ * tenant's automation rules and message real people.
+ */
+const syncFromDsp = async (tenantId, requestingUserId, { dryRun = false } = {}) => {
+  if (!dspConfigured()) {
     throw Object.assign(
-      new Error('DSP DB credentials are not configured'),
+      new Error('DSP database is not configured — set DSP_SUPABASE_URL and DSP_SUPABASE_SERVICE_KEY.'),
       { statusCode: 400, expose: true },
     );
   }
 
-  const dspConnectionConfig = {
-    host: env.DSP_DB_HOST,
-    port: Number(env.DSP_DB_PORT),
-    user: env.DSP_DB_USER,
-    password: env.DSP_DB_PASSWORD,
-    database: env.DSP_DB_NAME,
-  };
+  const rows = await fetchDspEnrolRequests();
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+  const currency = resolveCurrency({ tenant });
 
-  let connection;
-  try {
-    connection = await mysql.createConnection(dspConnectionConfig);
-  } catch (error) {
-    logger.error(
-      {
-        err: error,
-        dspHost: env.DSP_DB_HOST,
-        dspPort: dspConnectionConfig.port,
-        dspDb: env.DSP_DB_NAME,
-        dspUser: env.DSP_DB_USER,
+  let inserted = 0;
+  let skipped = 0;
+  let invalid = 0;
+  const sample = [];
+
+  for (const row of rows) {
+    const phone = normalizePhone(row.phone || '');
+    const email = row.email?.trim() || null;
+    const name = pickContactName(row.full_name, email, phone);
+
+    if (!phone) {
+      invalid += 1;
+      continue;
+    }
+
+    const existingContact = await prisma.contact.findFirst({
+      where: {
+        tenantId,
+        OR: [
+          { phone },
+          ...(email ? [{ email }] : []),
+        ],
       },
-      'Failed to connect DSP MySQL database',
-    );
-    const msg = dspMysqlConnectHint(error);
-    throw Object.assign(new Error(msg), { statusCode: 502, expose: true });
-  }
+      select: { id: true },
+    });
 
-  try {
-    const [rows] = await connection.execute(
-      `SELECT name, email, phone_number, is_phone_verified
-       FROM users`,
-    );
+    if (existingContact) {
+      skipped += 1;
+      continue;
+    }
 
-    let inserted = 0;
-    let skipped = 0;
-    let invalid = 0;
+    // Counted as an insert either way, so a dry run's numbers match the real
+    // run's — the only difference is whether the rows are written.
+    inserted += 1;
+    if (sample.length < 20) sample.push({ name, phone, email, status: row.status || null });
+    if (dryRun) continue;
 
-    for (const row of rows) {
-      const phone = normalizePhone(row.phone_number || '');
-      const email = row.email?.trim() || null;
-      const name = pickContactName(row.name, email, phone);
-
-      if (!phone) {
-        invalid += 1;
-        continue;
-      }
-
-      const existingContact = await prisma.contact.findFirst({
-        where: {
+    await prisma.$transaction(async (tx) => {
+      const contact = await tx.contact.create({
+        data: {
           tenantId,
-          OR: [
-            { phone },
-            ...(email ? [{ email }] : []),
-          ],
+          name,
+          email,
+          phone,
+          optIn: true,
+          customFields: {
+            source: 'DSP_ENROL',
+            dspEnrolStatus: row.status || null,
+            dspCountry: row.country || null,
+          },
         },
-        select: { id: true },
       });
 
-      if (existingContact) {
-        skipped += 1;
-        continue;
-      }
-
-      await prisma.$transaction(async (tx) => {
-        const contact = await tx.contact.create({
-          data: {
-            tenantId,
-            name,
-            email,
-            phone,
-            optIn: Boolean(row.is_phone_verified),
-            customFields: {
-              source: 'DSP_CRM',
-              dspPhoneVerified: Boolean(row.is_phone_verified),
-            },
-          },
-        });
-
-        const lead = await tx.lead.create({
-          data: {
-            tenantId,
-            contactId: contact.id,
-            stage: 'NEW',
-            scoreLabel: 'COLD',
-            aiScore: 0,
-            currency: 'PKR',
-          },
-        });
-
-        await tx.activity.create({
-          data: {
-            tenantId,
-            leadId: lead.id,
-            userId: requestingUserId || null,
-            type: 'SYSTEM',
-            content: 'Lead imported from DSP CRM',
-            metadata: {
-              source: 'DSP_CRM',
-              isPhoneVerified: Boolean(row.is_phone_verified),
-            },
-          },
-        });
+      const lead = await tx.lead.create({
+        data: {
+          tenantId,
+          contactId: contact.id,
+          stage: 'NEW',
+          scoreLabel: 'COLD',
+          aiScore: 0,
+          currency,
+          // These come off the Mastery enrolment form, so the product is known
+          // up front and the Qualifier does not have to guess it.
+          product: 'MASTERY',
+        },
       });
 
-      inserted += 1;
-    }
-
-    if (inserted > 0) {
-      await realtimeService.broadcastLeadsRefresh(tenantId);
-      await realtimeService.broadcastDashboardUpdate(tenantId);
-    }
-
-    return {
-      totalFetched: rows.length,
-      inserted,
-      skipped,
-      invalid,
-    };
-  } catch (runErr) {
-    logger.error({ err: runErr }, 'DSP sync query failed');
-    const extra = runErr.sqlMessage || runErr.message || 'query failed';
-    throw Object.assign(
-      new Error(`DSP CRM read failed: ${extra}`),
-      { statusCode: 502, expose: true },
-    );
-  } finally {
-    await connection.end();
+      await tx.activity.create({
+        data: {
+          tenantId,
+          leadId: lead.id,
+          userId: requestingUserId || null,
+          type: 'SYSTEM',
+          content: 'Lead imported from DSP enrolment requests',
+          metadata: {
+            source: 'DSP_ENROL',
+            enrolStatus: row.status || null,
+            requestedAt: row.created_at || null,
+          },
+        },
+      });
+    });
   }
+
+  if (!dryRun && inserted > 0) {
+    await realtimeService.broadcastLeadsRefresh(tenantId);
+    await realtimeService.broadcastDashboardUpdate(tenantId);
+  }
+
+  logger.info({ tenantId, dryRun, totalFetched: rows.length, inserted, skipped, invalid }, 'DSP enrolment sync finished');
+
+  return {
+    dryRun,
+    totalFetched: rows.length,
+    inserted,
+    skipped,
+    invalid,
+    sample,
+  };
 };
 
 const sendDailyHotLeadDigest = async (tenantId) => {

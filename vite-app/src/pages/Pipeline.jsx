@@ -261,6 +261,8 @@ export default function Pipeline() {
   const [totalLeads, setTotalLeads] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  // Non-null once a preview has run — the next click is the real import.
+  const [syncPreview, setSyncPreview] = useState(null);
 
   const allLeads = useMemo(() => (isDemo && dbLeads.length === 0 ? LEADS : dbLeads), [dbLeads, isDemo]);
 
@@ -338,15 +340,30 @@ export default function Pipeline() {
 
   const active = activeId ? allLeads.find((l) => l.id === activeId) : null;
 
+  // Two steps on purpose. An import creates leads, and creating a lead can fire
+  // the tenant's automation rules at a real phone number, so the first click
+  // only reports what would happen and the second one commits it.
   const onSync = async () => {
     setSyncing(true);
     setSyncMessage('');
     try {
-      const res = await leadsAPI.syncDsp();
+      const res = await leadsAPI.syncDsp(syncPreview !== null);
       const stats = res.data || {};
-      setSyncMessage(`DSP sync done: ${stats.inserted || 0} inserted, ${stats.skipped || 0} skipped, ${stats.invalid || 0} invalid`);
-      await loadDbLeads();
+
+      if (stats.dryRun) {
+        setSyncPreview(stats.inserted || 0);
+        setSyncMessage(
+          `Preview — ${stats.inserted || 0} new lead(s) would be imported `
+          + `(${stats.skipped || 0} already in the pipeline, ${stats.invalid || 0} without a usable phone). `
+          + 'Click Sync again to import them.',
+        );
+      } else {
+        setSyncPreview(null);
+        setSyncMessage(`DSP sync done: ${stats.inserted || 0} imported, ${stats.skipped || 0} skipped, ${stats.invalid || 0} invalid`);
+        await loadDbLeads();
+      }
     } catch (error) {
+      setSyncPreview(null);
       setSyncMessage(error.message);
     } finally {
       setSyncing(false);

@@ -95,10 +95,13 @@ const handoffQueue = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// Previews by default. Importing leads can trip the tenant's automation rules
+// and message real people, so a caller has to ask for the write explicitly.
 const syncFromDsp = async (req, res, next) => {
   try {
-    const result = await leadsService.syncFromDsp(req.tenantId, req.user.id);
-    return success(res, result, 'DSP CRM sync completed');
+    const dryRun = req.body?.confirm !== true;
+    const result = await leadsService.syncFromDsp(req.tenantId, req.user.id, { dryRun });
+    return success(res, result, dryRun ? 'DSP sync preview' : 'DSP sync completed');
   } catch (err) { next(err); }
 };
 

@@ -173,7 +173,8 @@ export const leadsAPI = {
   importStudents: (students) => api.post('/leads/import-students', { students }),
   addNote:     (id, content) => api.post(`/leads/${id}/notes`, { content }),
   updateDeal:  (id, dealValue, currency) => api.patch(`/leads/${id}/deal-value`, { dealValue, currency }),
-  syncDsp:     () => api.post('/leads/sync-dsp'),
+  // No argument previews; confirm:true performs the import.
+  syncDsp:     (confirm = false) => api.post('/leads/sync-dsp', { confirm }),
   deleteLead:  (id) => api.delete(`/leads/${id}`),
 };
 
