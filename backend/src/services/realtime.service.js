@@ -88,7 +88,8 @@ const subscribe = (tenantId, channel, client) => {
   const key = keyFor(tenantId, channel);
   if (!subscriptions.has(key)) subscriptions.set(key, new Set());
   subscriptions.get(key).add(client);
-  logger.debug(`Client subscribed to ${key}`);
+  // TEMPORARY DIAGNOSTIC: confirms the exact key a live socket is listening on.
+  logger.info({ key, sockets: subscriptions.get(key).size }, 'realtime: client subscribed');
 };
 
 const unsubscribe = (tenantId, channel, client) => {
@@ -160,7 +161,11 @@ const broadcast = async (tenantId, channel, data) => {
     logger.error({ err, tenantId, channel }, 'Redis publish failed — local delivery only');
   }
 
-  logger.debug({ tenantId, channel, delivered }, 'Broadcast dispatched');
+  // TEMPORARY DIAGNOSTIC (info level): proves whether a broadcast is published
+  // and how many local sockets it reached. Drop back to debug once the
+  // new-leads-not-appearing issue is closed.
+  logger.info({ tenantId, channel, localDelivered: delivered, origin: ORIGIN.slice(0, 8) },
+    'realtime: published');
   return delivered;
 };
 
@@ -183,7 +188,11 @@ const handleBroadcast = (channel, raw) => {
     if (message.origin === ORIGIN) return;
 
     const envelope = message.payload ?? message;
-    deliverLocal(keyFor(tenantId, eventType), JSON.stringify({ ...envelope, source: 'redis' }));
+    const delivered = deliverLocal(keyFor(tenantId, eventType), JSON.stringify({ ...envelope, source: 'redis' }));
+    // TEMPORARY DIAGNOSTIC: delivered=0 with subscribers>0 means the channel key
+    // does not match what any socket subscribed to.
+    logger.info({ tenantId, eventType, delivered, subscriptionKeys: subscriptions.size },
+      'realtime: received from redis');
   } catch (err) {
     logger.warn({ err, channel }, 'Discarded malformed real-time broadcast');
   }
