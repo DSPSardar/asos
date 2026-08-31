@@ -57,7 +57,9 @@ router.post('/', async (req, res) => {
         if (!Number.isFinite(fee) || fee <= 0) fee = ENROLMENT_FEE_PKR;
         const wonValid = currency === 'PKR' && fee === ENROLMENT_FEE_PKR;
         let contact = await prisma.contact.findFirst({ where: { tenantId, email: { equals: email, mode: 'insensitive' } } });
-        const phone = body.data.phone ? String(body.data.phone).replace(/[^\d+]/g, '') : null;
+        // ASOS stores WhatsApp numbers as bare digits (923001234567); normalise the same way
+        // so an enrolment typed as "+92 300 1234567" or "0092…" matches the existing lead.
+        const phone = body.data.phone ? String(body.data.phone).replace(/[^\d]/g, '').replace(/^00/, '') : null;
         if (!contact && phone) contact = await prisma.contact.findFirst({ where: { tenantId, phone } });
         if (!contact) {
           contact = await prisma.contact.create({ data: { tenantId, email, name: body.data.full_name || null,
