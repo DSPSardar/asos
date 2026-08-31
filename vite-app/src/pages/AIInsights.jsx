@@ -1,6 +1,6 @@
 // src/pages/AIInsights.jsx — AI Insights (route: /ai-insights).
 // Live mode: real tenant data from /leads/hot + /leads/handoff.
-// Demo mode: canned DSP AI Agents Bootcamp walkthrough (sales demos only).
+// Demo mode: canned DSP AI Agent Mastery walkthrough (sales demos only).
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -29,7 +29,7 @@ const DEMO_KPI_INSIGHTS = [
 const SIGNAL_STYLES = {
   PRICING:      { label:'Fee inquiry',          pill:'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
   INSTALLMENT:  { label:'Installment Q',        pill:'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' },
-  BATCH:        { label:'Batch schedule',       pill:'bg-violet-500/15 text-violet-300 border-violet-500/30' },
+  BATCH:        { label:'Schedule inquiry',     pill:'bg-violet-500/15 text-violet-300 border-violet-500/30' },
   CAREER:       { label:'Career outcome',       pill:'bg-amber-500/15 text-amber-300 border-amber-500/30' },
   PAYMENT:      { label:'Payment issue',        pill:'bg-rose-500/15 text-rose-300 border-rose-500/30' },
   TRACK_RECORD: { label:'Trainer credibility',  pill:'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' },
@@ -41,15 +41,15 @@ const SIGNAL_STYLES = {
 
 const DEMO_SIGNALS = [
   { id:'s1',  name:'Maryam Ali',     type:'ENROLLMENT',   conf:96, snippet:'Fee structure clear hai. Aaj hi enroll karna chahti hoon — payment details bhej dein?',
-    action:'Send payment instructions + reserve seat in the next batch', primary:'Send payment info' },
+    action:'Send payment instructions + activate Mastery access', primary:'Send payment info' },
   { id:'s2',  name:'Hassan Raza',    type:'CORPORATE',    conf:94, snippet:'Apni company ki team ke liye AI agents ki corporate training chahiye. Terms discuss kar lein?',
     action:'Escalate to Sardar — corporate training package, custom quote', primary:'Escalate' },
-  { id:'s3',  name:'Ahmed Khan',     type:'PRICING',      conf:91, snippet:'Bootcamp ki total fee kitni hai? Kya kuch discount possible hai?',
-    action:'Send fee structure + current-batch offer PDF', primary:'Send fees' },
+  { id:'s3',  name:'Ahmed Khan',     type:'PRICING',      conf:91, snippet:'AI Agent Mastery ki total fee kitni hai? Kya kuch discount possible hai?',
+    action:'Send fee structure + Mastery enrolment link', primary:'Send fees' },
   { id:'s4',  name:'Ayesha Malik',   type:'CAREER',       conf:90, snippet:'Course ke baad clients kaise milenge? Freelancing ya job — kya realistic hai?',
     action:'Share alumni success stories + freelancing roadmap', primary:'Send roadmap' },
-  { id:'s5',  name:'Fatima Sheikh',  type:'BATCH',        conf:88, snippet:'Next batch kab start ho raha hai? Weekend ya evening classes hain?',
-    action:'Send batch calendar + Zoom session timings', primary:'Send schedule' },
+  { id:'s5',  name:'Fatima Sheikh',  type:'BATCH',        conf:88, snippet:'Course self-paced hai? Main job ke sath apni speed se complete kar sakti hoon?',
+    action:'Confirm self-paced access + send Mastery onboarding steps', primary:'Send details' },
   { id:'s6',  name:'Tariq Hussain',  type:'CORPORATE',    conf:87, snippet:'Office ke 5 logon ke liye seats chahiye. Group discount milega?',
     action:'Escalate to Sardar — group enrollment, 5 seats', primary:'Escalate' },
   { id:'s7',  name:'Bilal Ahmed',    type:'TRACK_RECORD', conf:84, snippet:'Sir aap Google aur Anthropic verified trainer hain? Certificate bhi milta hai?',
@@ -59,7 +59,7 @@ const DEMO_SIGNALS = [
   { id:'s9',  name:'Usman Ali',      type:'PAYMENT',      conf:97, snippet:'Payment kar di, screenshot bhi bheja — abhi tak student group mein add nahi kiya!',
     action:'URGENT — verify payment screenshot, add to student group, send onboarding', primary:'Resolve now' },
   { id:'s10', name:'Sana Tariq',     type:'RISK',         conf:79, snippet:'Fee zyada lag rahi hai. YouTube pe free courses bhi to hain.',
-    action:'Nurture — invite to free masterclass, re-engage before batch deadline', primary:'Send masterclass' },
+    action:'Nurture — invite to free masterclass, re-engage with Mastery outcomes', primary:'Send masterclass' },
 ];
 
 const DEMO_SENTIMENT_TREND = [
@@ -76,7 +76,7 @@ const DEMO_DIGEST_BULLETS = [
   'Hot signal volume up 56% week-over-week — fee and installment questions dominate inbound.',
   'AI handled 92% of inbound threads; only 8 escalations to human (most: corporate training inquiries).',
   'Top conversion driver: leads who got the trainer-credentials reply within 5 minutes.',
-  '6 conversations stalled > 48h — suggest re-engaging with the installment plan + next-batch deadline.',
+  '6 conversations stalled > 48h — suggest re-engaging with the Mastery outcomes recap + alumni stories.',
   '1 high-priority risk: Usman Ali (payment received, not yet added to student group) — must resolve in 24h.',
 ];
 
@@ -288,7 +288,7 @@ function LiveInsights() {
   );
 }
 
-// ───────────────────────────── Demo (DSP Bootcamp) ───────────
+// ───────────────────────────── Demo (DSP AI Agent Mastery) ───
 function DemoInsights() {
   const signals = DEMO_SIGNALS.map((s) => {
     const style = SIGNAL_STYLES[s.type] || SIGNAL_STYLES.PRICING;

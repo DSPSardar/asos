@@ -77,7 +77,6 @@ Respond with ONLY a valid JSON object using this EXACT schema. No prose, no mark
   "is_price_objection": <true | false>,
   "is_enrollment_confirmed": <true | false>,
   "business_unit": "DSP" | "SDC" | "UNKNOWN",
-  "product": "BOOTCAMP" | "MASTERY" | "UNKNOWN",
   "sentiment": "POSITIVE" | "NEUTRAL" | "NEGATIVE",
   "signal_type": "PRICING" | "INSTALLMENT" | "BATCH" | "CAREER" | "PAYMENT" | "TRACK_RECORD" | "CONSULTATION" | "CORPORATE" | "ENROLLMENT" | "RISK" | "NONE"
 }
@@ -146,16 +145,6 @@ is_enrollment_confirmed — THE ONLY HANDOFF TRIGGER:
 
   THE TEST: ask yourself "Has this person said YES to paying and joining?"
   If there is any doubt → false. The Closer AI keeps selling until the answer is clearly YES.
-
-product RULES (DSP only — which offer this lead is buying):
-  "MASTERY"  — the lead wants the SELF-PACED / RECORDED program: says they cannot attend live classes,
-               asks for recordings, "apni speed se", "raat ko time nahi", lifetime access, "Mastery",
-               "$100", "28,000", asks about the dashboard / certificate for the recorded course,
-               or is overseas and mentions time-zone problems.
-  "BOOTCAMP" — the lead wants the 7-DAY LIVE bootcamp: batch dates, "Monday se", live class timing,
-               "10,000", Zoom, or asks when the next batch starts.
-  "UNKNOWN"  — not yet clear. Never guess from price alone if both were discussed; keep UNKNOWN until
-               the lead states a preference. Once a lead has chosen, keep returning that value.
 
 business_unit RULES:
   Identify which business the lead is asking about based on their message and conversation history.
@@ -268,7 +257,6 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
     is_enrollment_confirmed: parsed.is_enrollment_confirmed === true,
     is_price_objection: parsed.is_price_objection === true,
     business_unit:      ['DSP','SDC','UNKNOWN'].includes(parsed.business_unit) ? parsed.business_unit : 'UNKNOWN',
-    product:            ['BOOTCAMP','MASTERY','UNKNOWN'].includes(parsed.product) ? parsed.product : 'UNKNOWN',
     sentiment:          SENTIMENTS.includes(parsed.sentiment) ? parsed.sentiment : 'NEUTRAL',
     signal_type:        SIGNAL_TYPES.includes(parsed.signal_type) ? parsed.signal_type : 'NONE',
     _tokens:            tokens,
@@ -476,7 +464,7 @@ QUALIFIER INTELLIGENCE (upstream analysis of THIS lead)
 Temperature : ${qualifierOutput.lead_status}   Score: ${qualifierOutput.score}/10   Intent: ${qualifierOutput.intent}
 Lead's situation: ${qualifierOutput.problem_summary}
 Recommended next move: ${qualifierOutput.next_action}
-Offer the lead is on : ${qualifierOutput.product && qualifierOutput.product !== 'UNKNOWN' ? qualifierOutput.product : 'not chosen yet — if they ask about recordings, self-paced or cannot attend live, present AI AGENT MASTERY from PRODUCT CONTEXT; otherwise present the live bootcamp'}
+Offer the lead is on : AI AGENT MASTERY — the only product. Present it from PRODUCT CONTEXT; the 7-day live bootcamp is sunset and must never be offered.
 Lead messages so far (including this one): ${messageCount}
 ${qualifierOutput.is_price_objection ? '⚠️  PRICE OBJECTION DETECTED — deploy the objection playbook immediately. Do NOT skip to close. Handle the concern, then pivot.' : ''}
 
@@ -516,7 +504,7 @@ const containsOutOfScopeOffer = (text) => {
 };
 
 const SAFE_FALLBACK_REPLY =
-  'DSP AI Agents Bootcamp ka fee fixed hai — koi discount ya kisi aur service ka option available nahi. ' +
+  'DSP AI Agent Mastery ka fee fixed hai — koi discount ya kisi aur service ka option available nahi. ' +
   'Kya main aapko seat confirm karne mein madad karun?';
 
 const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false }) => {
@@ -850,7 +838,6 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
     problemSummary:    qualifierOutput.problem_summary,
     nextAction:        qualifierOutput.next_action,
     businessUnit:      qualifierOutput.business_unit,
-    product:           qualifierOutput.product,
     sentiment:         qualifierOutput.sentiment || 'NEUTRAL',
     signalType:        (qualifierOutput.signal_type && qualifierOutput.signal_type !== 'NONE')
                          ? qualifierOutput.signal_type : null,

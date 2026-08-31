@@ -1,6 +1,7 @@
 // src/pages/Conversations.jsx — WhatsApp-style two-pane conversations view (live API)
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { conversationsAPI, settingsAPI, resolveUploadUrl } from '@lib/api';
+import { ENROLMENT_FEE_PKR } from '@lib/constants';
 import { displayName } from '@lib/displayName';
 
 // ─────────────────────────────────────────────────────────────
@@ -287,7 +288,7 @@ export default function Conversations() {
     // Books revenue and is terminal for the lead, so it asks first. The backend
     // rejects a conversation with no proof on file (409) and refuses to book
     // without a fee (422) — Won always means paid.
-    const raw = window.prompt('Enrollment fee received (PKR)?\nThe lead will be marked CLOSED_WON and the conversation closed.', '10000');
+    const raw = window.prompt('Enrollment fee received (PKR)?\nThe lead will be marked CLOSED_WON and the conversation closed.', String(ENROLMENT_FEE_PKR));
     if (raw === null) return;
     const fee = parseFloat(raw.replace(/[^\d.]/g, ''));
     if (!fee || fee <= 0) { alert('Enter the fee amount to confirm the payment.'); return; }

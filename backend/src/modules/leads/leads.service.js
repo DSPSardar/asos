@@ -5,6 +5,7 @@ const masteryService = require('../../services/mastery.service');
 const sheetsSyncService = require('../../services/sheetsSync.service');
 const realtimeService = require('../../services/realtime.service');
 const { resolveCurrency } = require('../../utils/currency');
+const { ENROLMENT_FEE_PKR } = require('../../config/constants');
 const logger = require('../../utils/logger');
 const env = require('../../config/env');
 const whatsappService = require('../../services/whatsapp.service');
@@ -205,7 +206,7 @@ const updateStage = async (tenantId, leadId, stage, userId, lostReason, { fee, c
   // "wins" creep back into the funnel and enrollment counts.
   let feeData = {};
   if (stage === 'CLOSED_WON') {
-    const amount = fee != null && !Number.isNaN(parseFloat(fee))
+    let amount = fee != null && !Number.isNaN(parseFloat(fee))
       ? parseFloat(fee)
       : (lead.dealValue != null ? parseFloat(lead.dealValue)
         : (lead.enrollmentFee != null ? parseFloat(lead.enrollmentFee) : null));
@@ -214,8 +215,20 @@ const updateStage = async (tenantId, leadId, stage, userId, lostReason, { fee, c
         { statusCode: 422, expose: true });
     }
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
-    feeData = { enrollmentFee: amount, dealValue: amount,
-                currency: resolveCurrency({ explicit: currency, existing: lead.currency, tenant }) };
+    let cur = resolveCurrency({ explicit: currency, existing: lead.currency, tenant });
+    // A USD sale is recorded as the PKR list price at the point of sale — USD
+    // is never stored on a lead.
+    if (cur === 'USD') { amount = ENROLMENT_FEE_PKR; cur = 'PKR'; }
+    // Since the bootcamp sunset, Mastery is the only product and its fee is
+    // fixed: a lead may only reach CLOSED_WON at exactly PKR 28,000. Any
+    // other amount is rejected here, so the lead stays at its current stage
+    // (Proposed) for a human to sort out.
+    if (cur !== 'PKR' || amount !== ENROLMENT_FEE_PKR) {
+      throw Object.assign(
+        new Error(`Enrollment fee must be exactly PKR ${ENROLMENT_FEE_PKR} — got ${cur} ${amount}. The lead stays at its current stage.`),
+        { statusCode: 422, expose: true });
+    }
+    feeData = { enrollmentFee: amount, dealValue: amount, currency: cur };
   }
 
   // ATOMIC TRANSACTION: All or nothing

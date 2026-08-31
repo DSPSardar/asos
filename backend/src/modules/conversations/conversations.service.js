@@ -10,6 +10,7 @@ const redis = require('../../config/redis');
 const { publishInboundMessage } = require('../../queues/message.queue');
 const { sanitizeHistoryForAI } = require('../../utils/aiHistory');
 const { signMediaUrl } = require('../../utils/mediaToken');
+const { ENROLMENT_FEE_PKR } = require('../../config/constants');
 
 // Stored mediaUrls are bare `/media/<id>` paths; the serving route now
 // requires a signed, expiring link (see app.js), so sign them on the way
@@ -254,14 +255,26 @@ const confirmPayment = async (tenantId, conversationId, userId, { fee, currency 
   // enrollment counts drift from reality again (prod 2026-08-23: 47 contacts
   // sat at "won" with no fee). Amount comes from the confirm dialog, falling
   // back to whatever dealValue the lead already carries.
-  const amount = fee != null && !Number.isNaN(parseFloat(fee))
+  let amount = fee != null && !Number.isNaN(parseFloat(fee))
     ? parseFloat(fee)
     : (conv.lead?.dealValue != null ? parseFloat(conv.lead.dealValue) : null);
   if (amount == null || amount <= 0) {
     throw Object.assign(new Error('Enrollment fee is required to confirm a payment'),
       { statusCode: 422, expose: true });
   }
-  const cur = currency || conv.lead?.currency || 'PKR';
+  let cur = currency || conv.lead?.currency || 'PKR';
+  // A USD sale is recorded as the PKR list price at the point of sale — USD is
+  // never stored on a lead.
+  if (cur === 'USD') { amount = ENROLMENT_FEE_PKR; cur = 'PKR'; }
+  // Since the bootcamp sunset, Mastery is the only product and its fee is
+  // fixed: a lead may only reach CLOSED_WON at exactly PKR 28,000. Any other
+  // amount is rejected here, so the lead stays at its current stage
+  // (Proposed) for a human to sort out.
+  if (cur !== 'PKR' || amount !== ENROLMENT_FEE_PKR) {
+    throw Object.assign(
+      new Error(`Enrollment fee must be exactly PKR ${ENROLMENT_FEE_PKR} — got ${cur} ${amount}. The lead stays at its current stage.`),
+      { statusCode: 422, expose: true });
+  }
 
   const now = new Date();
   const updated = await prisma.$transaction(async (tx) => {
@@ -298,9 +311,12 @@ const confirmPayment = async (tenantId, conversationId, userId, { fee, currency 
 
   // Purchase fires here rather than when the AI hears "yes": this is the first
   // point at which money has actually been verified, so it is the only honest
-  // signal to hand Meta's optimiser.
+  // signal to hand Meta's optimiser. The value is the Mastery list price —
+  // the amount validated above — not the lead's pre-update dealValue, which
+  // could be stale or empty. Fires only for this new confirmation; historical
+  // events are never re-sent.
   if (conv.tenant && conv.contact?.phone) {
-    metaService.trackPurchase(conv.tenant, conv.contact.phone, conv.leadId, conv.lead?.dealValue, conv.lead?.currency)
+    metaService.trackPurchase(conv.tenant, conv.contact.phone, conv.leadId, ENROLMENT_FEE_PKR, 'PKR')
       .catch(() => {});
   }
 
