@@ -311,9 +311,12 @@ const confirmPayment = async (tenantId, conversationId, userId, { fee, currency 
 
   // Purchase fires here rather than when the AI hears "yes": this is the first
   // point at which money has actually been verified, so it is the only honest
-  // signal to hand Meta's optimiser.
+  // signal to hand Meta's optimiser. The value is the Mastery list price —
+  // the amount validated above — not the lead's pre-update dealValue, which
+  // could be stale or empty. Fires only for this new confirmation; historical
+  // events are never re-sent.
   if (conv.tenant && conv.contact?.phone) {
-    metaService.trackPurchase(conv.tenant, conv.contact.phone, conv.leadId, conv.lead?.dealValue, conv.lead?.currency)
+    metaService.trackPurchase(conv.tenant, conv.contact.phone, conv.leadId, ENROLMENT_FEE_PKR, 'PKR')
       .catch(() => {});
   }
 
