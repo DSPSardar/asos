@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@pages/Layout';
 import { leadsAPI, usersAPI } from '@lib/api';
+import { ENROLMENT_FEE_PKR } from '@lib/constants';
 import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 
 // ── Poll interval ─────────────────────────────────────────────────────
@@ -302,7 +303,7 @@ export default function Dashboard() {
                       // Won means PAID — backend rejects CLOSED_WON without a fee (422).
                       let fee, cur;
                       if (stage === 'CLOSED_WON') {
-                        const raw = window.prompt('Enrollment fee received (PKR)?', '10000');
+                        const raw = window.prompt('Enrollment fee received (PKR)?', String(ENROLMENT_FEE_PKR));
                         if (raw === null) return;
                         fee = parseFloat(raw.replace(/[^\d.]/g, ''));
                         if (!fee || fee <= 0) { alert('Enter the fee amount to mark this lead Won.'); return; }

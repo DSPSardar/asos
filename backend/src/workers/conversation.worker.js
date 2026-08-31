@@ -27,6 +27,7 @@ const { requestContext } = require('../middleware/requestContext.middleware');
 const { publishStatusUpdate, registerWeeklyDigest, registerAutomationTick, registerSheetsSyncTick } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
+const { ENROLMENT_FEE_PKR } = require('../config/constants');
 
 // See server.js for the matching handlers and why they exist. concurrency:10
 // below means several unrelated jobs may be in flight when one throws
@@ -587,7 +588,7 @@ const handleInboundMessage = async (job) => {
     //    tenant (classic reused-screenshot fraud) — the receipt "looks real"
     //    because it IS real, just already spent.
     //  • amount mismatch: the receipt's extracted amount differs from the
-    //    tenant's configured enrollment fee.
+    //    tenant's configured enrollment fee (fallback: the Mastery list price).
     let duplicateOf = null;
     if (savedMedia?.sha256 && savedMedia?.mediaRowId) {
       duplicateOf = await prisma.inboundMedia.findFirst({
@@ -596,7 +597,7 @@ const handleInboundMessage = async (job) => {
       }).catch(() => null);
     }
 
-    const expectedFee = Number(tenant.settings?.enrollmentFee) || null;
+    const expectedFee = Number(tenant.settings?.enrollmentFee) || ENROLMENT_FEE_PKR;
     const extractedAmount = imageClassification?.amount || null;
     const amountMismatch = Boolean(expectedFee && extractedAmount && extractedAmount !== expectedFee);
     const suspicious = Boolean(duplicateOf) || amountMismatch;

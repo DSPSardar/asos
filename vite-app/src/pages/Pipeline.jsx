@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { PageHeader } from '@pages/Layout';
 import { contactsAPI, leadsAPI } from '@lib/api';
+import { ENROLMENT_FEE_PKR } from '@lib/constants';
 import { displayName } from '@lib/displayName';
 import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeSync';
@@ -440,7 +441,7 @@ export default function Pipeline() {
         onStageChange={(leadId, nextStage) => {
           // Won means PAID — the backend rejects CLOSED_WON without a fee (422).
           if (nextStage === 'CLOSED_WON') {
-            const raw = window.prompt('Enrollment fee received (PKR)?', '10000');
+            const raw = window.prompt('Enrollment fee received (PKR)?', String(ENROLMENT_FEE_PKR));
             if (raw === null) return;
             const fee = parseFloat(raw.replace(/[^\d.]/g, ''));
             if (!fee || fee <= 0) { alert('Enter the fee amount to mark this lead Won.'); return; }
@@ -449,7 +450,7 @@ export default function Pipeline() {
           return updateLead(leadId, (apiId) => leadsAPI.updateStage(apiId, nextStage));
         }}
         onMarkWon={(leadId) => {
-          const raw = window.prompt('Enrollment fee received (PKR)?', '10000');
+          const raw = window.prompt('Enrollment fee received (PKR)?', String(ENROLMENT_FEE_PKR));
           if (raw === null) return;
           const fee = parseFloat(raw.replace(/[^\d.]/g, ''));
           if (!fee || fee <= 0) { alert('Enter the fee amount to mark this lead Won.'); return; }
