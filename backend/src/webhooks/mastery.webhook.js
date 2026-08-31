@@ -10,7 +10,8 @@
 //
 // "enrolled" from the course's own PKR page creates/updates the CRM record so
 // a student who never messaged WhatsApp still shows up in Leads and Reports
-// (as CLOSED_WON, product MASTERY, with the fee). Every other event becomes a
+// (as CLOSED_WON at the PKR 28,000 list price — any other amount is held at
+// PROPOSED for manual verification). Every other event becomes a
 // SYSTEM activity that the automation engine's `mastery_event` trigger reads.
 
 const { Router } = require('express');
@@ -19,6 +20,7 @@ const prisma = require('../config/database');
 const env = require('../config/env');
 const logger = require('../utils/logger');
 const masteryService = require('../services/mastery.service');
+const { ENROLMENT_FEE_PKR } = require('../config/constants');
 const { runWithSystemScope } = require('../middleware/requestContext.middleware');
 
 const router = Router();
@@ -43,10 +45,17 @@ router.post('/', async (req, res) => {
   try {
     await runWithSystemScope(async () => {
       if (body.event === 'enrolled') {
-        // Upsert contact + a CLOSED_WON MASTERY lead. Won means paid: the fee is required
-        // exactly like the two in-app paths (leads.service / conversations.service).
-        const fee = parseFloat(body.data.fee);
-        const currency = body.data.currency || 'PKR';
+        // Upsert contact + a MASTERY lead. Won means paid at exactly the list
+        // price, same rule as the two in-app paths (leads.service /
+        // conversations.service): a USD checkout is recorded as PKR 28,000 at
+        // the point of sale (USD is never stored), a missing fee from the
+        // course's own checkout means list price, and any other amount lands
+        // at PROPOSED for a human to verify instead of booking a Won.
+        let fee = parseFloat(body.data.fee);
+        let currency = body.data.currency || 'PKR';
+        if (currency === 'USD') { fee = ENROLMENT_FEE_PKR; currency = 'PKR'; }
+        if (!Number.isFinite(fee) || fee <= 0) fee = ENROLMENT_FEE_PKR;
+        const wonValid = currency === 'PKR' && fee === ENROLMENT_FEE_PKR;
         let contact = await prisma.contact.findFirst({ where: { tenantId, email: { equals: email, mode: 'insensitive' } } });
         const phone = body.data.phone ? String(body.data.phone).replace(/[^\d+]/g, '') : null;
         if (!contact && phone) contact = await prisma.contact.findFirst({ where: { tenantId, phone } });
@@ -57,17 +66,22 @@ router.post('/', async (req, res) => {
           contact = await prisma.contact.update({ where: { id: contact.id }, data: { email } });
         }
         const existing = await prisma.lead.findFirst({ where: { tenantId, contactId: contact.id, product: 'MASTERY' }, orderBy: { createdAt: 'desc' } });
-        const won = { stage: 'CLOSED_WON', product: 'MASTERY', closedAt: new Date(),
-          ...(Number.isFinite(fee) && fee > 0 ? { enrollmentFee: fee, dealValue: fee, currency } : {}), businessUnit: 'DSP' };
+        const landing = wonValid
+          ? { stage: 'CLOSED_WON', product: 'MASTERY', closedAt: new Date(),
+              enrollmentFee: fee, dealValue: fee, currency, businessUnit: 'DSP' }
+          : { stage: 'PROPOSED', product: 'MASTERY', businessUnit: 'DSP' };
         const lead = existing
-          ? await prisma.lead.update({ where: { id: existing.id }, data: existing.stage === 'CLOSED_WON' ? { product: 'MASTERY' } : won })
-          : await prisma.lead.create({ data: { tenantId, contactId: contact.id, ...won, qualificationData: { source: body.data.source || 'mastery_site' } } });
-        if (!existing || existing.stage !== 'CLOSED_WON') {
-          await prisma.leadStageHistory.create({ data: { tenantId, leadId: lead.id, fromStage: existing?.stage || null, toStage: 'CLOSED_WON', changedBy: null } }).catch(() => {});
+          ? await prisma.lead.update({ where: { id: existing.id }, data: existing.stage === 'CLOSED_WON' ? { product: 'MASTERY' } : landing })
+          : await prisma.lead.create({ data: { tenantId, contactId: contact.id, ...landing, qualificationData: { source: body.data.source || 'mastery_site' } } });
+        if ((!existing || existing.stage !== 'CLOSED_WON') && existing?.stage !== landing.stage) {
+          await prisma.leadStageHistory.create({ data: { tenantId, leadId: lead.id, fromStage: existing?.stage || null, toStage: landing.stage, changedBy: null } }).catch(() => {});
         }
         await prisma.activity.create({ data: { tenantId, leadId: lead.id, type: 'STAGE_CHANGE',
-          content: `🎓 Enrolled in AI Agent Mastery via ${body.data.source || 'course site'}${Number.isFinite(fee) ? ` — ${currency} ${fee}` : ''}`,
-          metadata: { masteryEvent: 'enrolled', source: body.data.source || 'mastery_site' } } });
+          content: wonValid
+            ? `🎓 Enrolled in AI Agent Mastery via ${body.data.source || 'course site'} — ${currency} ${fee}`
+            : `⚠️ Mastery enrolment reported at ${currency} ${fee} — not the PKR ${ENROLMENT_FEE_PKR} list price, lead held at PROPOSED for manual verification`,
+          metadata: { masteryEvent: 'enrolled', source: body.data.source || 'mastery_site',
+            ...(wonValid ? {} : { flag: 'enrolment_fee_mismatch', reportedFee: body.data.fee ?? null, reportedCurrency: body.data.currency ?? null }) } } });
         return;
       }
       const leadId = await masteryService.recordEvent({ tenantId, email, event: body.event, data: body.data });
