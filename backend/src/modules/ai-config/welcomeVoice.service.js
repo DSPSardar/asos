@@ -23,7 +23,9 @@ const convertToOpus = (inputPath, outputPath) =>
   new Promise((resolve, reject) => {
     execFile(
       'ffmpeg',
-      ['-y', '-i', inputPath, '-c:a', 'libopus', '-avoid_negative_ts', 'make_zero', outputPath],
+      // Mono 32 kbps Opus is what WhatsApp itself uses for voice notes; without
+      // an explicit bitrate ffmpeg was inflating a 350 KB note to 1.3 MB.
+      ['-y', '-i', inputPath, '-vn', '-ac', '1', '-c:a', 'libopus', '-b:a', '32k', '-avoid_negative_ts', 'make_zero', outputPath],
       (err, stdout, stderr) => {
         if (err) return reject(Object.assign(new Error('Audio conversion failed'), { cause: stderr || err.message }));
         resolve();
@@ -77,6 +79,13 @@ const refreshMedia = async (tenant, aiConfig) => {
     throw new Error('No stored welcome voice file to re-upload');
   }
   const filePath = path.resolve(process.cwd(), aiConfig.welcomeVoiceFilePath.replace(/^\//, ''));
+  if (!fs.existsSync(filePath)) {
+    // uploads/ is ephemeral on Railway without a volume — the .ogg is gone after a
+    // redeploy. Keep using the existing media id rather than killing every welcome
+    // send; the admin re-uploads once storage persists.
+    logger.warn({ tenantId: tenant.id, filePath }, 'welcome voice file missing on disk — keeping existing media id');
+    return aiConfig;
+  }
   const oggBuffer = fs.readFileSync(filePath);
   const mediaId = await whatsappService.uploadMedia(tenant, oggBuffer, 'audio/ogg', 'welcome-voice.ogg');
 

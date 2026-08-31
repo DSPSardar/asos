@@ -108,9 +108,13 @@ const uploadMedia = async (tenant, buffer, mimeType, filename) => {
   form.append('type', mimeType);
   form.append('file', new Blob([buffer], { type: mimeType }), filename);
 
+  // Media uploads to Graph are slow (multi-MB multipart); 20s was timing out
+  // real welcome-voice uploads and surfacing as a bare 500 in Settings.
   const res = await axios.post(`${baseURL}/media`, form, {
     headers: { Authorization: `Bearer ${token}` },
-    timeout: 20000,
+    timeout: 120000,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
   });
 
   const mediaId = res.data?.id;

@@ -5,9 +5,30 @@ const logger = require('../utils/logger');
 const { error } = require('../utils/response');
 const { ZodError } = require('zod');
 
+// Axios errors carry the full request config (including the Authorization
+// header and the whole request body). Logging `err` verbatim wrote a live Meta
+// access token into Railway logs. Log a stripped view for those instead.
+const safeError = (err) => {
+  if (!err || !err.isAxiosError) return err;
+  const headers = { ...(err.config?.headers || {}) };
+  if (headers.Authorization) headers.Authorization = '[REDACTED]';
+  return {
+    name: err.name,
+    message: err.message,
+    code: err.code,
+    status: err.response?.status,
+    responseData: err.response?.data,
+    method: err.config?.method,
+    url: err.config?.url,
+    timeout: err.config?.timeout,
+    headers,
+    stack: err.stack,
+  };
+};
+
 const errorHandler = (err, req, res, next) => {
   logger.error({
-    err,
+    err: safeError(err),
     method: req.method,
     url: req.url,
     tenantId: req.tenantId,
