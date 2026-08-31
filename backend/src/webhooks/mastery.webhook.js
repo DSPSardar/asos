@@ -20,6 +20,7 @@ const prisma = require('../config/database');
 const env = require('../config/env');
 const logger = require('../utils/logger');
 const masteryService = require('../services/mastery.service');
+const whatsappService = require('../services/whatsapp.service');
 const { ENROLMENT_FEE_PKR } = require('../config/constants');
 const { runWithSystemScope } = require('../middleware/requestContext.middleware');
 
@@ -57,10 +58,20 @@ router.post('/', async (req, res) => {
         if (!Number.isFinite(fee) || fee <= 0) fee = ENROLMENT_FEE_PKR;
         const wonValid = currency === 'PKR' && fee === ENROLMENT_FEE_PKR;
         let contact = await prisma.contact.findFirst({ where: { tenantId, email: { equals: email, mode: 'insensitive' } } });
-        // ASOS stores WhatsApp numbers as bare digits (923001234567); normalise the same way
-        // so an enrolment typed as "+92 300 1234567" or "0092…" matches the existing lead.
-        const phone = body.data.phone ? String(body.data.phone).replace(/[^\d]/g, '').replace(/^00/, '') : null;
-        if (!contact && phone) contact = await prisma.contact.findFirst({ where: { tenantId, phone } });
+        // Canonical phone form across the system is digits-only (see the note in
+        // leads.service). This used to keep the '+' that the enrol form sends, so an
+        // existing WhatsApp contact could never be matched and every approval opened a
+        // duplicate instead of closing the real lead. One definition, shared.
+        const phone = body.data.phone ? whatsappService.normalizePhone(String(body.data.phone)) : null;
+        if (!contact && phone) {
+          contact = await prisma.contact.findFirst({ where: { tenantId, phone } });
+          // Numbers entered in local form (0345…) lose only the country code, and older
+          // rows may still carry a '+'. Fall back to the last 10 digits before giving up —
+          // tenant-scoped, so this cannot reach across accounts.
+          if (!contact && phone.length >= 10) {
+            contact = await prisma.contact.findFirst({ where: { tenantId, phone: { endsWith: phone.slice(-10) } } });
+          }
+        }
         if (!contact) {
           contact = await prisma.contact.create({ data: { tenantId, email, name: body.data.full_name || null,
             phone: phone || `email:${email}` } });
@@ -68,15 +79,21 @@ router.post('/', async (req, res) => {
           contact = await prisma.contact.update({ where: { id: contact.id }, data: { email } });
         }
         const existing = await prisma.lead.findFirst({ where: { tenantId, contactId: contact.id, product: 'MASTERY' }, orderBy: { createdAt: 'desc' } });
+        // A re-sync of an enrolment that already happened passes its real date.
+        // Backdating earns its keep twice: time-in-stage analytics stay honest, and the
+        // stage_entered automations (Enrollment Welcome) only scan a recent window — so a
+        // backfill can't send "welcome, you're enrolled" to a student from three weeks ago.
+        const reported = body.data.enrolled_at ? new Date(body.data.enrolled_at) : null;
+        const closedAt = reported && !Number.isNaN(reported.getTime()) ? reported : new Date();
         const landing = wonValid
-          ? { stage: 'CLOSED_WON', product: 'MASTERY', closedAt: new Date(),
+          ? { stage: 'CLOSED_WON', product: 'MASTERY', closedAt,
               enrollmentFee: fee, dealValue: fee, currency, businessUnit: 'DSP' }
           : { stage: 'PROPOSED', product: 'MASTERY', businessUnit: 'DSP' };
         const lead = existing
           ? await prisma.lead.update({ where: { id: existing.id }, data: existing.stage === 'CLOSED_WON' ? { product: 'MASTERY' } : landing })
           : await prisma.lead.create({ data: { tenantId, contactId: contact.id, ...landing, qualificationData: { source: body.data.source || 'mastery_site' } } });
         if ((!existing || existing.stage !== 'CLOSED_WON') && existing?.stage !== landing.stage) {
-          await prisma.leadStageHistory.create({ data: { tenantId, leadId: lead.id, fromStage: existing?.stage || null, toStage: landing.stage, changedBy: null } }).catch(() => {});
+          await prisma.leadStageHistory.create({ data: { tenantId, leadId: lead.id, fromStage: existing?.stage || null, toStage: landing.stage, changedBy: null, createdAt: closedAt } }).catch(() => {});
         }
         await prisma.activity.create({ data: { tenantId, leadId: lead.id, type: 'STAGE_CHANGE',
           content: wonValid
