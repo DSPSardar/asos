@@ -305,9 +305,10 @@ model Lead {
   // re-import or an AI score bump must never look like 280 phase changes.
   dspPhaseChangedAt   DateTime?  @map("dsp_phase_changed_at")
   enrollmentFee       Decimal?   @db.Decimal(12,2) @map("enrollment_fee")
-  // Which DSP product this lead is buying: BOOTCAMP (7-day live) | MASTERY (self-paced
-  // AI Agent Mastery) | null (not yet known). Set by the Qualifier, never downgraded to null.
-  product             String?    @map("product")
+  // Which DSP product this lead is buying. Since the bootcamp sunset (2026-08)
+  // MASTERY is the only product and the default for new leads; BOOTCAMP remains
+  // a valid stored value on historical rows and is never rewritten.
+  product             String?    @default("MASTERY") @map("product")
 
   closedAt            DateTime?  @map("closed_at")
   createdAt           DateTime   @default(now()) @map("created_at")

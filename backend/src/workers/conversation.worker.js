@@ -777,17 +777,13 @@ const handleInboundMessage = async (job) => {
     ? aiResult.businessUnit
     : (lead.businessUnit !== 'UNKNOWN' ? lead.businessUnit : 'UNKNOWN');
 
-  // Same never-downgrade rule as businessUnit: once a lead has chosen an offer
-  // (BOOTCAMP / MASTERY) a later UNKNOWN must not erase it.
-  const resolvedProduct = aiResult.product && aiResult.product !== 'UNKNOWN'
-    ? aiResult.product
-    : (lead.product || null);
-
+  // product is not written here: since the bootcamp sunset the Qualifier no
+  // longer decides between offers — new leads default to MASTERY at the DB
+  // layer and historical BOOTCAMP rows keep their value.
   await prisma.lead.update({
     where: { id: lead.id },
     data: {
       stage: aiResult.stage,
-      product: resolvedProduct,
       scoreLabel: aiResult.leadStatus,
       aiScore: aiResult.aiScore ?? Math.round((aiResult.score || 1) * 10),
       // v1.5 columns
