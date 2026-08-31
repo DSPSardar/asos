@@ -78,7 +78,15 @@ router.post('/', async (req, res) => {
         } else if (!contact.email) {
           contact = await prisma.contact.update({ where: { id: contact.id }, data: { email } });
         }
-        const existing = await prisma.lead.findFirst({ where: { tenantId, contactId: contact.id, product: 'MASTERY' }, orderBy: { createdAt: 'desc' } });
+        // Reuse the person's existing lead instead of opening a second pipeline row.
+        // Preference order: their MASTERY lead, else any already-won lead (legacy rows
+        // predate Lead.product — flipping product beats duplicating the human), else
+        // their most recent lead in any stage. Only a contact with no leads at all
+        // gets a new one — so re-running a sync converges instead of accumulating.
+        const existing =
+          (await prisma.lead.findFirst({ where: { tenantId, contactId: contact.id, product: 'MASTERY' }, orderBy: { createdAt: 'desc' } })) ||
+          (await prisma.lead.findFirst({ where: { tenantId, contactId: contact.id, stage: 'CLOSED_WON' }, orderBy: { createdAt: 'desc' } })) ||
+          (await prisma.lead.findFirst({ where: { tenantId, contactId: contact.id }, orderBy: { createdAt: 'desc' } }));
         // A re-sync of an enrolment that already happened passes its real date.
         // Backdating earns its keep twice: time-in-stage analytics stay honest, and the
         // stage_entered automations (Enrollment Welcome) only scan a recent window — so a
