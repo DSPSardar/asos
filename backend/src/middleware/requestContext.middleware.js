@@ -59,10 +59,28 @@ const runWithSystemScope = (fn) => {
   return requestContext.run({ rlsScope: 'system' }, fn);
 };
 
+// Multer (and anything else that hands control back from a body stream's
+// 'finish' event) invokes the next handler from the socket's async context,
+// not the one requestContextMiddleware started — so getStore() is empty and
+// every Prisma write downstream runs with no tenant set, which RLS rejects as
+// "new row violates row-level security policy". Mount this AFTER the multer
+// call to re-enter the request's context from the verified values auth
+// already put on req. Same derivation rules as auth.middleware.js.
+const rehydrateRequestContext = (req, res, next) => {
+  const user = req.user;
+  const store = {
+    requestId: req.id,
+    tenantId: user?.role === 'SUPERADMIN' ? '' : (req.tenantId || user?.tenantId || ''),
+    rlsScope: user?.role === 'SUPERADMIN' ? 'system' : '',
+  };
+  requestContext.run(store, next);
+};
+
 module.exports = {
   requestContext,
   requestContextMiddleware,
   getRequestContext,
   setTenantContext,
   runWithSystemScope,
+  rehydrateRequestContext,
 };
