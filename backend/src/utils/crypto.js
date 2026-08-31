@@ -84,4 +84,26 @@ const hashPhone = (phone) => {
   return crypto.createHash('sha256').update(phone.replace(/\D/g, '')).digest('hex');
 };
 
-module.exports = { encrypt, decrypt, isLegacyCiphertext, hashPhone };
+// Ciphertext produced by encrypt() is always iv:tag:data in hex. A raw
+// credential (Meta token, API key) never matches this shape.
+const CIPHERTEXT_RE = /^[0-9a-f]{32}:[0-9a-f]{32}:[0-9a-f]+$/i;
+
+// Resolve a stored credential to its usable value.
+//   - legacy plaintext → returned as-is
+//   - ciphertext that decrypts → plaintext
+//   - ciphertext that does NOT decrypt → throw
+// The old `decrypt(x) || x` pattern at call sites returned the ciphertext
+// itself in the third case and sent it to Meta as a bearer token, which
+// showed up as error 190 with no hint that the real problem was a service
+// missing ENCRYPTION_KEY. Fail loudly instead.
+const resolveCredential = (stored, label = 'credential') => {
+  if (!stored) return null;
+  if (!CIPHERTEXT_RE.test(stored)) return stored;
+  const plain = decrypt(stored);
+  if (plain) return plain;
+  const err = new Error(`${label} is encrypted but cannot be decrypted on this service — ENCRYPTION_KEY is missing or does not match the service that wrote it`);
+  err.code = 'CREDENTIAL_DECRYPT_FAILED';
+  throw err;
+};
+
+module.exports = { encrypt, decrypt, isLegacyCiphertext, hashPhone, resolveCredential };

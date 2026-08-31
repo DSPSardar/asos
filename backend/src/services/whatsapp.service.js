@@ -5,13 +5,13 @@ const axios = require('axios');
 const crypto = require('crypto');
 const env = require('../config/env');
 const logger = require('../utils/logger');
-const { decrypt } = require('../utils/crypto');
+const { decrypt, resolveCredential } = require('../utils/crypto');
 const prisma = require('../config/database');
 
 // ── Get axios instance for a specific tenant ──────────────────────────
 
 const getClient = (tenant) => {
-  const token = decrypt(tenant.waAccessToken) || tenant.waAccessToken;
+  const token = resolveCredential(tenant.waAccessToken, 'WhatsApp access token');
   return axios.create({
     baseURL: `${env.WHATSAPP_API_URL}/${tenant.waPhoneId}`,
     headers: {
@@ -100,7 +100,7 @@ const uploadMedia = async (tenant, buffer, mimeType, filename) => {
     return mockId;
   }
 
-  const token = decrypt(tenant.waAccessToken) || tenant.waAccessToken;
+  const token = resolveCredential(tenant.waAccessToken, 'WhatsApp access token');
   const baseURL = `${env.WHATSAPP_API_URL}/${tenant.waPhoneId}`;
 
   const form = new FormData();
@@ -227,7 +227,7 @@ const markAsRead = async (tenant, waMessageId) => {
 
 const getMediaUrl = async (tenant, mediaId) => {
   try {
-    const token = decrypt(tenant.waAccessToken) || tenant.waAccessToken;
+    const token = resolveCredential(tenant.waAccessToken, 'WhatsApp access token');
     const res = await axios.get(`${env.WHATSAPP_API_URL}/${mediaId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -248,7 +248,7 @@ const downloadMedia = async (tenant, mediaId) => {
   if (!url) return null;
 
   try {
-    const token = decrypt(tenant.waAccessToken) || tenant.waAccessToken;
+    const token = resolveCredential(tenant.waAccessToken, 'WhatsApp access token');
     const res = await axios.get(url, {
       headers: { Authorization: `Bearer ${token}` },
       responseType: 'arraybuffer',
@@ -411,7 +411,13 @@ const verifyCredentials = async (tenant) => {
     return { ok: false, error: 'Phone Number ID or Access Token not configured' };
   }
 
-  const token = (() => { try { return decrypt(rawToken) || rawToken; } catch { return rawToken; } })();
+  let token;
+  try {
+    token = resolveCredential(rawToken, 'WhatsApp access token');
+  } catch (err) {
+    // Surface the config problem in the Settings UI instead of a 500.
+    return { ok: false, error: err.message };
+  }
 
   try {
     const res = await axios.get(

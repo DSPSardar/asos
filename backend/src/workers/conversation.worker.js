@@ -457,6 +457,18 @@ const handleInboundMessage = async (job) => {
           },
         });
 
+        if (!welcomeWaMessageId) {
+          // Meta rejected the send (expired media id, bad token, outage…).
+          // Release the claim so the contact's NEXT inbound message gets the
+          // note; otherwise the flag stays true forever and the lead never
+          // hears it. The claim-first pattern above still guarantees no
+          // double-send within this job.
+          await prisma.contact.update({
+            where: { id: contact.id },
+            data: { sentWelcomeVoice: false },
+          });
+        }
+
         await prisma.conversation.update({
           where: { id: conversation.id },
           data: { lastMessageAt: new Date() },
