@@ -323,6 +323,12 @@ function StudentCard({ student, onClick, isSelected }) {
   const age  = student.contact?.ageGroup || '—';
   const initials = name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
   const fmtDate2 = (d) => d ? new Date(d).toLocaleDateString('en-PK', { day:'2-digit', month:'short' }) : '—';
+  const fmtFee = (s) => {
+    const amount = parseFloat(s.enrollmentFee ?? s.dealValue);
+    if (!Number.isFinite(amount) || amount <= 0) return '—';
+    const prefix = !s.currency || s.currency === 'PKR' ? 'Rs.' : s.currency;
+    return `${prefix} ${amount.toLocaleString('en-PK', { maximumFractionDigits: 0 })}`;
+  };
 
   return (
     <button
@@ -359,7 +365,9 @@ function StudentCard({ student, onClick, isSelected }) {
       {/* Meta */}
       <div className="flex justify-between text-xs text-slate-500 mt-1">
         <span>Enrolled {fmtDate2(student.closedAt)}</span>
-        <span className="text-emerald-400 font-medium">Rs. 10,000</span>
+        {/* Real amount from the lead — this was hardcoded "Rs. 10,000" from the
+            bootcamp era, so Mastery students (PKR 28,000) displayed the old price. */}
+        <span className="text-emerald-400 font-medium">{fmtFee(student)}</span>
       </div>
     </button>
   );
