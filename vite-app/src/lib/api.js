@@ -188,6 +188,22 @@ export const automationsAPI = {
   preview: (id) => api.post(`/automations/${id}/preview`),
 };
 
+// Today's Queue (backend modules/today). Draft/summary are POST because they
+// may spend AI tokens — once per thread state, cached server-side.
+export const todayAPI = {
+  queue:        (all = false) => api.get('/today', { params: all ? { all: '1' } : {} }),
+  templates:    () => api.get('/today/templates'),
+  context:      (id) => api.get(`/today/${id}/context`),
+  draft:        (id, force = false) => api.post(`/today/${id}/draft`, { force }),
+  summary:      (id, force = false) => api.post(`/today/${id}/summary`, { force }),
+  send:         (id, content) => api.post(`/today/${id}/send`, { content }),
+  sendTemplate: (id, name) => api.post(`/today/${id}/send-template`, { name }),
+  skip:         (id) => api.post(`/today/${id}/skip`),
+  unskip:       (id) => api.delete(`/today/${id}/skip`),
+  dismiss:      (id) => api.post(`/today/${id}/dismiss`),
+  undismiss:    (id) => api.delete(`/today/${id}/dismiss`),
+};
+
 export const contactsAPI = {
   list:   (params) => api.get('/contacts', { params }),
   get:    (id) => api.get(`/contacts/${id}`),

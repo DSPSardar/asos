@@ -3,6 +3,7 @@ const { z } = require('zod');
 const svc = require('./automations.service');
 const engine = require('../../services/automation.service');
 const { success, created, error } = require('../../utils/response');
+const { validateSteps, MAX_STEPS } = require('../../services/automation.steps');
 
 const TRIGGER_TYPES = ['no_reply', 'no_activity', 'stage_entered', 'dsp_phase_changed'];
 const STAGES = ['NEW', 'QUALIFYING', 'DIAGNOSED', 'PROPOSED', 'CLOSED_WON', 'CLOSED_LOST'];
@@ -16,21 +17,38 @@ const triggerSchema = z.object({
 }).refine((t) => t.type !== 'stage_entered' || t.stage, { message: 'stage is required for stage_entered' })
   .refine((t) => t.type !== 'dsp_phase_changed' || t.phase, { message: 'phase is required for dsp_phase_changed' });
 
+// Approved Meta template used when the lead is outside the 24h window.
+// name must match WhatsApp Manager exactly; bodyParams fill {{1}}, {{2}}…
+const waTemplateSchema = z.object({
+  name:       z.string().trim().regex(/^[a-z0-9_]{1,512}$/, 'lowercase letters, digits and underscores only'),
+  language:   z.string().trim().min(2).max(10).default('en'),
+  bodyParams: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
+}).nullable().optional();
+
+// One touch of a multi-step sequence. Step 1's delay is ignored (the trigger
+// says when it fires); every later step needs delay > 0 AND an approved
+// template — services/automation.steps.js validateSteps enforces that.
+const stepSchema = z.object({
+  delay:      z.number().int().min(0).max(365).default(0),
+  unit:       z.enum(['minutes', 'hours', 'days']).default('days'),
+  template:   z.string().trim().min(5).max(1000),
+  waTemplate: waTemplateSchema,
+});
+
+const actionSchema = z.object({
+  type:     z.literal('send_whatsapp'),
+  template: z.string().trim().min(5).max(1000),
+  waTemplate: waTemplateSchema,
+  steps:    z.array(stepSchema).min(1).max(MAX_STEPS).optional(),
+}).superRefine((a, ctx) => {
+  for (const msg of validateSteps(a)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['steps'], message: msg });
+});
+
 const ruleSchema = z.object({
   name:      z.string().trim().min(2).max(80),
   trigger:   triggerSchema,
   condition: z.object({ stage: z.enum([...STAGES, 'any']).optional() }).default({}),
-  action:    z.object({
-    type:     z.literal('send_whatsapp'),
-    template: z.string().trim().min(5).max(1000),
-    // Approved Meta template used when the lead is outside the 24h window.
-    // name must match WhatsApp Manager exactly; bodyParams fill {{1}}, {{2}}…
-    waTemplate: z.object({
-      name:       z.string().trim().regex(/^[a-z0-9_]{1,512}$/, 'lowercase letters, digits and underscores only'),
-      language:   z.string().trim().min(2).max(10).default('en'),
-      bodyParams: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
-    }).nullable().optional(),
-  }),
+  action:    actionSchema,
   tags:      z.array(z.string().trim().min(1).max(24)).max(6).default([]),
 });
 

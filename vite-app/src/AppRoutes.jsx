@@ -32,6 +32,7 @@ const AuthPage          = React.lazy(() => import('@pages/Auth'));
 const ResetPasswordPage = React.lazy(() => import('@pages/ResetPassword'));
 const DashboardLayout   = React.lazy(() => import('@pages/Layout'));
 const DashboardPage     = React.lazy(() => import('@pages/Dashboard'));
+const TodayPage         = React.lazy(() => import('@pages/Today'));
 const PipelinePage      = React.lazy(() => import('@pages/Pipeline'));
 const ConversationsPage = React.lazy(() => import('@pages/Conversations'));
 const AIInsightsPage    = React.lazy(() => import('@pages/AIInsights'));
@@ -110,6 +111,7 @@ export function AppRoutes() {
           public. Do not convert these back to relative paths. */}
       <Route element={<PrivateRoute><DashboardLayout /></PrivateRoute>}>
         <Route path="/dashboard"     element={<TenantRoute><DashboardPage /></TenantRoute>}      />
+        <Route path="/today"         element={<TenantRoute><TodayPage /></TenantRoute>}          />
         <Route path="/leads"         element={<TenantRoute><PipelinePage /></TenantRoute>}       />
         <Route path="/conversations" element={<TenantRoute><ConversationsPage /></TenantRoute>}  />
         <Route path="/ai-insights"   element={<TenantRoute><AIInsightsPage /></TenantRoute>}     />

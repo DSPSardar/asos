@@ -4,6 +4,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { DEMO_ACCESS_TOKEN, useAuthStore } from '@stores/auth.store';
 
 const NAV = [
+  { to: '/today',         label: 'Today',         icon: IconSun       },
   { to: '/dashboard',     label: 'Dashboard',     icon: IconDashboard },
   { to: '/leads',         label: 'Leads',         icon: IconPipeline  },
   { to: '/conversations', label: 'Conversations', icon: IconChat      },
@@ -219,6 +220,7 @@ export function PageHeader({ title, subtitle, action }) {
 
 // ── Inline icons (SVG, no extra deps) ──────────────────────
 function svgProps(props) { return { fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', viewBox: '0 0 24 24', ...props }; }
+function IconSun(p){ return <svg {...svgProps(p)}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>; }
 function IconDashboard(p){ return <svg {...svgProps(p)}><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>; }
 function IconPipeline(p){ return <svg {...svgProps(p)}><path d="M3 6h18M6 12h12M9 18h6"/></svg>; }
 function IconChat(p){ return <svg {...svgProps(p)}><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12Z"/></svg>; }

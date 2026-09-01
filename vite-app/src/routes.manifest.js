@@ -35,6 +35,7 @@ export const APP_ROUTES = [
   '/onboarding',
   '/settings',
   '/students',
+  '/today',
 ];
 
 export const ALL_ROUTES = [...PUBLIC_ROUTES, ...APP_ROUTES];

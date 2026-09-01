@@ -18,6 +18,7 @@ const elevenlabsService = require('../services/elevenlabs.service');
 const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
+const automationService = require('../services/automation.service');
 const realtimeService = require('../services/realtime.service');
 const billingService = require('../modules/billing/billing.service');
 const { toDbMessageType } = require('../utils/messageType');
@@ -408,6 +409,13 @@ const handleInboundMessage = async (job) => {
       sentAt: timestamp ? new Date(parseInt(timestamp) * 1000) : new Date(),
     },
   });
+
+  // ── 6a. The lead wrote to us → every pending automation follow-up touch
+  // for them stops right now (services/automation.service.js sequences).
+  // A "did you see our message?" landing after they replied is the one
+  // thing a multi-touch sequence must never do. Eager here; the tick
+  // re-checks as a backstop. Non-fatal.
+  if (!existingInbound) await automationService.cancelSequencesForLead(lead.id, 'lead_replied');
 
   // ── 6b. Welcome voice note — bypass the AI entirely on this contact's
   // first ever inbound message. contact.sentWelcomeVoice is flipped true
@@ -1365,7 +1373,6 @@ setTimeout(() => {
 // keeps the weekly fan-out from contending with the message worker.
 const digestService = require('../services/digest.service');
 const dailyDigestService = require('../services/dailyDigest.service');
-const automationService = require('../services/automation.service');
 const sheetsSyncService = require('../services/sheetsSync.service');
 
 const schedulerWorker = new Worker(

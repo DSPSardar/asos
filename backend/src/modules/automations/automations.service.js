@@ -85,16 +85,21 @@ const withStats = async (tenantId, rules) => {
     _count: { _all: true },
     _max: { createdAt: true },
   });
+  const empty = () => ({ sent: 0, failed: 0, skipped: 0, active: 0, cancelled: 0, lastRunAt: null });
   const stats = {};
   for (const g of grouped) {
-    const s = stats[g.ruleId] || (stats[g.ruleId] = { sent: 0, failed: 0, skipped: 0, lastRunAt: null });
+    const s = stats[g.ruleId] || (stats[g.ruleId] = empty());
     s[g.status.toLowerCase()] = g._count._all;
     if (!s.lastRunAt || g._max.createdAt > s.lastRunAt) s.lastRunAt = g._max.createdAt;
   }
   return rules.map((r) => {
-    const s = stats[r.id] || { sent: 0, failed: 0, skipped: 0, lastRunAt: null };
-    const attempted = s.sent + s.failed;
-    return { ...r, stats: { ...s, attempted, successRate: attempted ? Math.round((s.sent / attempted) * 100) : null } };
+    const s = stats[r.id] || empty();
+    // ACTIVE and CANCELLED rows both delivered at least one touch, so they
+    // count as reached; a sequence that ends because the lead replied is the
+    // rule working, not failing.
+    const attempted = s.sent + s.active + s.cancelled + s.failed;
+    const reached = s.sent + s.active + s.cancelled;
+    return { ...r, stats: { ...s, attempted, reached, successRate: attempted ? Math.round((reached / attempted) * 100) : null } };
   });
 };
 

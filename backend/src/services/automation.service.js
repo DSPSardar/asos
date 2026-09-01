@@ -3,20 +3,37 @@
 //
 // Runs as a repeatable 'automation-tick' job on the scheduler queue (every
 // TICK_MINUTES). Each tick, for every tenant with at least one enabled rule:
-//   1. findMatches(rule)  → leads whose trigger condition is satisfied
-//   2. for each match     → send WhatsApp, persist OUTBOUND message + Activity,
-//                           write an automation_runs row (SENT / FAILED / SKIPPED)
+//   1. advanceDue(rule)   → leads mid-sequence whose next touch is due
+//   2. findMatches(rule)  → leads whose trigger condition is satisfied (enrol)
+//   3. for each           → send WhatsApp, persist OUTBOUND message + Activity,
+//                           write/update the automation_runs row
+//
+// Multi-touch sequences: a rule's action may carry `steps`
+//   [{ delay, unit, template, waTemplate? }, ...]
+// Step 0 fires when the trigger matches (exactly what a plain rule does);
+// each later step fires `delay` after the PREVIOUS touch, unless the lead
+// replied in between. The automation_runs row is the lead's enrolment — the
+// unique (rule, lead) key is the once-per-lead-ever guard — and it carries
+// the progress: step (touches sent), nextDueAt, lastTouchAt, status ACTIVE
+// while more touches are pending, SENT when the last one went out,
+// CANCELLED (cancelReason) when the sequence stopped early. A rule without
+// `steps` is a one-step sequence, so nothing about existing rules changed.
 //
 // Safety rails (all deliberate — a rule can reach every lead in a tenant):
-//   - a rule fires at most ONCE per lead, ever (unique rule_id+lead_id)
+//   - a rule enrols a lead at most ONCE, ever (unique rule_id+lead_id)
 //   - only events at/after rule.enabledAt count; enabling never replays history
 //   - LOOKBACK caps how far back time-based triggers scan
-//   - MAX_SENDS_PER_RULE_PER_TICK caps blast size; leftovers go next tick
+//   - MAX_SENDS_PER_RULE_PER_TICK caps blast size (advance + enrol share it;
+//     due touches go first so a new blast never starves a lead mid-sequence)
 //   - conversations in HUMAN_TAKEOVER / PENDING_VERIFICATION / aiEnabled=false
 //     and CLOSED_LOST leads are never touched
 //   - CLOSED_WON leads are never CHASED (no_reply / no_activity); lifecycle
 //     triggers still reach them, so enrolled students keep getting welcome,
 //     certificate and Mastery nudges
+//   - a pending sequence is cancelled the moment the lead replies (the inbound
+//     worker calls cancelSequencesForLead; advanceDue re-checks as a backstop),
+//     when a human agent messages them, or when the lead/conversation becomes
+//     ineligible (won, lost, handed to a human, AI off)
 //   - Meta only delivers free-form text inside the 24h customer-service
 //     window. Outside it we record SKIPPED(outside_24h_window) instead of
 //     burning a send that Meta will reject with error 131047.
@@ -25,15 +42,15 @@ const logger = require('../utils/logger');
 const whatsappService = require('./whatsapp.service');
 const { requestContext, runWithSystemScope } = require('../middleware/requestContext.middleware');
 
+const {
+  UNIT_MS, delayMs, UNTOUCHABLE_CONV, CANCEL_REASONS,
+  normalizeSteps, validateSteps, planAfterTouch, cancelReasonFor, isChaseTrigger,
+} = require('./automation.steps');
+
 const TICK_MINUTES = 10;
 const LOOKBACK_DAYS = 14;
 const MAX_SENDS_PER_RULE_PER_TICK = 50;
 const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-const UNIT_MS = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 };
-const delayMs = (t) => (Number(t?.delay) || 0) * (UNIT_MS[t?.unit] || UNIT_MS.hours);
-
-const UNTOUCHABLE_CONV = ['HUMAN_TAKEOVER', 'PENDING_VERIFICATION'];
 
 const renderTemplate = (tpl, lead) => {
   const name = (lead.contact?.name || '').trim().split(/\s+/)[0] || 'dost';
@@ -49,13 +66,15 @@ const leadSelect = {
   },
 };
 
-// Latest message direction + last inbound time for the 24h-window check.
+// Latest message direction + last inbound / last human-agent time, for the
+// 24h-window check and the sequence cancel rules.
 const conversationFacts = async (conversationId) => {
-  const [last, lastInbound] = await Promise.all([
+  const [last, lastInbound, lastAgent] = await Promise.all([
     prisma.message.findFirst({ where: { conversationId }, orderBy: { sentAt: 'desc' }, select: { direction: true, sentAt: true } }),
     prisma.message.findFirst({ where: { conversationId, direction: 'INBOUND' }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
+    prisma.message.findFirst({ where: { conversationId, direction: 'OUTBOUND', sender: 'AGENT' }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
   ]);
-  return { last, lastInboundAt: lastInbound?.sentAt || null };
+  return { last, lastInboundAt: lastInbound?.sentAt || null, lastAgentAt: lastAgent?.sentAt || null };
 };
 
 // Common lead filter shared by every trigger type.
@@ -87,6 +106,7 @@ const findMatches = async (rule, { limit = MAX_SENDS_PER_RULE_PER_TICK, ignoreEn
   const floor = since > lookback ? since : lookback;
   const cutoff = new Date(now - delayMs(t));
   const out = [];
+  if (limit <= 0) return out;
 
   const push = async (lead) => {
     const conv = lead.conversations?.[0];
@@ -181,23 +201,31 @@ const findMatches = async (rule, { limit = MAX_SENDS_PER_RULE_PER_TICK, ignoreEn
   return out;
 };
 
-const recordRun = (rule, leadId, status, reason) => prisma.automationRun.create({
-  data: { tenantId: rule.tenantId, ruleId: rule.id, leadId, status, reason: reason || null },
+// Enrolment row upsert: create on the first touch, update on later ones.
+// Never throws — a bookkeeping failure must not take the tick down.
+const recordRun = (rule, leadId, status, reason, extra = {}) => prisma.automationRun.upsert({
+  where: { ruleId_leadId: { ruleId: rule.id, leadId } },
+  create: { tenantId: rule.tenantId, ruleId: rule.id, leadId, status, reason: reason || null, ...extra },
+  update: { status, reason: reason || null, ...extra },
 }).catch((err) => logger.warn({ err, ruleId: rule.id, leadId }, 'Could not record automation run'));
 
-const executeMatch = async (tenant, rule, match) => {
-  const { lead, conversationId, insideWindow } = match;
+// Deliver ONE touch of the rule to one lead. `stepIndex` 0 is the enrolment
+// touch; later indexes are sequence follow-ups. Writes the enrolment row.
+const sendTouch = async (tenant, rule, { lead, conversationId, insideWindow }, stepIndex = 0, now = new Date()) => {
+  const steps = normalizeSteps(rule.action);
+  const step = steps[stepIndex] || steps[0];
   const phone = lead.contact?.phone;
-  if (!phone) return recordRun(rule, lead.id, 'SKIPPED', 'no_phone');
+  if (!phone) return recordRun(rule, lead.id, 'SKIPPED', 'no_phone', { step: stepIndex, nextDueAt: null });
 
   // Outside Meta's 24h customer-service window only an approved template
-  // delivers. If the rule names one (action.waTemplate), use it; otherwise
+  // delivers. If the step names one (waTemplate), use it; otherwise
   // record the skip so the admin can see exactly why nothing went out.
-  const tpl = rule.action?.waTemplate;
+  const tpl = step.waTemplate;
   const useTemplate = !insideWindow && tpl?.name;
-  if (!insideWindow && !useTemplate) return recordRun(rule, lead.id, 'SKIPPED', 'outside_24h_window');
+  if (!insideWindow && !useTemplate) return recordRun(rule, lead.id, 'SKIPPED', 'outside_24h_window', { step: stepIndex, nextDueAt: null });
 
-  const content = renderTemplate(rule.action?.template, lead);
+  const content = renderTemplate(step.template, lead);
+  const label = steps.length > 1 ? ` (touch ${stepIndex + 1}/${steps.length})` : '';
   let waMessageId = null;
   let sendError = null;
   try {
@@ -221,11 +249,11 @@ const executeMatch = async (tenant, rule, match) => {
     await prisma.activity.create({
       data: {
         tenantId: rule.tenantId, leadId: lead.id, type: 'SYSTEM',
-        content: `⚠️ Automation "${rule.name}" could not send WhatsApp message`,
-        metadata: { flag: 'automation_send_failed', ruleId: rule.id, error: sendError },
+        content: `⚠️ Automation "${rule.name}"${label} could not send WhatsApp message`,
+        metadata: { flag: 'automation_send_failed', ruleId: rule.id, step: stepIndex, error: sendError },
       },
     }).catch(() => {});
-    return recordRun(rule, lead.id, 'FAILED', sendError || 'wa_send_failed');
+    return recordRun(rule, lead.id, 'FAILED', sendError || 'wa_send_failed', { step: stepIndex, nextDueAt: null });
   }
 
   await prisma.message.create({
@@ -234,15 +262,73 @@ const executeMatch = async (tenant, rule, match) => {
       direction: 'OUTBOUND', sender: 'SYSTEM', type: useTemplate ? 'TEMPLATE' : 'TEXT', content, status: 'SENT',
     },
   }).catch((err) => logger.warn({ err }, 'Automation: could not persist outbound message'));
-  await prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date() } }).catch(() => {});
+  await prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: now } }).catch(() => {});
   await prisma.activity.create({
     data: {
       tenantId: rule.tenantId, leadId: lead.id, type: 'SYSTEM',
-      content: `🤖 Automation "${rule.name}" sent WhatsApp ${useTemplate ? `template ${tpl.name}` : 'message'}`,
-      metadata: { ruleId: rule.id, preview: content.slice(0, 120) },
+      content: `🤖 Automation "${rule.name}"${label} sent WhatsApp ${useTemplate ? `template ${tpl.name}` : 'message'}`,
+      metadata: { ruleId: rule.id, step: stepIndex, preview: content.slice(0, 120) },
     },
   }).catch(() => {});
-  return recordRun(rule, lead.id, 'SENT', useTemplate ? `template:${tpl.name}` : null);
+  const plan = planAfterTouch(steps, stepIndex, now);
+  return recordRun(rule, lead.id, plan.status, useTemplate ? `template:${tpl.name}` : null, { step: plan.step, nextDueAt: plan.nextDueAt, lastTouchAt: plan.lastTouchAt });
+};
+
+// Kept for callers that think in "matches" (enrolment touch).
+const executeMatch = (tenant, rule, match) => sendTouch(tenant, rule, match, 0);
+
+// ── Sequence advance ─────────────────────────────────────────────────
+// Leads enrolled in this rule whose next touch is due. Re-checks eligibility
+// and the reply/agent cancel rules right before sending — the inbound worker
+// cancels eagerly, but a tick can race a webhook, so this is the backstop.
+const advanceDue = async (tenant, rule, { limit = MAX_SENDS_PER_RULE_PER_TICK, now = new Date() } = {}) => {
+  const steps = normalizeSteps(rule.action);
+  const results = [];
+  if (steps.length < 2 || limit <= 0) return results;
+
+  const due = await prisma.automationRun.findMany({
+    where: { ruleId: rule.id, status: 'ACTIVE', nextDueAt: { lte: now } },
+    orderBy: { nextDueAt: 'asc' }, take: limit,
+    select: { id: true, leadId: true, step: true, lastTouchAt: true },
+  });
+  for (const run of due) {
+    const stepIndex = run.step; // touches sent so far == index of the next one
+    if (!steps[stepIndex]) { // nothing left — close the row out
+      await prisma.automationRun.update({ where: { id: run.id }, data: { status: 'SENT', nextDueAt: null } }).catch(() => {}); // eslint-disable-line no-await-in-loop
+      continue;
+    }
+    const lead = await prisma.lead.findFirst({ where: { id: run.leadId, tenantId: rule.tenantId }, select: leadSelect }); // eslint-disable-line no-await-in-loop
+    const conv = lead?.conversations?.[0];
+    const facts = conv ? await conversationFacts(conv.id) : null; // eslint-disable-line no-await-in-loop
+    const reason = cancelReasonFor({ lead, conv, facts, since: run.lastTouchAt, excludeWon: isChaseTrigger(rule) });
+    if (reason) {
+      await prisma.automationRun.update({ where: { id: run.id }, data: { status: 'CANCELLED', cancelReason: reason, nextDueAt: null } }).catch(() => {}); // eslint-disable-line no-await-in-loop
+      results.push({ leadId: run.leadId, status: 'CANCELLED', reason });
+      continue;
+    }
+    const insideWindow = !!facts.lastInboundAt && (now - facts.lastInboundAt) < WA_WINDOW_MS;
+    const out = await sendTouch(tenant, rule, { lead, conversationId: conv.id, insideWindow }, stepIndex, now); // eslint-disable-line no-await-in-loop
+    results.push({ leadId: run.leadId, status: out?.status || 'FAILED' });
+  }
+  return results;
+};
+
+// Called by the inbound worker the moment a lead writes to us (and by
+// takeover / payment-proof paths): every pending touch for that lead stops.
+// Runs inside the caller's request context, so RLS scoping is inherited.
+const cancelSequencesForLead = async (leadId, reason = CANCEL_REASONS.replied) => {
+  if (!leadId) return 0;
+  try {
+    const { count } = await prisma.automationRun.updateMany({
+      where: { leadId, status: 'ACTIVE' },
+      data: { status: 'CANCELLED', cancelReason: reason, nextDueAt: null },
+    });
+    if (count) logger.info({ leadId, count, reason }, '🤖 Automation sequence cancelled');
+    return count;
+  } catch (err) {
+    logger.warn({ err, leadId }, 'Could not cancel automation sequences');
+    return 0;
+  }
 };
 
 // Evaluate + execute every enabled rule for ONE tenant. Runs inside that
@@ -251,22 +337,37 @@ const runTenant = async (tenantId) => requestContext.run({ requestId: `automatio
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
   if (!tenant) return { tenantId, skipped: 'tenant_not_found' };
   const rules = await prisma.automationRule.findMany({ where: { tenantId, enabled: true } });
-  const summary = { tenantId, rules: rules.length, sent: 0, failed: 0, skipped: 0 };
+  const summary = { tenantId, rules: rules.length, sent: 0, failed: 0, skipped: 0, cancelled: 0 };
+  const tally = (status) => {
+    if (status === 'SENT' || status === 'ACTIVE') summary.sent += 1;
+    else if (status === 'FAILED') summary.failed += 1;
+    else if (status === 'CANCELLED') summary.cancelled += 1;
+    else summary.skipped += 1;
+  };
 
   for (const rule of rules) {
+    // 1. Due follow-up touches first, so a fresh blast can't starve them.
+    let budget = MAX_SENDS_PER_RULE_PER_TICK;
+    try {
+      const advanced = await advanceDue(tenant, rule, { limit: budget }); // eslint-disable-line no-await-in-loop
+      advanced.forEach((r) => tally(r.status));
+      budget -= advanced.filter((r) => r.status !== 'CANCELLED').length;
+    } catch (err) {
+      logger.error({ err, ruleId: rule.id, tenantId }, 'Automation: advanceDue failed');
+    }
+
+    // 2. New enrolments.
     let matches = [];
     try {
-      matches = await findMatches(rule); // eslint-disable-line no-await-in-loop
+      matches = await findMatches(rule, { limit: budget }); // eslint-disable-line no-await-in-loop
     } catch (err) {
       logger.error({ err, ruleId: rule.id, tenantId }, 'Automation: findMatches failed');
       continue;
     }
     for (const m of matches) {
       // Sequential on purpose — keeps us under WhatsApp send rate limits.
-      const run = await executeMatch(tenant, rule, m); // eslint-disable-line no-await-in-loop
-      if (run?.status === 'SENT') summary.sent += 1;
-      else if (run?.status === 'FAILED') summary.failed += 1;
-      else summary.skipped += 1;
+      const run = await sendTouch(tenant, rule, m, 0); // eslint-disable-line no-await-in-loop
+      tally(run?.status);
     }
     if (matches.length) logger.info({ tenantId, ruleId: rule.id, rule: rule.name, matches: matches.length }, '🤖 Automation rule evaluated');
   }
@@ -287,9 +388,16 @@ const runTick = async () => runWithSystemScope(async () => {
       return { tenantId, error: err.message };
     }));
   }
-  const totals = results.reduce((a, r) => ({ sent: a.sent + (r.sent || 0), failed: a.failed + (r.failed || 0), skipped: a.skipped + (r.skipped || 0) }), { sent: 0, failed: 0, skipped: 0 });
+  const totals = results.reduce((a, r) => ({
+    sent: a.sent + (r.sent || 0), failed: a.failed + (r.failed || 0), skipped: a.skipped + (r.skipped || 0), cancelled: a.cancelled + (r.cancelled || 0),
+  }), { sent: 0, failed: 0, skipped: 0, cancelled: 0 });
   if (tenants.length) logger.info({ tenants: tenants.length, ...totals }, '🤖 Automation tick finished');
   return { tenants: tenants.length, ...totals };
 });
 
-module.exports = { findMatches, runTenant, runTick, renderTemplate, baseLeadWhere, TICK_MINUTES };
+module.exports = {
+  findMatches, runTenant, runTick, renderTemplate, baseLeadWhere, TICK_MINUTES,
+  executeMatch, sendTouch, advanceDue, cancelSequencesForLead,
+  // pure — see automation.steps.js (unit tested without a DB)
+  normalizeSteps, validateSteps, planAfterTouch, cancelReasonFor, isChaseTrigger, CANCEL_REASONS, UNIT_MS,
+};

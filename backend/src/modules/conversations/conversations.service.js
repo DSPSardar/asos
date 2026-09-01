@@ -5,6 +5,7 @@ const masteryService = require('../../services/mastery.service');
 const whatsappService = require('../../services/whatsapp.service');
 const claudeService = require('../../services/claude.service');
 const metaService = require('../../services/meta.service');
+const automationService = require('../../services/automation.service');
 const logger = require('../../utils/logger');
 const redis = require('../../config/redis');
 const { publishInboundMessage } = require('../../queues/message.queue');
@@ -97,6 +98,13 @@ const sendMessage = async (tenantId, conversationId, userId, content) => {
     },
   });
 
+  // A human is talking to this lead now — a pending automation follow-up
+  // would land in the middle of the conversation. Stop it.
+  if (waMessageId) {
+    await prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date() } }).catch(() => {});
+    await automationService.cancelSequencesForLead(conv.leadId, 'agent_active');
+  }
+
   await prisma.activity.create({
     data: {
       tenantId,
@@ -135,6 +143,8 @@ const takeover = async (tenantId, conversationId, userId) => {
 
   // Clear the AI control flag — next handback will re-set it
   await redis.del(aiControlKey(conversationId)).catch(() => {});
+  // A human owns this thread now — stop any pending automation follow-ups.
+  await automationService.cancelSequencesForLead(conv.leadId, 'ineligible');
 
   await prisma.activity.create({
     data: {

@@ -41,6 +41,7 @@ const { requestContext, runWithSystemScope } = require('../middleware/requestCon
 const { tenantCurrency } = require('../utils/currency');
 const whatsappService = require('./whatsapp.service');
 const emailService = require('./email.service');
+const needsYou = require('./needsYou.select');
 
 // ── Tunables ─────────────────────────────────────────────────────────
 const TZ = 'Asia/Karachi';
@@ -52,14 +53,10 @@ const CALL_LIST_SIZE = 5;       // top hot leads to call today
 const CALL_LIST_ACTIVE_DAYS = 7; // "hot right now": spoke to us this recently
 const LIST_CAP = 10;            // max rows shown per list section
 const NEW_LEADS_WINDOW_MS = DAY_MS; // "since the last digest"
-const QUIET_HOURS = 48;         // we spoke last and they've gone quiet this long
-const LOOKBACK_DAYS = 14;       // follow-up scan horizon
-// Days in the current stage before a lead counts as stalled. CLOSED_* never
-// stall. Beyond STALL_MAX_DAYS a lead is cold, not at-risk — the 130-odd
-// legacy PROPOSED leads would otherwise sit in this section forever.
-const STALL_THRESHOLDS_DAYS = { NEW: 3, QUALIFYING: 10, DIAGNOSED: 7, PROPOSED: 7 };
-const STALL_MAX_DAYS = 30;
-const OPEN_STAGES = ['NEW', 'QUALIFYING', 'DIAGNOSED', 'PROPOSED'];
+// Quiet/stall thresholds, the follow-up split and stall detection live in
+// needsYou.select.js — the SAME code the Today's Queue page runs — so the
+// digest and the dashboard can never disagree about who needs a human.
+const { QUIET_HOURS, LOOKBACK_DAYS, STALL_THRESHOLDS_DAYS, STALL_MAX_DAYS, OPEN_STAGES } = needsYou;
 const LOCK_TTL_SECONDS = 48 * 60 * 60;
 
 // ── Time helpers (pure) ──────────────────────────────────────────────
@@ -136,23 +133,8 @@ const buildOpener = (lead) => {
 
 // ── Selection logic (pure) ───────────────────────────────────────────
 
-// One row per person. Duplicate lead rows for the same phone exist in real
-// data (manual entries, re-imports); the digest shouldn't list them twice.
-const contactKey = (lead) => String(lead?.contact?.phone || lead?.id || '');
-const dedupeByContact = (rows, keyOf = contactKey) => {
-  const seen = new Set();
-  return rows.filter((r) => {
-    const k = keyOf(r);
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-};
-
-const lastActivityAt = (lead) => {
-  const t = lead.conversations?.[0]?.lastMessageAt;
-  return t ? new Date(t).getTime() : 0;
-};
+// Shared with the Today's Queue page (needsYou.select.js).
+const { contactKey, dedupeByContact, lastActivityAt } = needsYou;
 
 // Today's call list: open HOT leads. Leads that talked to us in the last
 // CALL_LIST_ACTIVE_DAYS come first (highest score, then most recent), then
@@ -170,98 +152,13 @@ const selectCallList = (leads, { limit = CALL_LIST_SIZE, now = new Date(), activ
   return dedupeByContact([...active, ...rest]).slice(0, limit);
 };
 
-// Follow-up split. `convs` are conversation rows with { status, aiEnabled,
-// lastMessageAt, lead: { stage, aiScore, ... }, messages: [latest] }.
-//   awaiting — a human owes them a reply: payment proof waiting for
-//              verification, or the last message is THEIRS on a thread the
-//              AI is no longer answering (handoff / AI off).
-//   quiet    — WE spoke last and they've been silent QUIET_HOURS+, on an
-//              open (not won/lost) lead within the lookback.
-//
-// hotOnly (default true) restricts the QUIET half to HOT leads. DSP's real
-// numbers are why: every warm/cold lead that ever went quiet qualifies, which
-// rendered "gone quiet (239)" every single morning — a figure that never
-// moves is wallpaper, and the section stops being read. The awaiting half is
-// never filtered: a human waiting on a reply matters whatever their score.
-const splitFollowUps = (convs, now = new Date(), { quietHours = QUIET_HOURS, lookbackDays = LOOKBACK_DAYS, cap = LIST_CAP, hotOnly = true } = {}) => {
-  const lookback = now.getTime() - lookbackDays * DAY_MS;
-  const quietCutoff = now.getTime() - quietHours * HOUR_MS;
-  const awaiting = [];
-  const quiet = [];
-
-  for (const c of convs) {
-    const last = c.messages?.[0];
-    const lastAt = c.lastMessageAt ? new Date(c.lastMessageAt).getTime() : 0;
-    if (!lastAt || lastAt < lookback) continue;
-    const stage = c.lead?.stage;
-    if (stage === 'CLOSED_LOST') continue;
-
-    const aiOff = c.status === 'HUMAN_TAKEOVER' || c.aiEnabled === false;
-    if (c.status === 'PENDING_VERIFICATION' || (aiOff && last?.direction === 'INBOUND')) {
-      awaiting.push(c);
-      continue;
-    }
-    if (stage === 'CLOSED_WON' || c.status === 'CLOSED') continue;
-    if (hotOnly && c.lead?.scoreLabel !== 'HOT') continue;
-    if (last?.direction === 'OUTBOUND' && lastAt <= quietCutoff) quiet.push(c);
-  }
-
-  // Money first — freshest payment proof on top (that's live money; a
-  // week-old one is probably already handled elsewhere) — then everyone
-  // else, longest wait first.
-  const isPv = (c) => c.status === 'PENDING_VERIFICATION';
-  awaiting.sort((a, b) => {
-    if (isPv(a) !== isPv(b)) return isPv(a) ? -1 : 1;
-    return isPv(a)
-      ? new Date(b.lastMessageAt) - new Date(a.lastMessageAt)
-      : new Date(a.lastMessageAt) - new Date(b.lastMessageAt);
-  });
-  // Hottest first, then longest silence.
-  quiet.sort((a, b) => (b.lead?.aiScore || 0) - (a.lead?.aiScore || 0)
-    || new Date(a.lastMessageAt) - new Date(b.lastMessageAt));
-
-  const awaitingU = dedupeByContact(awaiting, (c) => contactKey(c.lead) || c.id);
-  const quietU = dedupeByContact(quiet, (c) => contactKey(c.lead) || c.id);
-  return {
-    awaiting: awaitingU.slice(0, cap), awaitingTotal: awaitingU.length,
-    quiet: quietU.slice(0, cap), quietTotal: quietU.length,
-  };
-};
-
-// Stalled = sitting in the current stage ≥ threshold days (and ≤ STALL_MAX_DAYS,
-// past which it's cold rather than at-risk). Stage entry time comes from the
-// newest lead_stage_history row for that lead; leads that predate the history
-// table fall back to updatedAt. A lead also has to have actually talked to
-// us within STALL_MAX_DAYS — a lead whose thread has been dead for a month
-// isn't "at risk", it's gone, and DSP has 600+ of those in PROPOSED.
-//
-// hotOnly (default true) for the same reason as the quiet queue: a stalled
-// count in the hundreds reads identically every morning and gets ignored. A
-// stalled HOT lead is a real, actionable miss.
-const findStalled = (leads, historyRows, now = new Date(), { thresholds = STALL_THRESHOLDS_DAYS, maxDays = STALL_MAX_DAYS, cap = LIST_CAP, hotOnly = true } = {}) => {
-  const enteredAt = new Map();
-  for (const h of historyRows) {
-    // historyRows are newest-first; first hit per lead wins.
-    if (!enteredAt.has(h.leadId)) enteredAt.set(h.leadId, h);
-  }
-  const activeSince = now.getTime() - maxDays * DAY_MS;
-  const out = [];
-  for (const lead of leads) {
-    const threshold = thresholds[lead.stage];
-    if (!threshold) continue;
-    if (hotOnly && lead.scoreLabel !== 'HOT') continue;
-    if (lastActivityAt(lead) < activeSince) continue;
-    const h = enteredAt.get(lead.id);
-    // A history row for a different stage than the lead is in means the
-    // latest transition wasn't recorded — fall back to updatedAt.
-    const since = h && h.toStage === lead.stage ? h.createdAt : lead.updatedAt;
-    const days = daysBetween(since, now);
-    if (days >= threshold && days <= maxDays) out.push({ lead, days, threshold });
-  }
-  out.sort((a, b) => (b.lead.aiScore || 0) - (a.lead.aiScore || 0) || b.days - a.days);
-  const unique = dedupeByContact(out, (x) => contactKey(x.lead));
-  return { items: unique.slice(0, cap), total: unique.length };
-};
+// Follow-up split and stall detection are the shared implementation in
+// needsYou.select.js. The digest keeps its historical defaults: HOT-only on
+// the quiet and stalled sections (a count in the hundreds "never moves and
+// becomes wallpaper"), capped at LIST_CAP rows. The awaiting half is never
+// filtered: a human waiting on a reply matters whatever their score.
+const splitFollowUps = (convs, now = new Date(), opts = {}) => needsYou.splitFollowUps(convs, now, { cap: LIST_CAP, ...opts });
+const findStalled = (leads, historyRows, now = new Date(), opts = {}) => needsYou.findStalled(leads, historyRows, now, { cap: LIST_CAP, ...opts });
 
 // Yesterday's wins — paid only. enrollmentFee > 0 is the won-means-paid rule.
 const summarizeWins = (wonLeads, currency) => {

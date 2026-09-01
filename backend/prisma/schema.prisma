@@ -835,9 +835,11 @@ model ManualPayment {
 // ─────────────────────────────────────────────
 
 enum AutomationRunStatus {
-  SENT
+  SENT       // every step of the rule delivered (single-step rules: the one send)
   FAILED
   SKIPPED
+  ACTIVE     // mid-sequence: at least one touch sent, the next is scheduled (nextDueAt)
+  CANCELLED  // sequence stopped early — see cancelReason (lead_replied, agent_active, ineligible)
 }
 
 model AutomationRule {
@@ -854,7 +856,11 @@ model AutomationRule {
   trigger     Json
   // { stage?: LeadStage | 'any' }  — optional extra filter on the lead
   condition   Json      @default("{}")
-  // { type: 'send_whatsapp', template: String }  — template supports {name}
+  // { type: 'send_whatsapp', template: String, waTemplate?, steps?: [...] }
+  // template supports {name}. A multi-touch sequence adds action.steps —
+  // [{ delay, unit, template, waTemplate? }] — step 0 fires on the trigger,
+  // later steps fire delay-after-the-previous-touch unless the lead replies.
+  // A rule without steps behaves exactly like a one-step sequence.
   action      Json
   tags        String[]  @default([])
 
@@ -876,6 +882,13 @@ model AutomationRun {
   status    AutomationRunStatus
   // Why it was skipped / failed (e.g. outside_24h_window, wa_send_failed)
   reason    String?
+  // ── Multi-touch sequences (services/automation.service.js) ──
+  // This row is the lead's ENROLMENT in the rule — the @@unique below is the
+  // once-per-lead-ever guard — so sequence progress lives here too.
+  step         Int       @default(1)  @map("step")            // touches sent so far
+  nextDueAt    DateTime? @map("next_due_at")                  // when the next touch is due (ACTIVE only)
+  lastTouchAt  DateTime? @map("last_touch_at")                // when the latest touch went out
+  cancelReason String?   @map("cancel_reason")                // lead_replied | agent_active | ineligible
   createdAt DateTime            @default(now()) @map("created_at")
 
   tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -884,5 +897,6 @@ model AutomationRun {
 
   @@unique([ruleId, leadId])
   @@index([tenantId, ruleId, createdAt])
+  @@index([status, nextDueAt])
   @@map("automation_runs")
 }

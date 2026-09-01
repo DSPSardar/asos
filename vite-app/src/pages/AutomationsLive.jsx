@@ -29,6 +29,14 @@ const relTime = (iso) => {
   return d === 1 ? '1 day ago' : `${d} days ago`;
 };
 
+const CANCEL_LABEL = { lead_replied: 'REPLIED', agent_active: 'HUMAN TOOK OVER', ineligible: 'STOPPED' };
+
+// Steps 2..N of a rule's sequence in editor shape. Step 1 lives in the main
+// message/template fields.
+const followUpTouches = (action) => (action?.steps || []).slice(1).map((st) => ({
+  delay: String(st.delay ?? 3), template: st.template || '', waName: st.waTemplate?.name || '',
+}));
+
 const REASON_LABEL = {
   outside_24h_window: 'Outside WhatsApp 24h window — needs an approved template',
   no_phone: 'Lead has no phone number',
@@ -223,6 +231,9 @@ function RuleCard({ rule, isAdmin, busy, isSelected, onSelect, onToggle }) {
             {rule.action?.waTemplate?.name && (
               <span className="text-[10px] font-mono bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 px-1.5 py-0.5 rounded" title="Approved Meta template used outside the 24h window">tpl: {rule.action.waTemplate.name}</span>
             )}
+            {(rule.action?.steps?.length || 0) > 1 && (
+              <span className="text-[10px] bg-sky-500/10 border border-sky-500/25 text-sky-300 px-1.5 py-0.5 rounded" title="Multi-touch sequence — cancels the moment the lead replies">{rule.action.steps.length} touches</span>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -230,7 +241,9 @@ function RuleCard({ rule, isAdmin, busy, isSelected, onSelect, onToggle }) {
               <span key={t} className={`text-[11px] px-2 py-0.5 rounded border font-medium ${TAG_COLORS[t] || 'bg-slate-700/50 border-slate-600/40 text-slate-400'}`}>{t}</span>
             ))}
             <span className="text-[11px] text-slate-500 ml-auto">
-              {s.sent ? `${s.sent} sent` : 'Nothing sent yet'}
+              {s.reached ?? s.sent ? `${s.reached ?? s.sent} reached` : 'Nothing sent yet'}
+              {s.active ? ` · ${s.active} in sequence` : ''}
+              {s.cancelled ? ` · ${s.cancelled} replied` : ''}
               {s.failed ? ` · ${s.failed} failed` : ''}
               {s.skipped ? ` · ${s.skipped} skipped` : ''}
               {' · Last: '}{relTime(s.lastRunAt)}
@@ -246,12 +259,17 @@ function RuleCard({ rule, isAdmin, busy, isSelected, onSelect, onToggle }) {
 function RuleDetail({ rule, isAdmin, onClose, onSaved, onDelete, onError }) {
   const [template, setTemplate] = useState(rule.action?.template || '');
   const [waName, setWaName]     = useState(rule.action?.waTemplate?.name || '');
+  // Follow-up touches (steps 2..N). Step 1 is the main message above; the
+  // API stores the whole sequence as action.steps with step 1 mirrored in.
+  const [touches, setTouches]   = useState(followUpTouches(rule.action));
   const [saving, setSaving]     = useState(false);
   const [runs, setRuns]         = useState(null);
   const [preview, setPreview]   = useState(null);
   const [previewing, setPreviewing] = useState(false);
-  const dirty = template !== (rule.action?.template || '') || waName.trim() !== (rule.action?.waTemplate?.name || '');
+  const touchesDirty = JSON.stringify(touches) !== JSON.stringify(followUpTouches(rule.action));
+  const dirty = template !== (rule.action?.template || '') || waName.trim() !== (rule.action?.waTemplate?.name || '') || touchesDirty;
   const waNameOk = waName.trim() === '' || /^[a-z0-9_]+$/.test(waName.trim());
+  const touchesOk = touches.every((t) => Number(t.delay) > 0 && t.template.trim().length >= 5 && /^[a-z0-9_]+$/.test(t.waName.trim()));
 
   useEffect(() => {
     automationsAPI.runs(rule.id, 30).then((r) => setRuns(unwrap(r) || [])).catch(() => setRuns([]));
@@ -261,7 +279,10 @@ function RuleDetail({ rule, isAdmin, onClose, onSaved, onDelete, onError }) {
     setSaving(true);
     try {
       const waTemplate = waName.trim() ? { name: waName.trim(), language: 'en', bodyParams: ['{name}'] } : null;
-      onSaved(unwrap(await automationsAPI.update(rule.id, { action: { type: 'send_whatsapp', template, waTemplate } })));
+      const steps = touches.length
+        ? [{ delay: 0, unit: 'days', template, waTemplate }, ...touches.map((t) => ({ delay: Number(t.delay), unit: 'days', template: t.template, waTemplate: { name: t.waName.trim(), language: 'en', bodyParams: ['{name}'] } }))]
+        : undefined;
+      onSaved(unwrap(await automationsAPI.update(rule.id, { action: { type: 'send_whatsapp', template, waTemplate, ...(steps ? { steps } : {}) } })));
     } catch (e) { onError(errMsg(e)); } finally { setSaving(false); }
   };
 
@@ -320,9 +341,44 @@ function RuleDetail({ rule, isAdmin, onClose, onSaved, onDelete, onError }) {
           </div>
         </div>
 
+        <div className="mt-4 border-t border-indigo-500/15 pt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[11px] font-bold text-sky-400/90 uppercase tracking-wider">Follow-up touches</label>
+            {isAdmin && touches.length < 4 && (
+              <button onClick={() => setTouches((t) => [...t, { delay: t.length ? 4 : 3, template: '', waName: waName.trim() }])} className="text-[11px] text-sky-300 hover:text-sky-200 underline underline-offset-2">+ Add touch</button>
+            )}
+          </div>
+          {touches.length === 0 ? (
+            <div className="text-[11px] text-slate-500 italic">One message only. Add a touch to turn this into a sequence: touch 2 after N days, touch 3 after N more — it stops the moment the lead replies, a human messages them, or they pay.</div>
+          ) : (
+            <div className="space-y-2">
+              {touches.map((t, i) => (
+                <div key={i} className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-2.5">
+                  <div className="flex items-center gap-2 mb-1.5 text-[11px]">
+                    <span className="font-semibold text-slate-200">Touch {i + 2}</span>
+                    <span className="text-slate-500">after</span>
+                    <input type="number" min={1} max={60} value={t.delay} disabled={!isAdmin}
+                      onChange={(e) => setTouches((ts) => ts.map((x, j) => (j === i ? { ...x, delay: e.target.value } : x)))}
+                      className="w-14 bg-slate-900/60 border border-slate-700/60 rounded px-1.5 py-0.5 text-xs text-slate-100 focus:outline-none focus:border-sky-500/60" />
+                    <span className="text-slate-500">days of silence</span>
+                    {isAdmin && <button onClick={() => setTouches((ts) => ts.filter((_, j) => j !== i))} className="ml-auto text-slate-500 hover:text-rose-300">remove</button>}
+                  </div>
+                  <textarea rows={3} value={t.template} disabled={!isAdmin} placeholder="New angle — not the same message again"
+                    onChange={(e) => setTouches((ts) => ts.map((x, j) => (j === i ? { ...x, template: e.target.value } : x)))}
+                    className="w-full bg-slate-900/60 border border-slate-700/60 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-sky-500/60 disabled:opacity-70" />
+                  <input value={t.waName} disabled={!isAdmin} placeholder="approved Meta template name (required)"
+                    onChange={(e) => setTouches((ts) => ts.map((x, j) => (j === i ? { ...x, waName: e.target.value } : x)))}
+                    className={`mt-1.5 w-full bg-slate-900/60 border rounded-lg px-2.5 py-1 text-xs font-mono text-slate-100 placeholder-slate-600 focus:outline-none ${/^[a-z0-9_]+$/.test(t.waName.trim()) ? 'border-slate-700/60 focus:border-sky-500/60' : 'border-rose-500/60'}`} />
+                </div>
+              ))}
+              <div className="text-[11px] text-slate-500 italic">Every follow-up lands days after we last spoke — always outside Meta's 24h window — so each one needs an approved template or it can never deliver.</div>
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center justify-end mt-2">
           {isAdmin && dirty && (
-            <button onClick={save} disabled={saving || template.trim().length < 5 || !waNameOk} className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-semibold rounded-md">
+            <button onClick={save} disabled={saving || template.trim().length < 5 || !waNameOk || !touchesOk} className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-semibold rounded-md">
               {saving ? 'Saving…' : 'Save'}
             </button>
           )}
@@ -331,9 +387,12 @@ function RuleDetail({ rule, isAdmin, onClose, onSaved, onDelete, onError }) {
 
       <div className="grid grid-cols-3 gap-2 mb-4">
         {[
-          { label: 'Sent', value: s.sent || 0 },
+          { label: 'Reached', value: s.reached ?? s.sent ?? 0 },
+          { label: 'In sequence', value: s.active || 0 },
+          { label: 'Replied (stopped)', value: s.cancelled || 0 },
           { label: 'Failed', value: s.failed || 0 },
           { label: 'Skipped', value: s.skipped || 0 },
+          { label: 'Done', value: s.sent || 0 },
         ].map((k) => (
           <div key={k.label} className="bg-slate-800/40 border border-slate-700/40 rounded-lg p-2.5">
             <div className="text-sm font-bold text-slate-100">{k.value}</div>
@@ -382,8 +441,10 @@ function RuleDetail({ rule, isAdmin, onClose, onSaved, onDelete, onError }) {
                 </div>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded border flex-shrink-0 ${
                   r.status === 'SENT' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : r.status === 'ACTIVE' ? 'bg-sky-500/10 border-sky-500/30 text-sky-300'
+                  : r.status === 'CANCELLED' ? 'bg-slate-700/40 border-slate-600/40 text-slate-400'
                   : r.status === 'FAILED' ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                  : 'bg-amber-500/10 border-amber-500/30 text-amber-400'}`}>{r.status}</span>
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-400'}`}>{r.status === 'ACTIVE' ? `TOUCH ${r.step}` : r.status === 'CANCELLED' ? (CANCEL_LABEL[r.cancelReason] || 'STOPPED') : r.status}</span>
               </li>
             ))}
           </ul>

@@ -36,6 +36,7 @@ const adminRoutes        = require('./modules/admin/admin.routes');
 const contentStudioRoutes = require('./modules/content-studio/content-studio.routes');
 const reportsRoutes = require('./modules/reports/reports.routes');
 const automationsRoutes = require('./modules/automations/automations.routes');
+const todayRoutes = require('./modules/today/today.routes');
 const webhookRoutes      = require('./webhooks/webhook.routes');
 const twilioVoiceWebhook = require('./webhooks/twilio.webhook');
 // Dev-only routes: inject fake inbound WhatsApp messages into any tenant's
@@ -260,6 +261,7 @@ const createApp = () => {
   app.use(`${v1}/content-studio`, contentStudioRoutes);
   app.use(`${v1}/reports`,        reportsRoutes);
   app.use(`${v1}/automations`,    automationsRoutes);
+  app.use(`${v1}/today`,          todayRoutes);
   if (devRoutes) {
     app.use(`${v1}/dev`,          devRoutes);
     logger.warn('[MOCK MODE] Dev routes mounted at /api/v1/dev — WHATSAPP_MOCK=true');

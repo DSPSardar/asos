@@ -22,7 +22,7 @@ vi.mock('@pages/Layout', () => ({
 const DASHBOARD_PATHS = [
   '/dashboard', '/leads', '/conversations', '/ai-insights', '/ads',
   '/analytics', '/settings', '/billing', '/onboarding', '/students',
-  '/dsp-reports', '/automations', '/admin',
+  '/dsp-reports', '/automations', '/today', '/admin',
 ];
 
 // Reports the location AFTER any redirect chain has settled. Without this,
