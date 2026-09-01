@@ -384,6 +384,18 @@ test('whatsapp params: seven strings, no newlines, top action truncated', () => 
   assert.match(wa, /Full list is in your inbox/);
 });
 
+// ── Recipients ───────────────────────────────────────────────────────
+
+test('email recipient precedence: digestEmail wins over alertEmail, matching the weekly digest', () => {
+  // Regression guard: the daily digest originally preferred alertEmail, which
+  // on DSP resolved to an address the mail provider rejected (403) while the
+  // nominated digestEmail inbox sat unused — a failure that would only have
+  // surfaced as a warn line at 09:00.
+  assert.equal(d.pickEmailRecipient({ digestEmail: 'digest@x.com', alertEmail: 'alerts@x.com' }), 'digest@x.com');
+  assert.equal(d.pickEmailRecipient({ alertEmail: 'alerts@x.com' }), 'alerts@x.com');
+  assert.equal(d.pickEmailRecipient({}), null);
+});
+
 // ── Gating ───────────────────────────────────────────────────────────
 
 test('gate: both daily channels off (or missing) → not eligible; whatsapp needs adminPhone', () => {

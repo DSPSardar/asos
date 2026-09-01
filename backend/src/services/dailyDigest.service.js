@@ -22,8 +22,11 @@
 //
 // Tenant settings used (tenant.settings JSON):
 //   notifPrefs.daily   — { email: bool, whatsapp: bool }. Both off → skipped.
-//   alertEmail         — preferred email recipient; falls back to digestEmail,
-//                        then every active TENANT_ADMIN on the account.
+//   digestEmail        — preferred email recipient, same precedence the weekly
+//                        digest uses: a tenant that nominated a digest inbox
+//                        means it for digests. Falls back to alertEmail (the
+//                        real-time alert address), then every active
+//                        TENANT_ADMIN on the account.
 //   adminPhone         — WhatsApp recipient (digits only).
 //   dailyDigest.waTemplate — optional { name, language } of an approved Meta
 //                        template; without it the WhatsApp copy is a free-form
@@ -573,10 +576,18 @@ const dailyPrefs = (tenant) => {
   return { email: p.email === true, whatsapp: p.whatsapp === true };
 };
 
+// Precedence deliberately matches digest.service (the weekly digest):
+// digestEmail is the address a tenant nominated FOR DIGESTS, so it wins over
+// alertEmail, which exists for real-time hot-lead/handoff alerts. Getting
+// this backwards sent DSP's digest to an address its own mail provider
+// refused while the nominated digest inbox sat unused.
+// Pure half, so the precedence is unit-testable without a DB.
+const pickEmailRecipient = (settings = {}) => settings.digestEmail || settings.alertEmail || null;
+
 const emailRecipients = async (tenant) => {
   const s = tenant.settings || {};
-  if (s.alertEmail) return [s.alertEmail];
-  if (s.digestEmail) return [s.digestEmail];
+  const nominated = pickEmailRecipient(s);
+  if (nominated) return [nominated];
   const admins = await prisma.user.findMany({
     where: { tenantId: tenant.id, isActive: true, role: 'TENANT_ADMIN' },
     select: { email: true },
@@ -726,7 +737,7 @@ module.exports = {
   // pure — unit tested
   pktDayKey, pktDayBounds, selectCallList, dedupeByContact, buildOpener, splitFollowUps, findStalled,
   summarizeWins, rankActions, isEmptyDigest, buildSections, buildDigest, renderText,
-  renderWhatsAppText, waParams, dailyPrefs, isEligible, problemLine,
+  renderWhatsAppText, waParams, dailyPrefs, isEligible, problemLine, pickEmailRecipient,
   STALL_THRESHOLDS_DAYS, STALL_MAX_DAYS, QUIET_HOURS, CALL_LIST_SIZE, CALL_LIST_ACTIVE_DAYS, LIST_CAP,
   // IO
   collectSections, sendDailyDigest, runDailyDigestForAllTenants,
