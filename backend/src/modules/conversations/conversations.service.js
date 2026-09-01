@@ -328,10 +328,10 @@ const getSummary = async (tenantId, conversationId) => {
   const [messages, aiConfig] = await Promise.all([
     prisma.message.findMany({
       where: { conversationId, tenantId },
-      orderBy: { sentAt: 'asc' },
+      orderBy: { sentAt: 'desc' },
       take: 30,
       select: { sender: true, content: true },
-    }),
+    }).then((r) => r.reverse()),
     prisma.aiConfig.findUnique({ where: { tenantId }, select: { paymentDetails: true } }),
   ]);
 
@@ -348,12 +348,12 @@ const getSuggestedReply = async (tenantId, conversationId) => {
     include: { lead: true, contact: true },
   });
   if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404, expose: true });
-  const messages = await prisma.message.findMany({
+  const messages = (await prisma.message.findMany({
     where: { tenantId, conversationId },
-    orderBy: { sentAt: 'asc' },
+    orderBy: { sentAt: 'desc' },
     take: 20,
     select: { sender: true, content: true },
-  });
+  })).reverse();
   const aiConfig = await prisma.aiConfig.findUnique({ where: { tenantId } });
   // Bank details must not reach the LLM — see utils/aiHistory.js.
   const history = sanitizeHistoryForAI(messages, aiConfig?.paymentDetails);
