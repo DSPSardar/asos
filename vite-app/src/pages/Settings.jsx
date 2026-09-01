@@ -1324,6 +1324,8 @@ function InviteModal({ onClose, onInvite }) {
 // ─────────────────────────────────────────────────────────────
 function NotificationsTab() {
   const [adminPhone, setAdminPhone] = useState('');
+  const [alertEmail, setAlertEmail] = useState('');
+  const [quietHours, setQuietHours] = useState({ enabled: false, start: '23:00', end: '08:00', tz: 'Asia/Karachi' });
   const [browserPerm, setBrowserPerm] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
   );
@@ -1342,6 +1344,8 @@ function NotificationsTab() {
     settingsAPI.get().then((res) => {
       const s = res.data?.data?.settings || res.data?.settings || {};
       if (s.adminPhone) setAdminPhone(s.adminPhone);
+      if (s.alertEmail) setAlertEmail(s.alertEmail);
+      if (s.quietHours) setQuietHours((prev) => ({ ...prev, ...s.quietHours }));
       if (s.notifPrefs) {
         setPrefs((prev) => {
           const merged = { ...prev };
@@ -1380,7 +1384,7 @@ function NotificationsTab() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await settingsAPI.update({ settings: { adminPhone, notifPrefs: prefs } });
+      await settingsAPI.update({ settings: { adminPhone, alertEmail, quietHours, notifPrefs: prefs } });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -1407,6 +1411,52 @@ function NotificationsTab() {
             className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
           />
           <p className="text-[11px] text-slate-600">No + or spaces — digits only. Must be on WhatsApp.</p>
+        </div>
+        <div className="mt-4 flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-slate-400">Fallback email (optional)</label>
+          <input
+            type="email"
+            value={alertEmail}
+            onChange={(e) => setAlertEmail(e.target.value)}
+            placeholder="you@company.com"
+            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+          />
+          <p className="text-[11px] text-slate-600">
+            Hot-lead and handoff alerts are emailed here whenever the WhatsApp copy can't be delivered
+            (quiet hours, or your number's 24-hour messaging window is closed).
+          </p>
+        </div>
+      </Section>
+
+      {/* Quiet hours */}
+      <Section
+        title="Quiet Hours"
+        description="Pause non-urgent WhatsApp alerts during a daily window. Handoff alerts always come through, and suppressed alerts still reach your fallback email."
+      >
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Checkbox on={quietHours.enabled} onChange={() => setQuietHours((q) => ({ ...q, enabled: !q.enabled }))} />
+            <span className="text-sm text-slate-300">Enable quiet hours</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">From</label>
+            <input
+              type="time"
+              value={quietHours.start}
+              onChange={(e) => setQuietHours((q) => ({ ...q, start: e.target.value }))}
+              disabled={!quietHours.enabled}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 disabled:opacity-40 focus:border-accent focus:outline-none"
+            />
+            <label className="text-xs text-slate-500">to</label>
+            <input
+              type="time"
+              value={quietHours.end}
+              onChange={(e) => setQuietHours((q) => ({ ...q, end: e.target.value }))}
+              disabled={!quietHours.enabled}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 disabled:opacity-40 focus:border-accent focus:outline-none"
+            />
+            <span className="text-[11px] text-slate-600">Pakistan time (PKT)</span>
+          </div>
         </div>
       </Section>
 

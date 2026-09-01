@@ -874,11 +874,18 @@ const handleInboundMessage = async (job) => {
       },
     });
 
-    // Notify admin of HOT lead
+    // Notify admin of HOT lead — a briefing pack, not just a ping: the
+    // Qualifier already produced the summary/next-step on this same call, so
+    // enriching the alert costs zero extra AI tokens. The deep link lands on
+    // /conversations?id=<id> (see vite-app Conversations.jsx).
     notificationService.notifyAdmin(tenant, 'hotLead', {
       contactName: contact.name,
       phone: normalizedPhone,
       score: aiResult.score,
+      problemSummary: aiResult.problemSummary,
+      nextAction: aiResult.nextAction,
+      urgencyTrigger: aiResult.urgencyTrigger,
+      conversationUrl: `${env.APP_URL}/conversations?id=${conversation.id}`,
     });
   }
 

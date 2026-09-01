@@ -126,6 +126,9 @@ export default function Conversations() {
   const knownThreadsRef = useRef(null);
   // Cache notifPrefs so we don't fetch settings on every poll
   const notifPrefsRef   = useRef(null);
+  // Deep link from a hot-lead alert: /conversations?id=<conversationId>.
+  // Consumed at most once — after that, polling keeps the user's own selection.
+  const deepLinkRef     = useRef(new URLSearchParams(window.location.search).get('id'));
 
   // Load notifPrefs once from backend (non-blocking)
   useEffect(() => {
@@ -166,8 +169,16 @@ export default function Conversations() {
 
       knownThreadsRef.current = mapped;
       setThreads(mapped);
-      // Auto-select first on initial load
-      setActiveId((prev) => prev || (mapped[0]?.id ?? null));
+      // Deep link wins once (e.g. arriving from the hot-lead WhatsApp alert);
+      // otherwise auto-select first on initial load.
+      const wanted = deepLinkRef.current;
+      if (wanted && mapped.some((t) => t.id === wanted)) {
+        deepLinkRef.current = null;
+        setActiveId(wanted);
+        setMobileView('detail');
+      } else {
+        setActiveId((prev) => prev || (mapped[0]?.id ?? null));
+      }
     } catch (e) {
       console.error('[Conversations] list error', e);
     } finally {
