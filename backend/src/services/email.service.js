@@ -131,6 +131,91 @@ const sendDigestEmail = async ({ to, brandName, bullets = [], dashboardUrl }) =>
   return { id: payload.id };
 };
 
+// ── Daily digest (services/dailyDigest.service.js) ───────────────────
+// Renders the channel-neutral digest structure: sections of lines (each
+// optionally linking to its conversation) plus the ranked actions.
+
+const buildDailyDigestHtml = ({ digest }) => {
+  const section = (sec) => {
+    const items = sec.lines.map((l) => {
+      const body = escapeHtml(l.text).replaceAll('\n', '<br>');
+      const link = l.url ? ` <a href="${escapeHtml(l.url)}" style="color:#a5b4fc;text-decoration:none;font-size:13px">open ↗</a>` : '';
+      return `<li style="margin:0 0 10px;line-height:1.6">${body}${link}</li>`;
+    }).join('');
+    const note = sec.note ? `<p style="font-size:13px;color:#64748b;margin:${items ? '4px' : '0'} 0 0">${escapeHtml(sec.note)}</p>` : '';
+    return `
+      <h2 style="font-size:15px;letter-spacing:.02em;text-transform:uppercase;color:#94a3b8;margin:26px 0 10px">${escapeHtml(sec.title)}</h2>
+      ${items ? `<ul style="font-size:15px;color:#cbd5e1;padding-left:20px;margin:0">${items}</ul>` : ''}
+      ${note}`;
+  };
+
+  const body = digest.empty
+    ? '<p style="font-size:16px;line-height:1.7;color:#cbd5e1;margin:0">Nothing needs you today — no new leads, no open hot leads, nobody waiting on a reply, nothing stalled.</p>'
+    : `
+      <div style="background:#111c33;border:1px solid #33416a;border-radius:14px;padding:18px 20px;margin:0 0 6px">
+        <div style="font-size:13px;letter-spacing:.02em;text-transform:uppercase;color:#a5b4fc;margin-bottom:10px">Today's 3 highest-value actions</div>
+        <ol style="font-size:15px;color:#e2e8f0;padding-left:20px;margin:0">${digest.actions.map((a) => `<li style="margin:0 0 8px;line-height:1.6">${escapeHtml(a)}</li>`).join('')}</ol>
+      </div>
+      ${digest.sections.map(section).join('')}`;
+
+  return `
+    <!doctype html>
+    <html lang="en">
+      <body style="margin:0;background:#030712;font-family:Arial,sans-serif;color:#e2e8f0">
+        <div style="max-width:640px;margin:0 auto;padding:40px 20px">
+          <div style="background:#0f172a;border:1px solid #273449;border-radius:20px;padding:32px">
+            <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">ASOS</div>
+            <div style="font-size:13px;color:#64748b;margin-bottom:24px">${escapeHtml(digest.brand)} — ${escapeHtml(digest.dayLabel)}</div>
+            <h1 style="font-size:24px;line-height:1.3;color:#fff;margin:0 0 20px">${digest.empty ? 'Nothing needs you today' : 'Your daily digest'}</h1>
+            ${body}
+            <a href="${escapeHtml(digest.dashboardUrl)}" style="display:inline-block;margin-top:28px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:10px">
+              Open the dashboard
+            </a>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+};
+
+// One daily digest per recipient per PKT day (`day` comes from the caller so
+// the key follows the tenant's day, not the server's UTC date). A manual
+// "send now" buckets to the minute instead, so an owner who asks for a
+// re-send after the cron actually gets one. The key prefix is distinct from
+// the weekly digest's so Monday's two digests never dedupe each other.
+const sendDailyDigestEmail = async ({ to, digest, text, day, manual = false }) => {
+  if (!isDigestEmailConfigured()) {
+    throw new Error('Digest email is not configured (RESEND_API_KEY / EMAIL_FROM)');
+  }
+
+  const bucket = manual ? `manual-${new Date().toISOString().slice(0, 16)}` : day;
+  const idempotencyKey = `daily-digest-${crypto.createHash('sha256').update(`${to}-${bucket}`).digest('hex')}`;
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: JSON.stringify({
+      from: `ASOS <${env.EMAIL_FROM}>`,
+      to: [to],
+      subject: digest.subject,
+      html: buildDailyDigestHtml({ digest }),
+      text,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.id) {
+    throw new Error(`Resend rejected daily digest email (${response.status})`);
+  }
+
+  return { id: payload.id };
+};
+
 // Same Resend credentials again — see isDigestEmailConfigured for why the
 // checks are named per purpose instead of shared.
 const isAlertEmailConfigured = () => Boolean(env.RESEND_API_KEY && env.EMAIL_FROM);
@@ -200,5 +285,6 @@ const sendAlertEmail = async ({ to, brandName, subject, lines = [], ctaUrl = nul
 module.exports = {
   isPasswordResetEmailConfigured, sendPasswordResetEmail,
   isDigestEmailConfigured, sendDigestEmail,
+  sendDailyDigestEmail, buildDailyDigestHtml,
   isAlertEmailConfigured, sendAlertEmail,
 };

@@ -634,10 +634,14 @@ const syncFromDsp = async (tenantId, requestingUserId, { dryRun = false } = {}) 
   };
 };
 
+// Manual "send my digest now" (POST /leads/digest/send). Was a stub that
+// counted agents and sent nothing; it now runs the real 09:00 daily digest
+// for this tenant on demand. force: skips the notifPrefs gate and the
+// once-a-day lock — the admin asked for it explicitly — but still needs a
+// recipient (alertEmail / digestEmail / admin user / adminPhone).
 const sendDailyHotLeadDigest = async (tenantId) => {
-  const hot = await getHotLeads(tenantId, 20);
-  const agents = await prisma.user.findMany({ where: { tenantId, isActive: true, role: { in: ['AGENT', 'TENANT_ADMIN'] } } });
-  return { sentTo: agents.length, hotLeads: hot.length };
+  const dailyDigestService = require('../../services/dailyDigest.service');
+  return dailyDigestService.sendDailyDigest(tenantId, { force: true });
 };
 
 // ── Delete a lead and all its related data ────────────────────────────

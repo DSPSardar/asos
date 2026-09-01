@@ -100,6 +100,28 @@ const registerWeeklyDigest = async () => {
   });
 };
 
+// Daily 09:00 Asia/Karachi owner digest (services/dailyDigest.service.js).
+// Same idempotent register-on-boot pattern as the weekly digest above.
+const DAILY_DIGEST_PATTERN = '0 9 * * *';
+const DAILY_DIGEST_TZ = 'Asia/Karachi';
+
+const registerDailyDigest = async () => {
+  const existing = await schedulerQueue.getRepeatableJobs();
+  await Promise.all(
+    existing
+      .filter((j) => j.name === 'daily-digest'
+        && (j.pattern !== DAILY_DIGEST_PATTERN || j.tz !== DAILY_DIGEST_TZ))
+      .map((j) => schedulerQueue.removeRepeatableByKey(j.key))
+  );
+
+  return schedulerQueue.add('daily-digest', {}, {
+    repeat: { pattern: DAILY_DIGEST_PATTERN, tz: DAILY_DIGEST_TZ },
+    jobId: 'daily-digest',
+    removeOnComplete: 30,
+    removeOnFail: 30,
+  });
+};
+
 // Automation engine tick (services/automation.service.js). Same idempotent
 // register-on-boot pattern as the digest; changing the interval here takes
 // effect on the next worker boot because stale schedules are cleared first.
@@ -151,6 +173,7 @@ module.exports = {
   publishMetaEvent,
   scheduleFollowUp,
   registerWeeklyDigest,
+  registerDailyDigest,
   registerAutomationTick,
   registerSheetsSyncTick,
   QUEUE_NAMES: { MESSAGE_QUEUE, META_EVENTS_QUEUE, SCHEDULER_QUEUE },

@@ -24,7 +24,7 @@ const { toDbMessageType } = require('../utils/messageType');
 const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
-const { publishStatusUpdate, registerWeeklyDigest, registerAutomationTick, registerSheetsSyncTick } = require('../queues/message.queue');
+const { publishStatusUpdate, registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
 const { ENROLMENT_FEE_PKR } = require('../config/constants');
@@ -1364,6 +1364,7 @@ setTimeout(() => {
 // concurrency 1: these are low-volume, time-based jobs; serialising them
 // keeps the weekly fan-out from contending with the message worker.
 const digestService = require('../services/digest.service');
+const dailyDigestService = require('../services/dailyDigest.service');
 const automationService = require('../services/automation.service');
 const sheetsSyncService = require('../services/sheetsSync.service');
 
@@ -1373,6 +1374,7 @@ const schedulerWorker = new Worker(
     { requestId: job.id, tenantId: job.data?.tenantId || '' },
     () => {
       if (job.name === 'weekly-digest') return digestService.runWeeklyDigestForAllTenants();
+      if (job.name === 'daily-digest') return dailyDigestService.runDailyDigestForAllTenants();
       if (job.name === 'automation-tick') return automationService.runTick();
       if (job.name === 'sheets-sync-tick') return sheetsSyncService.syncAllTenants();
       if (job.name === 'sheets-sync') return sheetsSyncService.syncTenant(job.data?.tenantId);
@@ -1394,6 +1396,10 @@ schedulerWorker.on('failed', (job, err) => {
 registerWeeklyDigest()
   .then(() => logger.info('🗓  Weekly digest scheduled — Mondays 09:00 Asia/Karachi'))
   .catch((err) => logger.warn({ err }, 'Could not register weekly digest schedule'));
+
+registerDailyDigest()
+  .then(() => logger.info('☀️  Daily digest scheduled — 09:00 Asia/Karachi'))
+  .catch((err) => logger.warn({ err }, 'Could not register daily digest schedule'));
 
 registerAutomationTick()
   .then(() => logger.info(`🤖 Automation tick scheduled — every ${automationService.TICK_MINUTES} min`))

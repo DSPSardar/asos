@@ -1335,8 +1335,10 @@ function NotificationsTab() {
     newLead:    { whatsapp: false, browser: false },
     hotLead:    { whatsapp: true,  browser: true  },
     needsHuman: { whatsapp: true,  browser: true  },
-    daily:      { whatsapp: false, browser: false },
-    weekly:     { whatsapp: false, browser: false },
+    // Digests carry an email channel: email is the copy that holds the full
+    // list; the WhatsApp copy is a short pointer (Meta's 24h window rules).
+    daily:      { whatsapp: false, browser: false, email: false },
+    weekly:     { whatsapp: false, browser: false, email: false },
   });
 
   // Load saved prefs from backend on mount
@@ -1362,8 +1364,8 @@ function NotificationsTab() {
     { key:'newLead',    label:'New lead',      desc:'Fires when a new contact starts a conversation.' },
     { key:'hotLead',    label:'Hot lead',      desc:'Fires when AI scores a lead as HOT (score ≥ 8).' },
     { key:'needsHuman', label:'Needs human',   desc:'Fires when AI escalates to a human agent.' },
-    { key:'daily',      label:'Daily digest',  desc:'9 AM PKT summary: new leads, conversion rate, AI cost.' },
-    { key:'weekly',     label:'Weekly report', desc:'Monday 9 AM: pipeline change, won/lost, AI performance.' },
+    { key:'daily',      label:'Daily digest',  desc:'9 AM PKT briefing: new leads, today\'s call list with openers, follow-up queue, stalled leads, yesterday\'s wins.', email: true },
+    { key:'weekly',     label:'Weekly report', desc:'Monday 9 AM: pipeline change, won/lost, AI performance.', email: true },
   ];
 
   const flip = (key, channel) =>
@@ -1423,7 +1425,8 @@ function NotificationsTab() {
           />
           <p className="text-[11px] text-slate-600">
             Hot-lead and handoff alerts are emailed here whenever the WhatsApp copy can't be delivered
-            (quiet hours, or your number's 24-hour messaging window is closed).
+            (quiet hours, or your number's 24-hour messaging window is closed). The daily digest is
+            emailed here too when its Email channel is on.
           </p>
         </div>
       </Section>
@@ -1518,6 +1521,12 @@ function NotificationsTab() {
                   <Checkbox on={prefs[it.key].browser} onChange={() => flip(it.key, 'browser')} />
                   <span className="text-xs text-slate-300">Browser</span>
                 </div>
+                {it.email && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox on={!!prefs[it.key].email} onChange={() => flip(it.key, 'email')} />
+                    <span className="text-xs text-slate-300">Email</span>
+                  </div>
+                )}
               </div>
             </li>
           ))}
@@ -1531,6 +1540,7 @@ function NotificationsTab() {
                 <th className="px-4 py-2 font-semibold">Event</th>
                 <th className="w-28 px-4 py-2 text-center font-semibold">WhatsApp</th>
                 <th className="w-28 px-4 py-2 text-center font-semibold">Browser</th>
+                <th className="w-28 px-4 py-2 text-center font-semibold">Email</th>
               </tr>
             </thead>
             <tbody>
@@ -1545,6 +1555,11 @@ function NotificationsTab() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <Checkbox on={prefs[it.key].browser} onChange={() => flip(it.key, 'browser')} />
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {it.email
+                      ? <Checkbox on={!!prefs[it.key].email} onChange={() => flip(it.key, 'email')} />
+                      : <span className="text-xs text-slate-600">—</span>}
                   </td>
                 </tr>
               ))}
