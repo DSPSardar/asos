@@ -14,6 +14,9 @@
 //   - MAX_SENDS_PER_RULE_PER_TICK caps blast size; leftovers go next tick
 //   - conversations in HUMAN_TAKEOVER / PENDING_VERIFICATION / aiEnabled=false
 //     and CLOSED_LOST leads are never touched
+//   - CLOSED_WON leads are never CHASED (no_reply / no_activity); lifecycle
+//     triggers still reach them, so enrolled students keep getting welcome,
+//     certificate and Mastery nudges
 //   - Meta only delivers free-form text inside the 24h customer-service
 //     window. Outside it we record SKIPPED(outside_24h_window) instead of
 //     burning a send that Meta will reject with error 131047.
@@ -56,8 +59,16 @@ const conversationFacts = async (conversationId) => {
 };
 
 // Common lead filter shared by every trigger type.
-const baseLeadWhere = (rule) => {
-  const where = { tenantId: rule.tenantId, stage: { not: 'CLOSED_LOST' } };
+//
+// excludeWon: chase triggers (no_reply / no_activity) must never nudge someone
+// who has already bought — a paid student asked "aap ne course ke baare mein
+// pucha tha, koi sawaal hai?" reads as a bot that doesn't know they enrolled.
+// Lifecycle triggers (stage_entered / dsp_phase_changed / mastery_event) are
+// SUPPOSED to reach enrolled students, so they leave this off. An explicit
+// condition.stage still wins over both defaults.
+const baseLeadWhere = (rule, { excludeWon = false } = {}) => {
+  const skipStages = excludeWon ? ['CLOSED_LOST', 'CLOSED_WON'] : ['CLOSED_LOST'];
+  const where = { tenantId: rule.tenantId, stage: { notIn: skipStages } };
   const condStage = rule.condition?.stage;
   if (condStage && condStage !== 'any') where.stage = condStage;
   // Never re-fire on a lead this rule already touched.
@@ -117,7 +128,7 @@ const findMatches = async (rule, { limit = MAX_SENDS_PER_RULE_PER_TICK, ignoreEn
     // message was OURS (the lead left us on read).
     const leads = await prisma.lead.findMany({
       where: {
-        ...baseLeadWhere(rule),
+        ...baseLeadWhere(rule, { excludeWon: true }),
         conversations: { some: {
           aiEnabled: true, status: { notIn: [...UNTOUCHABLE_CONV, 'CLOSED'] },
           lastMessageAt: { gte: floor, lte: cutoff },
@@ -281,4 +292,4 @@ const runTick = async () => runWithSystemScope(async () => {
   return { tenants: tenants.length, ...totals };
 });
 
-module.exports = { findMatches, runTenant, runTick, renderTemplate, TICK_MINUTES };
+module.exports = { findMatches, runTenant, runTick, renderTemplate, baseLeadWhere, TICK_MINUTES };
