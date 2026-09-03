@@ -73,7 +73,6 @@ const envSchema = z.object({
   // (plain text replies only) unless both are set.
   ELEVENLABS_API_KEY:      z.string().optional(),
   ELEVENLABS_VOICE_ID:     z.string().optional(),
-  ELEVENLABS_WEBHOOK_SECRET: z.string().optional(),  // shared secret (x-elevenlabs-secret) for the WhatsApp voice agent's tool calls
 
   REPLICATE_API_TOKEN:     z.string().optional(),
   REPLICATE_MODEL:         z.string().default('black-forest-labs/flux-dev'),
