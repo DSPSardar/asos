@@ -1,6 +1,7 @@
 // src/pages/Conversations.jsx — WhatsApp-style two-pane conversations view (live API)
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { conversationsAPI, settingsAPI, resolveUploadUrl } from '@lib/api';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { conversationsAPI, settingsAPI, todayAPI, resolveUploadUrl } from '@lib/api';
 import { ENROLMENT_FEE_PKR } from '@lib/constants';
 import { displayName } from '@lib/displayName';
 
@@ -49,8 +50,29 @@ function formatTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString('en-PK', { hour:'2-digit', minute:'2-digit', hour12:false });
 }
 
+const PAGE_SIZE = 50;
+const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// Merge a freshly fetched page into the list: replace rows we already have,
+// append the rest, keep everything else (later pages, a deep-linked thread).
+function mergeThreads(prev, incoming, { reset = false } = {}) {
+  if (reset) return incoming;
+  const byId = new Map(prev.map((t) => [t.id, t]));
+  for (const t of incoming) byId.set(t.id, t);
+  return [...byId.values()];
+}
+
+// Last time the lead wrote — free text only delivers within 24h of that.
+function lastInboundAt(conv) {
+  const msgs = Array.isArray(conv?.messages) ? conv.messages : [];
+  for (let i = msgs.length - 1; i >= 0; i -= 1) if (msgs[i].direction === 'INBOUND') return msgs[i].sentAt;
+  return null;
+}
+
 function mapThread(conv) {
-  const lastMsg = Array.isArray(conv.messages) ? conv.messages[0] : null;
+  // List rows carry the latest message first; a full thread (GET /:id) is ascending.
+  const msgs = Array.isArray(conv.messages) ? conv.messages : [];
+  const lastMsg = msgs.length ? (conv._ascending ? msgs[msgs.length - 1] : msgs[0]) : null;
   const isHumanTakeover = conv.status === 'HUMAN_TAKEOVER' || !conv.aiEnabled;
   const needsHuman = conv.lead?.humanFollowupRequired || false;
   // unread: last message is inbound and status isn't READ
@@ -126,9 +148,30 @@ export default function Conversations() {
   const knownThreadsRef = useRef(null);
   // Cache notifPrefs so we don't fetch settings on every poll
   const notifPrefsRef   = useRef(null);
-  // Deep link from a hot-lead alert: /conversations?id=<conversationId>.
-  // Consumed at most once — after that, polling keeps the user's own selection.
-  const deepLinkRef     = useRef(new URLSearchParams(window.location.search).get('id'));
+  // Deep links: /conversations/:conversationId, ?id=<conversationId> (legacy
+  // alert links) or ?leadId=<leadId> (lead panel). Resolved once, and the
+  // thread is fetched directly if it is not on the loaded page — old threads
+  // used to be unreachable because only the 50 newest were ever loaded.
+  const { conversationId: routeId } = useParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const deepLinkRef     = useRef({ id: routeId || searchParams.get('id'), leadId: searchParams.get('leadId') });
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Search is debounced and sent to the server — the box searches the whole
+  // inbox, not the rows that happen to be loaded.
+  const [searchQ, setSearchQ] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQ(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  const listParams = useCallback((p) => ({
+    limit: PAGE_SIZE, page: p,
+    ...(searchQ ? { search: searchQ } : {}),
+    ...(filter === 'needs' ? { needsHuman: 'true' } : {}),
+    ...(filter === 'ai' ? { aiEnabled: 'true' } : {}),
+  }), [searchQ, filter]);
 
   // Load notifPrefs once from backend (non-blocking)
   useEffect(() => {
@@ -138,12 +181,20 @@ export default function Conversations() {
     }).catch(() => {});
   }, []);
 
-  // ── Load conversation list ──────────────────────────────────
+  // ── Load conversation list (page 1 with the current filters) ─────────
+  // Polling re-fetches page 1 and merges; extra pages loaded via "Load more"
+  // survive until the filters change.
+  const filtersKey = `${searchQ}|${filter}`;
+  const lastFiltersRef = useRef(filtersKey);
   const loadThreads = useCallback(async () => {
     try {
-      const res = await conversationsAPI.list({ limit: 50 });
+      const reset = lastFiltersRef.current !== filtersKey;
+      lastFiltersRef.current = filtersKey;
+      const res = await conversationsAPI.list(listParams(1));
       const convs = Array.isArray(res.data) ? res.data : (res?.data || []);
       const mapped = convs.map(mapThread);
+      setTotal(res?.pagination?.total ?? mapped.length);
+      if (reset) setPage(1);
 
       // ── Browser notification diffing (runs after initial load) ──
       if (knownThreadsRef.current !== null) {
@@ -168,14 +219,25 @@ export default function Conversations() {
       }
 
       knownThreadsRef.current = mapped;
-      setThreads(mapped);
-      // Deep link wins once (e.g. arriving from the hot-lead WhatsApp alert);
-      // otherwise auto-select first on initial load.
+      setThreads((prev) => mergeThreads(prev, mapped, { reset }));
+      // Deep link wins once; otherwise auto-select first on initial load.
       const wanted = deepLinkRef.current;
-      if (wanted && mapped.some((t) => t.id === wanted)) {
+      if (wanted?.id || wanted?.leadId) {
         deepLinkRef.current = null;
-        setActiveId(wanted);
-        setMobileView('detail');
+        let id = wanted.id;
+        if (!id && wanted.leadId) {
+          try {
+            const r = await conversationsAPI.byLead(wanted.leadId);
+            id = r?.data?.id || r?.id || null;
+          } catch (_) { id = null; }
+        }
+        if (id) {
+          if (!mapped.some((t) => t.id === id)) await ensureThreadLoaded(id);
+          setActiveId(id);
+          setMobileView('detail');
+        } else {
+          setActiveId((prev) => prev || (mapped[0]?.id ?? null));
+        }
       } else {
         setActiveId((prev) => prev || (mapped[0]?.id ?? null));
       }
@@ -184,7 +246,41 @@ export default function Conversations() {
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listParams, filtersKey]);
+
+  // A thread not on the loaded page (deep link, old thread) is fetched by id
+  // and pinned to the top of the list.
+  const ensureThreadLoaded = useCallback(async (id) => {
+    try {
+      const res = await conversationsAPI.get(id);
+      const conv = res.data && typeof res.data === 'object' && !Array.isArray(res.data) ? res.data : res;
+      if (!conv?.id) return false;
+      const row = mapThread({ ...conv, _ascending: true });
+      setThreads((prev) => (prev.some((t) => t.id === row.id) ? prev : [row, ...prev]));
+      return true;
+    } catch (e) {
+      console.error('[Conversations] deep-link fetch error', e);
+      return false;
+    }
   }, []);
+
+  const loadMore = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const next = page + 1;
+      const res = await conversationsAPI.list(listParams(next));
+      const convs = Array.isArray(res.data) ? res.data : (res?.data || []);
+      setThreads((prev) => mergeThreads(prev, convs.map(mapThread)));
+      setTotal(res?.pagination?.total ?? total);
+      setPage(next);
+    } catch (e) {
+      console.error('[Conversations] load more error', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     loadThreads();
@@ -219,26 +315,17 @@ export default function Conversations() {
 
   const activeThread = threads.find((t) => t.id === activeId) || threads[0] || null;
 
-  const visible = useMemo(() => {
-    return threads.filter((t) => {
-      if (filter === 'unread' && t.unread === 0)       return false;
-      if (filter === 'ai'     && t.handler !== 'AI')   return false;
-      if (filter === 'needs'  && !t.needsHuman)        return false;
-      if (search) {
-        const q = search.toLowerCase();
-        if (!t.name.toLowerCase().includes(q) &&
-            !t.preview.toLowerCase().includes(q) &&
-            !t.phone.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [threads, filter, search]);
+  // Search / needs-human / AI-handled are applied by the server (see
+  // listParams); only "unread" is a property of the loaded rows.
+  const visible = useMemo(() => threads.filter((t) => !(filter === 'unread' && t.unread === 0)), [threads, filter]);
 
   const totalUnread = threads.reduce((s, t) => s + (t.unread || 0), 0);
 
   const handleSelect = (id) => {
     setActiveId(id);
     setMobileView('detail');
+    // Keep the URL a shareable deep link to the open thread.
+    navigate(`/conversations/${id}`, { replace: true });
   };
 
   const handleToggleAI = async (id, enabled) => {
@@ -277,9 +364,8 @@ export default function Conversations() {
       await conversationsAPI.deleteConversation(id);
       setActiveId(null);
       setMobileView('list');
-      // Reload thread list
-      const res = await conversationsAPI.list({ page: 1, limit: 50 });
-      setThreads((res.data || res.conversations || []).map(mapThread));
+      setThreads((prev) => prev.filter((t) => t.id !== id));
+      await loadThreads();
     } catch (e) {
       console.error('[Conversations] deleteConversation error', e);
       alert(e.message);
@@ -320,7 +406,14 @@ export default function Conversations() {
       await loadMessages(id);
     } catch (e) {
       console.error('[Conversations] sendMessage error', e);
+      throw e;
     }
+  };
+
+  // Outside the 24h window only an approved template delivers (Meta 131047).
+  const handleSendTemplate = async (id, name) => {
+    await todayAPI.sendTemplate(id, name);
+    await loadMessages(id);
   };
 
   if (loading) {
@@ -344,6 +437,9 @@ export default function Conversations() {
         onSearch={setSearch}
         totalUnread={totalUnread}
         mobileView={mobileView}
+        total={total}
+        onLoadMore={loadMore}
+        loadingMore={loadingMore}
       />
       <ConvErrorBoundary resetKey={activeId} mobileView={mobileView}>
         {activeThread ? (
@@ -358,6 +454,8 @@ export default function Conversations() {
             onHandback={() => handleHandback(activeThread.id)}
             onConfirmPayment={() => handleConfirmPayment(activeThread.id)}
             onSend={(content) => handleSend(activeThread.id, content)}
+            onSendTemplate={(name) => handleSendTemplate(activeThread.id, name)}
+            insideWindow={(() => { const t = lastInboundAt(activeConv); return !!t && (Date.now() - new Date(t).getTime()) < WA_WINDOW_MS; })()}
             onClearMessages={() => handleClearMessages(activeThread.id)}
             onDeleteConversation={() => handleDeleteConversation(activeThread.id)}
           />
@@ -374,7 +472,7 @@ export default function Conversations() {
 // ─────────────────────────────────────────────────────────────
 // LEFT — Thread list
 // ─────────────────────────────────────────────────────────────
-function ThreadList({ threads, allCount, activeId, onSelect, filter, onFilter, search, onSearch, totalUnread, mobileView }) {
+function ThreadList({ threads, allCount, activeId, onSelect, filter, onFilter, search, onSearch, totalUnread, mobileView, total = 0, onLoadMore, loadingMore }) {
   const FILTERS = [
     { id:'all',    label:'All' },
     { id:'unread', label:'Unread', badge: totalUnread || null },
@@ -388,7 +486,7 @@ function ThreadList({ threads, allCount, activeId, onSelect, filter, onFilter, s
       <div className="border-b border-slate-800/60 px-4 py-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold tracking-tight">Conversations</h2>
-          <span className="text-[11px] text-slate-500">{threads.length} of {allCount}</span>
+          <span className="text-[11px] text-slate-500">{threads.length} of {Math.max(total, allCount)}</span>
         </div>
         {/* Search */}
         <div className="relative">
@@ -430,6 +528,15 @@ function ThreadList({ threads, allCount, activeId, onSelect, filter, onFilter, s
               <ThreadRow key={t.id} thread={t} active={t.id === activeId} onClick={() => onSelect(t.id)} />
             ))}
           </ul>
+        )}
+        {allCount < total && (
+          <button
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="m-3 w-[calc(100%-1.5rem)] rounded-lg border border-dashed border-slate-700/60 py-2 text-[11px] text-slate-400 hover:border-accent/40 hover:text-accent disabled:opacity-50"
+          >
+            {loadingMore ? 'Loading…' : `Load more · ${total - allCount} older`}
+          </button>
         )}
       </div>
     </aside>
@@ -551,10 +658,30 @@ class ConvErrorBoundary extends React.Component {
 // ─────────────────────────────────────────────────────────────
 // RIGHT — Conversation view
 // ─────────────────────────────────────────────────────────────
-function ConversationView({ thread, messages, msgLoading, mobileView, onBack, onToggleAI, onTakeover, onHandback, onConfirmPayment, onSend, onClearMessages, onDeleteConversation }) {
+function ConversationView({ thread, messages, msgLoading, mobileView, onBack, onToggleAI, onTakeover, onHandback, onConfirmPayment, onSend, onSendTemplate, insideWindow = true, onClearMessages, onDeleteConversation }) {
   const [aiOn,  setAiOn]  = useState(thread.aiEnabled !== false);
   const [draft, setDraft] = useState('');
   const scrollRef = useRef(null);
+  // Backlog reply helper: outside the 24h window (or after Meta refuses a
+  // free-text send) the composer offers the approved template instead.
+  const [templates, setTemplates] = useState([]);
+  const [tplName, setTplName] = useState('');
+  const [forceTpl, setForceTpl] = useState(false);
+  const [sendErr, setSendErr] = useState('');
+  const [sending, setSending] = useState(false);
+  const useTemplate = !insideWindow || forceTpl;
+  useEffect(() => { setForceTpl(false); setSendErr(''); }, [thread.id]);
+  useEffect(() => {
+    if (!useTemplate || templates.length) return;
+    todayAPI.templates().then((r) => {
+      const list = r?.data ?? r ?? [];
+      setTemplates(Array.isArray(list) ? list : []);
+      const pick = (Array.isArray(list) ? list : []).find((t) => /no_reply_followup/i.test(t.name))
+        || (Array.isArray(list) ? list : []).find((t) => /reengage|followup|follow_up/i.test(t.name)) || list[0];
+      if (pick && !tplName) setTplName(pick.name);
+    }).catch(() => setTemplates([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useTemplate]);
 
   // Sync AI toggle when thread changes
   useEffect(() => {
@@ -584,10 +711,40 @@ function ConversationView({ thread, messages, msgLoading, mobileView, onBack, on
     onHandback();
   };
 
-  const handleSend = () => {
-    if (!draft.trim()) return;
-    onSend(draft.trim());
-    setDraft('');
+  const handleSend = async () => {
+    if (!draft.trim() || sending) return;
+    const text = draft.trim();
+    setSending(true);
+    setSendErr('');
+    try {
+      await onSend(text);
+      setDraft('');
+    } catch (e) {
+      const status = e?.response?.status;
+      if (status === 409 || !insideWindow) {
+        setForceTpl(true);
+        setSendErr('Outside the 24h window — free text will not deliver. Send the approved template below; the window reopens when they reply.');
+      } else {
+        setSendErr(e?.response?.data?.message || e?.message || 'Send failed');
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSendTemplate = async () => {
+    if (!tplName || sending) return;
+    if (!window.confirm(`Send the approved template "${tplName}" to ${thread.name}?`)) return;
+    setSending(true);
+    setSendErr('');
+    try {
+      await onSendTemplate(tplName);
+      setForceTpl(false);
+    } catch (e) {
+      setSendErr(e?.response?.data?.message || e?.message || 'Template send failed');
+    } finally {
+      setSending(false);
+    }
   };
 
   const onKey = (e) => {
@@ -684,6 +841,28 @@ function ConversationView({ thread, messages, msgLoading, mobileView, onBack, on
 
       {/* Composer */}
       <div className="border-t border-slate-800/60 bg-surface/40 px-4 py-3 md:px-6">
+        {sendErr && <div className="mx-auto mb-2 max-w-3xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">{sendErr}</div>}
+        {useTemplate ? (
+          <div className="mx-auto max-w-3xl">
+            <div className="mb-2 text-[11px] text-amber-200/90">
+              <b>Outside Meta's 24h window</b> — only an approved template reaches {thread.name}. If they reply, free text works again.
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={tplName} onChange={(e) => setTplName(e.target.value)} className="input-dark min-w-[12rem] flex-1 rounded-lg px-2 py-2 text-xs">
+                <option value="">Choose an approved template…</option>
+                {templates.map((t) => <option key={t.name} value={t.name}>{t.name} — {t.source}</option>)}
+              </select>
+              <button type="button" onClick={handleSendTemplate} disabled={!tplName || sending} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-50">
+                {sending ? 'Sending…' : 'Send template'}
+              </button>
+              {forceTpl && insideWindow && (
+                <button type="button" onClick={() => setForceTpl(false)} className="text-xs text-slate-400 underline underline-offset-2 hover:text-slate-200">Back to free text</button>
+              )}
+            </div>
+            {tplName && <div className="mt-2 whitespace-pre-line text-[11px] text-slate-400">{templates.find((t) => t.name === tplName)?.text}</div>}
+            {!templates.length && <div className="mt-2 text-[11px] text-slate-500">No approved templates found — add one to an automation rule (Automations → rule → Meta template).</div>}
+          </div>
+        ) : (
         <div className="mx-auto flex max-w-3xl items-end gap-2">
           <button
             type="button"
@@ -705,13 +884,14 @@ function ConversationView({ thread, messages, msgLoading, mobileView, onBack, on
           <button
             type="button"
             onClick={handleSend}
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || sending}
             className="flex shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-accent to-accent2 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-accent/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
           >
-            Send
+            {sending ? 'Sending…' : 'Send'}
             <IconSend className="h-4 w-4" />
           </button>
         </div>
+        )}
       </div>
     </section>
   );

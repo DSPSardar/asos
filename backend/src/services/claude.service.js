@@ -13,6 +13,11 @@ const env = require('../config/env');
 const logger = require('../utils/logger');
 const prisma = require('../config/database');
 const kgSvc = require('../modules/knowledge-gaps/knowledge-gaps.service');
+const { modelId, modelParams } = require('../config/models');
+const { guardAiStageTransition } = require('./agent-guards/won-guard');
+const enrolledSupport = require('./agent-guards/enrolled-support');
+const escalation = require('./agent-guards/escalation');
+const { languageInstruction } = require('../utils/language');
 
 // Bounded on purpose. The SDK defaults to a 10-minute timeout with 2 automatic
 // retries, so a single stalled call could pin a worker job for ~30 minutes —
@@ -25,9 +30,11 @@ const client = new OpenAI({
 });
 
 // ── Model selection (per-agent) ───────────────────────────────────────
-// Qualifier = fast/cheap (analytic). Closer = better copy.
-const QUALIFIER_MODEL = env.OPENAI_QUALIFIER_MODEL || env.OPENAI_MODEL;
-const CLOSER_MODEL    = env.OPENAI_CLOSER_MODEL || env.OPENAI_MODEL;
+// Qualifier = fast/cheap (analytic). Closer = better copy. IDs and params
+// live in config/models.js (env overrides there), never inline here.
+const QUALIFIER_MODEL = modelId('qualifier');
+const CLOSER_MODEL    = modelId('closer');
+const SUPPORT_MODEL   = modelId('support');
 
 const createResponse = async ({ model, maxOutputTokens, instructions, input, jsonMode = false }) => {
   const messages = [
@@ -159,18 +166,13 @@ business_unit RULES:
   unless the lead explicitly switches to the other business.
 `;
 
-// ── Settings-rule handoff detectors ─────────────────────────────────
-// Pure functions (no OpenAI call, no DB access) so the rule matching itself
-// is unit-testable without spending real API credits or mocking the model.
-// Bilingual on purpose — this product's own Qualifier prompt treats
-// Urdu/Roman-Urdu as first-class (see is_price_objection above), so a
-// human-escalation rule that only understood English would miss most of
-// this user base's actual disputes and threats.
-const PAYMENT_DISPUTE_PATTERN = /refund|dispute|charge ?back|payment.*fail|failed.*payment|paisay wapis|paise wapas|wapis karo|galat charge|dhoka|fraud hua/i;
-const detectPaymentDispute = (message) => PAYMENT_DISPUTE_PATTERN.test(message || '');
-
-const LEGAL_THREAT_PATTERN = /lawyer|vakeel|legal action|sue you|court|adalat|consumer complaint|shikayat karonga|shikayat karungi|\bFBR\b|fraud case|police complaint|fir karonga/i;
-const detectLegalThreat = (message) => LEGAL_THREAT_PATTERN.test(message || '');
+// ── Hard escalation detectors ────────────────────────────────────────
+// Kept as named exports for existing callers/tests; the patterns now live in
+// agent-guards/escalation.js and are HARD rules — they fire regardless of the
+// dashboard's handoff toggles. Bilingual on purpose (Urdu / Roman Urdu /
+// English). Fee / payment / screenshot / "paid" never match on their own.
+const detectPaymentDispute = escalation.detectRefundDispute;
+const detectLegalThreat = escalation.detectComplaintOrLegal;
 
 // Prompt layout is deliberately static-first: the fixed instructions + schema
 // (identical for every tenant and every message) form the longest possible
@@ -223,7 +225,7 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
   try {
     const resp = await createResponse({
       model: QUALIFIER_MODEL,
-      maxOutputTokens: 512,
+      maxOutputTokens: modelParams('qualifier').maxOutputTokens,
       instructions: system,
       input: history,
       jsonMode: true,
@@ -321,7 +323,7 @@ CLOSING TYPE GUIDE:
 // the per-message Qualifier output, which zeroed the cacheable prefix on
 // every call. Order now: fixed instructions (shared by all tenants) →
 // per-tenant product context → per-message dynamic tail.
-const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false) => `
+const buildCloserPrompt = (aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false, leadLanguage = null) => `
 You are an elite AI Sales Closer specializing in converting WhatsApp leads into paid course enrollments.
 
 Your ONLY job: generate ONE perfectly-calibrated reply that moves this specific lead one step closer to enrolling.
@@ -470,6 +472,7 @@ ${qualifierOutput.is_price_objection ? '⚠️  PRICE OBJECTION DETECTED — dep
 
 CONTACT
 Name: ${contact.name || 'Unknown'} | Pipeline stage: ${lead.stage}
+${languageInstruction(leadLanguage || lead.language)}
 ${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? `
 ⚠️  FIRST REAL EXCHANGE — set send_payment_details = false on this reply, no exceptions.
 This lead has only received the welcome voice note — you have not actually talked to them
@@ -507,7 +510,7 @@ const SAFE_FALLBACK_REPLY =
   'DSP AI Agent Mastery ka fee fixed hai — koi discount ya kisi aur service ka option available nahi. ' +
   'Kya main aapko seat confirm karne mein madad karun?';
 
-const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false }) => {
+const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false, leadLanguage = null }) => {
   const t0 = Date.now();
   // The playbook's phase thresholds (lead messages 1–3 / 4–8 / 9+) count the
   // LEAD's messages only. The old raw history length counted both sides, so a
@@ -515,7 +518,7 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
   // straight past qualifying into the value pitch. +1 is the inbound message
   // being answered, which the worker excludes from messageHistory.
   const messageCount = (messageHistory || []).filter((m) => m.sender === 'CONTACT').length + 1;
-  const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice);
+  const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice, leadLanguage);
 
   const history = (messageHistory || []).slice(-20).map(m => ({
     role: m.sender === 'CONTACT' ? 'user' : 'assistant',
@@ -529,7 +532,7 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
   try {
     const resp = await createResponse({
       model: CLOSER_MODEL,
-      maxOutputTokens: aiConfig.maxTokens || 1024,
+      maxOutputTokens: aiConfig.maxTokens || modelParams('closer').maxOutputTokens,
       instructions: system,
       input: history,
       jsonMode: true,
@@ -602,14 +605,151 @@ const deriveStage = (currentStage, qualifierOutput) => {
 };
 
 // =====================================================================
+// ENROLLED-STUDENT SUPPORT PERSONA
+// =====================================================================
+// A CLOSED_WON Mastery student (or a lead who said "already enrolled") never
+// reaches the sales Closer. One short call on the support block from
+// agent-guards/enrolled-support.js; no Qualifier, no stage change, no payment
+// details, no "reserve your seat".
+
+const runSupportReply = async ({ lead, messageHistory, newMessage, leadLanguage = null }) => {
+  const t0 = Date.now();
+  const system = enrolledSupport.buildSupportPrompt({ languageInstruction: languageInstruction(leadLanguage || lead.language) });
+  const history = (messageHistory || []).slice(-10).map(m => ({
+    role: m.sender === 'CONTACT' ? 'user' : 'assistant',
+    content: m.content || '[media]',
+  }));
+  history.push({ role: 'user', content: newMessage });
+
+  let raw = '';
+  let tokens = 0;
+  let parsed = {};
+  try {
+    const resp = await createResponse({
+      model: SUPPORT_MODEL,
+      maxOutputTokens: modelParams('support').maxOutputTokens,
+      instructions: system,
+      input: history,
+      jsonMode: true,
+    });
+    raw = resp.choices?.[0]?.message?.content || '';
+    tokens = resp.usage?.total_tokens || 0;
+    parsed = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId: lead.id, raw }, 'Support persona call failed — using safe support reply');
+    parsed = {};
+  }
+
+  let reply = String(parsed.reply_message || '').trim().slice(0, 1000);
+  if (!reply) reply = enrolledSupport.SAFE_SUPPORT_REPLY;
+  if (enrolledSupport.containsSalesLanguage(reply)) {
+    logger.warn({ leadId: lead.id, raw: reply }, '🚫 Support reply vetoed — contained sales language for an enrolled student');
+    reply = enrolledSupport.SAFE_SUPPORT_REPLY;
+  }
+
+  return {
+    reply_message: reply,
+    needs_human: parsed.needs_human === true,
+    _tokens: tokens,
+    _model: SUPPORT_MODEL,
+    _ms: Date.now() - t0,
+  };
+};
+
+// v1-compatible result the worker understands, for turns that never ran the
+// Qualifier/Closer (hard escalation, support persona).
+const staticResult = ({ lead, reply, action, handoffReason, mode, tokens = 0, model = null, ms = 0, closerOutput = null }) => ({
+  reply,
+  leadStatus:        lead.scoreLabel || 'WARM',
+  score:             Math.max(1, Math.round((lead.aiScore || 0) / 10) || 5),
+  aiScore:           lead.aiScore || 0,
+  stage:             lead.stage,
+  problemDiagnosis:  lead.problemSummary || null,
+  salesFix:          null,
+  urgencyTrigger:    null,
+  sendPaymentDetails: false,
+  enrollmentConfirmed: false,
+  action,
+  handoffReason,
+  qualificationData: { mode },
+  nextSteps:         lead.nextAction || null,
+  humanFollowupRequired: false,
+  intent:            lead.intent || null,
+  problemSummary:    lead.problemSummary || null,
+  nextAction:        lead.nextAction || null,
+  businessUnit:      lead.businessUnit || 'UNKNOWN',
+  sentiment:         'NEUTRAL',
+  signalType:        null,
+  qualifierOutput:   null,
+  closerOutput,
+  mode,
+  tokensUsed:        tokens,
+  qualifierTokens:   0,
+  closerTokens:      tokens,
+  qualifierMs:       0,
+  closerMs:          ms,
+  qualifierModel:    QUALIFIER_MODEL,
+  closerModel:       model || CLOSER_MODEL,
+});
+
+// =====================================================================
 // MAIN ORCHESTRATOR — used by the worker
 // =====================================================================
 // Returns the same shape as v1 processMessage() so the worker doesn't break.
 // Adds: qualifierOutput, closerOutput, humanFollowupRequired
 
-const processMessage = async ({ tenantId, lead, contact, conversation, newMessage, messageHistory, handedBackToAI = false, welcomeVoiceAlreadySent = false }) => {
+const processMessage = async ({ tenantId, lead, contact, conversation, newMessage, messageHistory, handedBackToAI = false, welcomeVoiceAlreadySent = false, lastInboundSentiment = null, leadLanguage = null }) => {
   const aiConfig = await prisma.aiConfig.findUnique({ where: { tenantId } });
   if (!aiConfig) throw new Error(`No AI config found for tenant ${tenantId}`);
+
+  // ── 0. HARD ESCALATION (independent of the dashboard toggles) ─────
+  // Refund/dispute/chargeback, complaint/legal/FBR/fraud, or an explicit ask
+  // for a human / Sardar → human, before any model call. Fee, payment,
+  // screenshot, "paid", "transaction" never trip this (see escalation.js).
+  const hard = escalation.detectHardEscalation(newMessage);
+  if (hard.escalate) {
+    logger.info({ leadId: lead.id, kind: hard.kind }, '🛡 Hard escalation → handoff');
+    return staticResult({
+      lead,
+      // Only a human/Sardar request gets Sardar's number; disputes and
+      // complaints get the configured farewell from the worker.
+      reply: hard.kind === 'human_requested' ? escalation.HUMAN_REQUEST_REPLY : null,
+      action: 'handoff',
+      handoffReason: hard.reason,
+      mode: `hard_escalation:${hard.kind}`,
+    });
+  }
+
+  // ── 0b. ENROLLED-STUDENT MODE ─────────────────────────────────────
+  // A paid Mastery student gets the support persona, never the sales prompt.
+  if (enrolledSupport.isEnrolledStudent(lead)) {
+    const support = await runSupportReply({ lead, messageHistory, newMessage, leadLanguage });
+    const result = staticResult({
+      lead,
+      reply: support.reply_message,
+      action: support.needs_human ? 'handoff' : 'continue',
+      handoffReason: support.needs_human ? 'Enrolled student needs a human (support persona)' : null,
+      mode: 'enrolled_support',
+      tokens: support._tokens, model: support._model, ms: support._ms,
+      closerOutput: { reply_message: support.reply_message, closing_type: 'support', urgency_trigger: '', knowledge_gap: '', send_payment_details: false, _tokens: support._tokens, _model: support._model, _ms: support._ms },
+    });
+    await prisma.aiAgentLog.create({
+      data: {
+        tenantId, leadId: lead.id, conversationId: conversation.id,
+        qualifierOutput: { mode: 'enrolled_support' }, qualifierTokens: 0, qualifierModel: null, qualifierMs: 0,
+        closerOutput: { reply_message: support.reply_message, closing_type: 'support', urgency_trigger: '' },
+        closerTokens: support._tokens, closerModel: support._model, closerMs: support._ms,
+        finalAction: result.action, errorReason: null,
+      },
+    }).catch(err => logger.warn({ err }, 'AiAgentLog write failed (non-blocking)'));
+    await prisma.subscription.upsert({
+      where:  { tenantId },
+      update: { aiTokensUsed: { increment: support._tokens || 0 } },
+      create: { tenantId, aiTokensUsed: BigInt(support._tokens || 0) },
+    }).catch(err => logger.warn({ err, tenantId }, 'Token usage update failed (non-blocking)'));
+    logger.info({ leadId: lead.id, action: result.action }, '🎓 Enrolled-student support reply');
+    return result;
+  }
 
   // The turn right after the welcome voice note (message history so far is
   // just [their first text, the outbound voice note]) — the lead hasn't had
@@ -665,25 +805,17 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   let rulesHandoff = false;
   let rulesHandoffReason = null;
 
-  // Settings rule: payment disputes / refund requests → always human.
-  // Previously English-only, in a product whose own Qualifier prompt treats
-  // Urdu/Roman-Urdu as first-class (see is_price_objection's own example
-  // list) — a lead disputing a charge in Urdu was invisible to this rule.
-  if (rules.payment !== false && detectPaymentDispute(newMessage)) {
+  // The keyword rules (refund / legal / human request) already ran as HARD
+  // escalation at the top of this function, independent of the toggles. The
+  // one remaining rule needs the Qualifier's output: two consecutive
+  // NEGATIVE inbound messages → human.
+  if (escalation.isConsecutiveNegative(lastInboundSentiment, qualifierOutput.sentiment)) {
     rulesHandoff = true;
-    rulesHandoffReason = 'Payment dispute detected — human required';
-    logger.info({ leadId: lead.id }, '🛡 Rule: payment dispute → handoff');
+    rulesHandoffReason = 'Two consecutive negative messages — human required';
+    logger.info({ leadId: lead.id }, '🛡 Rule: consecutive negative sentiment → handoff');
   }
 
-  // Settings rule: legal threats / consumer complaints → always human.
-  // Net new — this toggle existed in the UI and did nothing.
-  if (!rulesHandoff && rules.legal !== false && detectLegalThreat(newMessage)) {
-    rulesHandoff = true;
-    rulesHandoffReason = 'Legal threat or complaint detected — human required';
-    logger.info({ leadId: lead.id }, '🛡 Rule: legal threat → handoff');
-  }
-
-  // Primary gate: Qualifier (claude-sonnet-4-6) decides when enrollment is confirmed.
+  // Primary gate: the Qualifier decides when enrollment is confirmed.
   // No hardcoded rules — the model reads the conversation and makes the call.
   // Deterministic override, not just a prompt instruction: on the turn right
   // after the welcome voice note, enrollment can never auto-confirm — the
@@ -712,7 +844,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   let closerError = null;
   if (!forceHandoff) {
     try {
-      closerOutput = await runCloser({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice });
+      closerOutput = await runCloser({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice, leadLanguage });
     } catch (err) {
       logger.error({ err, leadId: lead.id }, 'Closer failed — using safe fallback reply');
       closerError = err.message;
@@ -764,7 +896,12 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   }
 
   // ── 6. Map qualifier 1-10 score → DB 0-100 + derive stage ──
-  const stage    = deriveStage(lead.stage, qualifierOutput);
+  // deriveStage() never returns CLOSED_WON today; the won-guard is the
+  // enforcement layer for the day it does (or someone edits it): for the
+  // Mastery tenant only the webhook or a human may write CLOSED_WON.
+  const { stage } = guardAiStageTransition({
+    tenantId, leadId: lead.id, fromStage: lead.stage, toStage: deriveStage(lead.stage, qualifierOutput),
+  });
   const aiScore  = qualifierOutput.score * 10;
   const reply    = closerOutput?.reply_message || null;
 
@@ -877,8 +1014,8 @@ const classifyPaymentProofImage = async (buffer, mimeType) => {
   try {
     const base64 = buffer.toString('base64');
     const res = await client.chat.completions.create({
-      model: env.OPENAI_MODEL,
-      max_completion_tokens: 120,
+      model: modelId('paymentProofVision'),
+      max_completion_tokens: modelParams('paymentProofVision').maxOutputTokens,
       messages: [
         {
           role: 'system',
@@ -929,8 +1066,8 @@ const generateSummary = async ({ tenantId, messageHistory }) => {
   }));
 
   const response = await createResponse({
-    model: env.OPENAI_MODEL,
-    maxOutputTokens: 300,
+    model: modelId('summary'),
+    maxOutputTokens: modelParams('summary').maxOutputTokens,
     instructions: 'You are a CRM assistant. Summarize this sales conversation in 3-5 bullet points. Focus on: lead need, budget signals, objections, and next steps. Respond in the same language as the conversation.',
     input: messages,
   });
@@ -944,6 +1081,8 @@ module.exports = {
   // exposed for direct use / testing
   runQualifier,
   runCloser,
+  runSupportReply,
+  deriveStage,
   detectPaymentDispute,
   detectLegalThreat,
   classifyPaymentProofImage,

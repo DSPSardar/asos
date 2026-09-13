@@ -7,6 +7,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const OpenAI   = require('openai');
 const prisma   = require('../../config/database');
 const env      = require('../../config/env');
+const { modelId, modelParams } = require('../../config/models');
 const whatsappService = require('../../services/whatsapp.service');
 const logger   = require('../../utils/logger');
 
@@ -19,8 +20,9 @@ const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const QUALIFIER_MODEL  = env.QUALIFIER_MODEL || 'claude-haiku-4-5';
-const CLOSER_MODEL     = env.CLOSER_MODEL || env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022';
+// Model IDs come from config/models.js (env overrides live there).
+const QUALIFIER_MODEL  = modelId('contentAnalysis');
+const CLOSER_MODEL     = modelId('contentCopy');
 const CHANNELS         = ['meta_ad', 'whatsapp_message', 'instagram_caption', 'email'];
 const MAX_VARIANTS     = 20;   // hard cap — enforced here and in controller
 
@@ -376,8 +378,8 @@ const extractBrandDNA = async ({ tenantId, sourceUrl, language = 'en', forceRefr
   try {
     ({ parsed, usage } = await callClaudeForObject({
       model:      QUALIFIER_MODEL,
-      max_tokens: 900,
-      temperature: 0,
+      max_tokens: modelParams('contentAnalysis').maxTokens,
+      temperature: modelParams('contentAnalysis').temperature,
       system: `You are a professional brand analyst. Your job is to extract structured brand DNA from any website — real estate, e-commerce, software, SaaS, retail, finance, healthcare, or any other industry. Every legitimate business has a brand and you can extract it.
 Return strict JSON only. Never invent data — use null or [] for anything not clearly present in the content. Never refuse to extract — always return the JSON structure with whatever data is available.`,
       userContent,
@@ -518,8 +520,8 @@ const generateVariants = async ({ tenantId, brandProfileId, count = 10, language
   try {
     ({ parsed: variants } = await callClaudeForArray({
       model:       CLOSER_MODEL,
-      max_tokens:  Math.min(4000, safeCount * 350 + 200),
-      temperature: 0.75,
+      max_tokens:  Math.min(modelParams('contentCopy').maxTokens, safeCount * 350 + 200),
+      temperature: modelParams('contentCopy').temperature,
       system: 'You are a senior performance marketing copywriter. Return ONLY a valid JSON array. No prose.',
       userContent,
     }));
@@ -652,7 +654,7 @@ const buildImageProviderChain = () => {
 };
 
 // ── OpenAI (gpt-image-1) ────────────────────────────────────────────────────
-const OPENAI_IMAGE_MODEL = 'gpt-image-1';
+const OPENAI_IMAGE_MODEL = modelId('image');
 
 // gpt-image-1 supports 1024x1024, 1024x1536 (portrait) and 1536x1024 (landscape).
 // Drafts carry a `channel`, not a platform: Instagram is portrait-first; meta_ad

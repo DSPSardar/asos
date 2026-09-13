@@ -14,18 +14,23 @@ const prisma = require('../config/database');
 const claudeService = require('../services/claude.service');
 const whatsappService = require('../services/whatsapp.service');
 const welcomeVoiceService = require('../modules/ai-config/welcomeVoice.service');
-const elevenlabsService = require('../services/elevenlabs.service');
 const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
 const automationService = require('../services/automation.service');
+const outbound = require('../services/outbound.service');
 const realtimeService = require('../services/realtime.service');
+const { guardAiStageTransition } = require('../services/agent-guards/won-guard');
+const formSubmitted = require('../services/agent-guards/form-submitted');
+const neverSilent = require('../services/agent-guards/never-silent');
+const escalation = require('../services/agent-guards/escalation');
+const { detectLanguage } = require('../utils/language');
 const billingService = require('../modules/billing/billing.service');
 const { toDbMessageType } = require('../utils/messageType');
 const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
-const { publishStatusUpdate, registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick } = require('../queues/message.queue');
+const { publishStatusUpdate, registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick, registerModelHealthCheck, registerBacklogSweep } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
 const { ENROLMENT_FEE_PKR } = require('../config/constants');
@@ -321,6 +326,18 @@ const handleInboundMessage = async (job) => {
     logger.info({ leadId: lead.id, contactId: contact.id }, 'New lead created');
   }
 
+  // ── 4b. Language detection — once, on the lead's first message ──────
+  // The Closer replies in this language from turn one (utils/language.js).
+  // Default 'mixed' (Urdu + English) when the first message is too short to
+  // tell; a later, clearer message may upgrade a 'mixed' guess once.
+  if (content && messageType !== 'audio') {
+    const detected = detectLanguage(content);
+    if (!lead.language || (lead.language === 'mixed' && detected !== 'mixed')) {
+      lead = await prisma.lead.update({ where: { id: lead.id }, data: { language: detected } }).catch(() => lead);
+      logger.info({ leadId: lead.id, language: detected }, '🌐 Lead language detected');
+    }
+  }
+
   // ── 5. Resolve or create Conversation ────────────────────────────
   let conversation = await prisma.conversation.findFirst({
     where: {
@@ -416,6 +433,48 @@ const handleInboundMessage = async (job) => {
   // thing a multi-touch sequence must never do. Eager here; the tick
   // re-checks as a backstop. Non-fatal.
   if (!existingInbound) await automationService.cancelSequencesForLead(lead.id, 'lead_replied');
+
+  // ── 6a′. Deterministic guards on the message text (no model call) ──
+  // Opt-out → acknowledge once, mark the contact, stop every automation.
+  if (escalation.detectOptOut(content)) {
+    await prisma.contact.update({ where: { id: contact.id }, data: { optedOutAt: new Date(), optIn: false } }).catch(() => {});
+    await automationService.cancelSequencesForLead(lead.id, 'opted_out');
+    await prisma.activity.create({ data: { tenantId, leadId: lead.id, type: 'AI_ACTION',
+      content: '🚫 Lead asked us to stop messaging — opted out; automations suppressed',
+      metadata: { flag: 'opt_out', waMessageId } } }).catch(() => {});
+    await sendAndSaveReply({ tenant, conversation, tenantId, phone: normalizedPhone,
+      content: escalation.OPT_OUT_REPLY, tokensUsed: 0, rawResponse: { systemMessage: 'opt_out_ack' }, voiceNote: false });
+    logger.info({ leadId: lead.id, contactId: contact.id }, '🚫 Opt-out honoured');
+    return;
+  }
+
+  // "Already enrolled" → flag the lead (sales automations skip them, the AI
+  // switches to the support persona) and keep going.
+  if (!lead.alreadyEnrolledAt && lead.stage !== 'CLOSED_WON' && escalation.detectAlreadyEnrolled(content)) {
+    lead = await prisma.lead.update({ where: { id: lead.id }, data: { alreadyEnrolledAt: new Date() } }).catch(() => lead);
+    await automationService.cancelSequencesForLead(lead.id, 'already_enrolled');
+    await prisma.activity.create({ data: { tenantId, leadId: lead.id, type: 'AI_ACTION',
+      content: '🎓 Lead says they are already enrolled — sales automations suppressed, support mode on',
+      metadata: { flag: 'already_enrolled', waMessageId } } }).catch(() => {});
+    logger.info({ leadId: lead.id }, '🎓 Lead flagged already-enrolled');
+  }
+
+  // "Form fill kar diya" from a payment-pending lead → fixed reply, stamp
+  // formSubmittedAt, stop the Unpaid Enrollment Reminder. The Mastery webhook
+  // finishes the enrolment; the AI must not try to sell here.
+  if (formSubmitted.isPaymentPending({ lead, conversation }) && formSubmitted.detectFormSubmitted(content)) {
+    if (!lead.formSubmittedAt) {
+      lead = await prisma.lead.update({ where: { id: lead.id }, data: { formSubmittedAt: new Date() } }).catch(() => lead);
+    }
+    await automationService.cancelSequencesForLead(lead.id, 'form_submitted');
+    await sendAndSaveReply({ tenant, conversation, tenantId, phone: normalizedPhone,
+      content: formSubmitted.FORM_SUBMITTED_REPLY, tokensUsed: 0, rawResponse: { systemMessage: 'form_submitted' } });
+    await prisma.activity.create({ data: { tenantId, leadId: lead.id, type: 'AI_ACTION',
+      content: '📝 Lead says the enrolment form is submitted — fixed "registration in process" reply sent; reminders stopped',
+      metadata: { flag: 'form_submitted', waMessageId } } }).catch(() => {});
+    logger.info({ leadId: lead.id, conversationId: conversation.id }, '📝 Form-submitted backstop reply sent');
+    return;
+  }
 
   // ── 6b. Welcome voice note — bypass the AI entirely on this contact's
   // first ever inbound message. contact.sentWelcomeVoice is flipped true
@@ -721,6 +780,9 @@ const handleInboundMessage = async (job) => {
   } catch (limitErr) {
     if (limitErr.statusCode === 402) {
       logger.warn({ tenantId, leadId: lead.id }, '💸 AI token limit reached — handing conversation to human');
+      // Never silent: the lead still gets the configured farewell.
+      await deliverWithNeverSilent({ tenant, conversation, tenantId, lead: { ...lead, contact }, phone: normalizedPhone, inboundMessage,
+        content: tenant.aiConfig?.handoffMessage || DEFAULT_FAREWELL, tokensUsed: 0, rawResponse: null, retry: null });
       await handleHandoff(tenant, conversation, lead, 'AI token limit reached — plan upgrade required');
       notificationService.notifyAdmin(tenant, 'needsHuman', {
         contactName: contact.name,
@@ -742,8 +804,13 @@ const handleInboundMessage = async (job) => {
   const messageHistory = (await prisma.message.findMany({
     where: { conversationId: conversation.id, tenantId },
     orderBy: { sentAt: 'asc' },
-    select: { id: true, sender: true, content: true, sentAt: true, type: true, direction: true },
+    select: { id: true, sender: true, content: true, sentAt: true, type: true, direction: true, sentiment: true },
   })).filter((m) => !(m.type === 'AUDIO' && m.direction === 'OUTBOUND'));
+
+  // Sentiment of the lead's PREVIOUS message (the current one is classified by
+  // the Qualifier this turn) — feeds the two-consecutive-negatives escalation.
+  const previousInbound = [...messageHistory].reverse().find((m) => m.sender === 'CONTACT' && m.id !== inboundMessage.id);
+  const lastInboundSentiment = previousInbound?.sentiment || null;
 
   // ── 9. Call Claude AI Engine ──────────────────────────────────────
   let aiResult;
@@ -769,12 +836,22 @@ const handleInboundMessage = async (job) => {
       ),
       handedBackToAI,
       welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact.sentWelcomeVoice),
+      lastInboundSentiment,
+      leadLanguage: lead.language || null,
     });
   } catch (aiErr) {
-    logger.error({ aiErr, leadId: lead.id }, 'Claude processing failed — handing off to agent');
+    logger.error({ aiErr, leadId: lead.id }, 'AI processing failed — handing off to agent');
+    // Never silent: the lead gets the farewell before the human takes over.
+    await deliverWithNeverSilent({ tenant, conversation, tenantId, lead: { ...lead, contact }, phone: normalizedPhone, inboundMessage,
+      content: tenant.aiConfig?.handoffMessage || DEFAULT_FAREWELL, tokensUsed: 0, rawResponse: null, retry: null });
     await handleHandoff(tenant, conversation, lead, 'AI service error — automatic handoff');
     return;
   }
+
+  // ── 9a. Won guard (belt and braces — claude.service applies it too) ──
+  // For the Mastery tenant the AI may never write CLOSED_WON; only the
+  // Mastery webhook or a human can. Logged with ev "won-guard".
+  aiResult.stage = guardAiStageTransition({ tenantId, leadId: lead.id, fromStage: lead.stage, toStage: aiResult.stage }).stage;
 
   // ── 9b. Persist Qualifier classification on the inbound message ────
   // Powers /insights sentiment + signal endpoints. Best-effort: a failure
@@ -791,6 +868,20 @@ const handleInboundMessage = async (job) => {
   // ── 10. Update CRM with AI results (v1.5 — Qualifier + Closer outputs) ──
   const prevStage = lead.stage;
 
+  // Support-persona and hard-escalation turns never ran the Qualifier: no
+  // score/stage to write, just the audit row.
+  if (aiResult.mode) {
+    await prisma.activity.create({
+      data: {
+        tenantId, leadId: lead.id, type: 'AI_ACTION',
+        content: aiResult.mode === 'enrolled_support'
+          ? `🎓 Support persona replied (enrolled student) · ${aiResult.action}`
+          : `🛡 Hard escalation (${aiResult.mode.replace('hard_escalation:', '')}) → ${aiResult.action}`,
+        metadata: { mode: aiResult.mode, action: aiResult.action, handoffReason: aiResult.handoffReason, tokensUsed: aiResult.tokensUsed },
+      },
+    });
+  }
+
   // Only update businessUnit if the AI identified a non-UNKNOWN value;
   // never overwrite a confirmed DSP/SDC tag back to UNKNOWN mid-conversation.
   const resolvedBusinessUnit = aiResult.businessUnit && aiResult.businessUnit !== 'UNKNOWN'
@@ -800,7 +891,7 @@ const handleInboundMessage = async (job) => {
   // product is not written here: since the bootcamp sunset the Qualifier no
   // longer decides between offers — new leads default to MASTERY at the DB
   // layer and historical BOOTCAMP rows keep their value.
-  await prisma.lead.update({
+  if (!aiResult.mode) await prisma.lead.update({
     where: { id: lead.id },
     data: {
       stage: aiResult.stage,
@@ -841,7 +932,7 @@ const handleInboundMessage = async (job) => {
   }
 
   // Log AI action activity
-  await prisma.activity.create({
+  if (!aiResult.mode) await prisma.activity.create({
     data: {
       tenantId,
       leadId: lead.id,
@@ -916,9 +1007,11 @@ const handleInboundMessage = async (job) => {
 
   if (aiResult.action === 'handoff') {
     // A) Human handoff — send closer reply first (if any), then farewell, then handoff
+    let handoffOutbound = false;
     if (aiResult.reply) {
-      await sendAndSaveReply({ tenant, conversation, tenantId, phone: normalizedPhone,
-        content: aiResult.reply, tokensUsed: aiResult.tokensUsed, rawResponse: aiResult });
+      const r = await deliverWithNeverSilent({ tenant, conversation, tenantId, lead: { ...lead, contact }, phone: normalizedPhone, inboundMessage,
+        content: aiResult.reply, tokensUsed: aiResult.tokensUsed, rawResponse: aiResult, retry: null });
+      handoffOutbound = !!r?.sent;
     }
 
     // A lead reaches this branch by confirming enrollment — they said yes and
@@ -942,10 +1035,16 @@ const handleInboundMessage = async (job) => {
     // farewell is skipped. It still sends for every other handoff reason, where
     // "a human will contact you" is the right and only thing to say.
     if (!paymentDetailsJustSent) {
-      const farewellMsg = tenant.aiConfig?.handoffMessage ||
-        '🙏 Shukriya apna waqt dene ka! Hamari team bohat jald aap se rabta karegi. Please available rahein. ✨';
-      await sendAndSaveReply({ tenant, conversation, tenantId, phone: normalizedPhone,
-        content: farewellMsg, tokensUsed: 0, rawResponse: null });
+      const farewellMsg = tenant.aiConfig?.handoffMessage || DEFAULT_FAREWELL;
+      const r = await deliverWithNeverSilent({ tenant, conversation, tenantId, lead: { ...lead, contact }, phone: normalizedPhone, inboundMessage,
+        content: farewellMsg, tokensUsed: 0, rawResponse: null, retry: null });
+      handoffOutbound = handoffOutbound || !!r?.sent;
+    } else {
+      handoffOutbound = true;
+    }
+    if (!handoffOutbound) {
+      logger.warn({ ev: neverSilent.EV, leadId: lead.id, conversationId: conversation.id, outcome: 'handoff_without_outbound' },
+        'Handoff turn ended without a delivered outbound');
     }
 
     await handleHandoff(tenant, conversation, lead, aiResult.handoffReason);
@@ -1008,13 +1107,31 @@ const handleInboundMessage = async (job) => {
     metaService.trackQualified(tenant, normalizedPhone, lead.id).catch(() => {});
   }
 
-  // C) Continue — send AI reply
-  await sendAndSaveReply({
-    tenant, conversation, tenantId,
+  // C) Continue — send AI reply. Never silent: a blank/blocked reply gets a
+  // holding line + one retry on a shorter context; an out-of-window thread
+  // gets the approved re-open template.
+  await deliverWithNeverSilent({
+    tenant, conversation, tenantId, lead: { ...lead, contact },
     phone: normalizedPhone,
+    inboundMessage,
     content: aiResult.reply,
     tokensUsed: aiResult.tokensUsed,
     rawResponse: aiResult,
+    retry: async () => {
+      const shorter = await claudeService.processMessage({
+        tenantId, lead, contact, conversation,
+        newMessage: content || '[non-text message]',
+        messageHistory: sanitizeHistoryForAI(
+          messageHistory.filter((m) => m.id !== inboundMessage.id).slice(-6),
+          tenant.aiConfig?.paymentDetails
+        ),
+        handedBackToAI,
+        welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact.sentWelcomeVoice),
+        lastInboundSentiment,
+        leadLanguage: lead.language || null,
+      });
+      return shorter?.reply || null;
+    },
   });
 
   // D) Payment instructions, sent verbatim from config as their own message.
@@ -1032,177 +1149,65 @@ const handleInboundMessage = async (job) => {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────
 
-// Two identical outbound texts this close together are never intentional —
-// they mean something re-ran, or the Closer regenerated a reply the lead
-// already has (common when a lead re-sends the same question). The guards
-// upstream stop the known causes; this is the last line of defence, right at
-// the boundary where the lead would actually receive the message.
-const DUPLICATE_REPLY_WINDOW_MS = 5 * 60 * 1000;
+// Reply / payment-block / template / handoff senders live in
+// services/outbound.service.js (shared with the backlog sweep).
+const { sendAndSaveReply, sendAndSaveTemplate, sendPaymentInstructions, handleHandoff } = outbound;
 
-const isRepeatOfLastReply = async ({ conversation, tenantId, content }) => {
-  const lastOutbound = await prisma.message.findFirst({
-    where: { conversationId: conversation.id, tenantId, direction: 'OUTBOUND', type: 'TEXT' },
-    orderBy: { sentAt: 'desc' },
-    select: { content: true, sentAt: true },
-  });
+const DEFAULT_FAREWELL = '🙏 Shukriya apna waqt dene ka! Hamari team bohat jald aap se rabta karegi. Please available rahein. ✨';
 
-  if (!lastOutbound?.content) return false;
-  if (lastOutbound.content.trim() !== content.trim()) return false;
+// ── Never silent ──────────────────────────────────────────────────────
+// Wraps every outbound the pipeline produces for an inbound message so the
+// lead can never end up with nothing: see agent-guards/never-silent.js for
+// the decision table. `retry` (optional) regenerates a reply on a shorter
+// context after the holding line went out. Every non-plain outcome is
+// logged with ev "never-silent".
+const deliverWithNeverSilent = async ({ tenant, conversation, tenantId, lead, phone, inboundMessage, content, tokensUsed, rawResponse, retry }) => {
+  const base = { tenant, conversation, tenantId, phone };
+  const lastInboundAt = inboundMessage?.sentAt || new Date();
+  const reopenTemplate = neverSilent.reopenTemplateFor(tenant);
+  const plan = neverSilent.planNeverSilent({ reply: content, lastInboundAt, reopenTemplate });
+  const log = (outcome, extra = {}) => logger.warn({ ev: neverSilent.EV, tenantId, leadId: lead?.id, conversationId: conversation.id,
+    waMessageId: inboundMessage?.waMessageId || null, plan: plan.action, reason: plan.reason, outcome, ...extra }, 'never-silent');
 
-  return Date.now() - new Date(lastOutbound.sentAt).getTime() < DUPLICATE_REPLY_WINDOW_MS;
-};
-
-// Sends the configured bank/payment block verbatim and records WHEN it went
-// out. That timestamp is what later lets an inbound image be read as payment
-// proof — without it we'd have no way to tell a receipt from any other photo.
-const sendPaymentInstructions = async ({ tenant, conversation, tenantId, phone }) => {
-  const details = tenant.aiConfig?.paymentDetails?.trim();
-  if (!details) {
-    logger.warn({ tenantId, conversationId: conversation.id },
-      '⚠️  Payment details requested but none configured — lead was told to pay with no account to pay into');
-    return false;
+  if (plan.action === 'send') {
+    const r = await sendAndSaveReply({ ...base, content: plan.text, tokensUsed, rawResponse });
+    if (r?.sent) return r;
+    // Duplicate-suppressed or Meta refused after retries: still say something.
+    log(r?.reason === 'duplicate' ? 'duplicate_suppressed_hold_sent' : 'send_failed_hold_attempted', { sendReason: r?.reason });
+    return sendAndSaveReply({ ...base, content: neverSilent.HOLD_REPLY, tokensUsed: 0, rawResponse: { systemMessage: 'never_silent_hold' }, voiceNote: false });
   }
 
-  await sendAndSaveReply({
-    tenant, conversation, tenantId, phone,
-    content: details,
-    tokensUsed: 0,
-    // Marker, not an AI response: lets tooling identify this row without
-    // comparing content strings.
-    rawResponse: { systemMessage: 'payment_details' },
-    // Never read account numbers aloud through a third-party TTS service —
-    // the text block is the deliverable here.
-    voiceNote: false,
-  });
-
-  await prisma.conversation.update({
-    where: { id: conversation.id },
-    data: { paymentDetailsSentAt: new Date() },
-  });
-
-  logger.info({ conversationId: conversation.id }, '🏦 Payment details sent from config');
-  return true;
-};
-
-const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content, tokensUsed, rawResponse, voiceNote = true }) => {
-  let waMessageId = null;
-
-  if (!content?.trim()) {
-    logger.warn({ tenantId, conversationId: conversation.id }, 'Empty reply — nothing sent');
-    return;
-  }
-
-  if (await isRepeatOfLastReply({ conversation, tenantId, content })) {
-    logger.warn({ tenantId, conversationId: conversation.id, preview: content.slice(0, 80) },
-      '🚫 Suppressed duplicate reply — identical text already sent to this lead');
-    return;
-  }
-
-  // Meta's send API fails transiently (throttling, 5xx) often enough that a
-  // single attempt silently dropping the reply is a real incident: the lead
-  // reads silence and nobody is told. Retry briefly, and if it still fails,
-  // leave a visible Activity so the dashboard shows the gap.
-  const MAX_SEND_ATTEMPTS = 3;
-  for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS && !waMessageId; attempt++) {
-    try {
-      waMessageId = await whatsappService.sendText(tenant, phone, content);
-    } catch (err) {
-      logger.error({ err, tenantId, phone, attempt }, 'Failed to send WA reply');
-      if (attempt < MAX_SEND_ATTEMPTS) {
-        await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
-      }
+  if (plan.action === 'hold_and_retry') {
+    log('hold_sent_retrying');
+    await sendAndSaveReply({ ...base, content: plan.text, tokensUsed: 0, rawResponse: { systemMessage: 'never_silent_hold' }, voiceNote: false });
+    let second = null;
+    if (typeof retry === 'function') {
+      try { second = await retry(); } catch (err) { log('retry_failed', { err: err.message }); }
     }
+    const text = neverSilent.isBlankReply(second) ? neverSilent.FINAL_FALLBACK_REPLY : String(second);
+    log(neverSilent.isBlankReply(second) ? 'retry_blank_fallback_sent' : 'retry_reply_sent');
+    return sendAndSaveReply({ ...base, content: text, tokensUsed: 0, rawResponse: { systemMessage: 'never_silent_retry' } });
   }
 
-  if (!waMessageId) {
-    await prisma.activity.create({
-      data: {
-        tenantId,
-        leadId: conversation.leadId,
-        type: 'AI_ACTION',
-        content: '⚠️ WhatsApp send failed after retries — the lead did NOT receive the last reply',
-        metadata: { flag: 'wa_send_failed', attempts: MAX_SEND_ATTEMPTS },
-      },
-    }).catch(() => {});
+  if (plan.action === 'template') {
+    log('reopen_template_sent', { template: plan.template.name });
+    return sendAndSaveTemplate({ ...base, lead: { ...lead, contact: lead?.contact || { name: null } }, tpl: plan.template, sender: 'AI',
+      rawResponse: { systemMessage: 'never_silent_reopen_template', template: plan.template.name } });
   }
 
-  await prisma.message.create({
-    data: {
-      tenantId,
-      conversationId: conversation.id,
-      waMessageId,
-      direction: 'OUTBOUND',
-      sender: 'AI',
-      type: 'TEXT',
-      content,
-      status: waMessageId ? 'SENT' : 'FAILED',
-      aiTokensUsed: tokensUsed || 0,
-      aiRawResponse: rawResponse,
-    },
-  });
-
-  // ── Optional voice-note follow-up, in the owner's ElevenLabs cloned voice.
-  // Best-effort and fully isolated: the text reply above has already been
-  // sent and saved, so nothing here can affect it.
-  //
-  // Per-tenant opt-out: the ElevenLabs credentials are platform-global, so
-  // without this gate every tenant's leads would hear the platform owner's
-  // cloned voice at the owner's expense. settings.voiceNotesEnabled = false
-  // turns it off for a tenant; default stays on so current behavior for the
-  // owner's own tenant is unchanged.
-  const tenantVoiceEnabled = tenant.settings?.voiceNotesEnabled !== false;
-  if (voiceNote && tenantVoiceEnabled && elevenlabsService.isVoiceCloneConfigured()) {
-    try {
-      const tts = await elevenlabsService.textToSpeech(content);
-      if (tts) {
-        const audioMessageId = await whatsappService.sendAudio(tenant, phone, tts.buffer, tts.mimeType);
-
-        await prisma.message.create({
-          data: {
-            tenantId,
-            conversationId: conversation.id,
-            waMessageId: audioMessageId,
-            direction: 'OUTBOUND',
-            sender: 'AI',
-            type: 'AUDIO',
-            // Marker, not a second copy of the reply text: the duplicate
-            // content used to appear twice in every AI-bound history and in
-            // the dashboard thread.
-            content: '[Voice note of the reply above]',
-            status: audioMessageId ? 'SENT' : 'FAILED',
-            aiTokensUsed: 0,
-            aiRawResponse: null,
-          },
-        });
-      }
-    } catch (err) {
-      logger.error({ err, tenantId, phone }, 'Voice-note follow-up failed (non-blocking)');
-    }
+  // no_template: nothing approved to send outside the window. Try the text
+  // anyway (the window estimate can be conservative), then make the gap
+  // visible instead of silent.
+  const r = await sendAndSaveReply({ ...base, content: neverSilent.isBlankReply(content) ? neverSilent.FINAL_FALLBACK_REPLY : content, tokensUsed, rawResponse });
+  log(r?.sent ? 'outside_window_text_delivered' : 'no_template_configured', { sendReason: r?.reason });
+  if (!r?.sent) {
+    await prisma.activity.create({ data: { tenantId, leadId: lead?.id || conversation.leadId, type: 'AI_ACTION',
+      content: '⚠️ Could not reply: thread is outside the 24h window and no re-open template is configured (settings.reopenTemplate)',
+      metadata: { flag: 'never_silent_no_template' } } }).catch(() => {});
+    notificationService.notifyAdmin(tenant, 'needsHuman', { contactName: lead?.contact?.name, phone,
+      reason: 'Lead is outside the 24h window and no approved re-open template is configured — reply by template manually' });
   }
-};
-
-const handleHandoff = async (tenant, conversation, lead, reason) => {
-  await prisma.conversation.update({
-    where: { id: conversation.id },
-    data: {
-      status: 'HUMAN_TAKEOVER',
-      aiEnabled: false,
-      handoffReason: reason || 'Manual handoff',
-      handoffAt: new Date(),
-    },
-  });
-
-  await prisma.activity.create({
-    data: {
-      tenantId: tenant.id,
-      leadId: lead.id,
-      type: 'AI_ACTION',
-      content: `Conversation handed off to human agent. Reason: ${reason}`,
-      metadata: { handoffReason: reason },
-    },
-  });
-
-  logger.info({ leadId: lead.id, reason }, '🙋 Lead handed off to human agent');
+  return r;
 };
 
 const extractAdAttribution = (referral) => {
@@ -1385,6 +1390,8 @@ const schedulerWorker = new Worker(
       if (job.name === 'automation-tick') return automationService.runTick();
       if (job.name === 'sheets-sync-tick') return sheetsSyncService.syncAllTenants();
       if (job.name === 'sheets-sync') return sheetsSyncService.syncTenant(job.data?.tenantId);
+      if (job.name === 'model-health-check') return require('../services/modelHealth.service').checkAllModels();
+      if (job.name === 'backlog-sweep') return require('../services/backlogSweep.service').runTick();
       // 'follow-up' intentionally unhandled for now: returning cleanly drains
       // the backlog these accumulated instead of failing them in a loop.
       logger.warn({ jobName: job.name, jobId: job.id }, 'Scheduler job has no handler — draining');
@@ -1415,5 +1422,13 @@ registerAutomationTick()
 registerSheetsSyncTick()
   .then(() => logger.info('📊 Google Sheet lead sync scheduled — hourly'))
   .catch((err) => logger.warn({ err }, 'Could not register sheet sync schedule'));
+
+registerModelHealthCheck()
+  .then(() => logger.info('🩺 Model health check scheduled — Mondays 08:00 Asia/Karachi'))
+  .catch((err) => logger.warn({ err }, 'Could not register model health check'));
+
+registerBacklogSweep()
+  .then(() => logger.info('🧹 Backlog sweep scheduled — every 15 min'))
+  .catch((err) => logger.warn({ err }, 'Could not register backlog sweep'));
 
 module.exports = worker;

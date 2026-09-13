@@ -1,6 +1,6 @@
 // src/pages/Pipeline.jsx — Leads page (route: /leads). Kanban + Table views,
 // search/filter, slide-out detail panel, "+ New Lead" modal.
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { PageHeader } from '@pages/Layout';
 import { contactsAPI, leadsAPI } from '@lib/api';
 import { ENROLMENT_FEE_PKR } from '@lib/constants';
@@ -322,8 +322,13 @@ export default function Pipeline() {
   }, [loadDbLeads]);
 
   // Another tab (or another user on the team) changed a lead — reload so this
-  // tab never sits on a stale pipeline or a stale revenue total.
-  useRealtimeRefresh(loadDbLeads);
+  // tab never sits on a stale pipeline or a stale revenue total. Our own
+  // mutations are patched locally (updateLead) and their echo is skipped.
+  const realtimeReload = useCallback(() => {
+    if (Date.now() < skipRealtimeUntil.current) return;
+    loadDbLeads();
+  }, [loadDbLeads]);
+  useRealtimeRefresh(realtimeReload);
 
   const filtered = useMemo(() => {
     return allLeads.filter((l) => {
@@ -372,10 +377,22 @@ export default function Pipeline() {
     }
   };
 
+  // A mutation used to re-page the whole pipeline (1,400+ leads × every page
+  // × every board re-render) and the realtime broadcast of that same change
+  // triggered a second full reload — that is the "Mark as Won freezes the tab"
+  // bug. Now: patch the one card from the API response and ignore our own
+  // realtime echo for a moment. A response without a lead (notes) still reloads.
+  const skipRealtimeUntil = useRef(0);
   const updateLead = async (leadId, updater) => {
     const target = allLeads.find((l) => l.id === leadId);
     if (!target?.apiId) return;
-    await updater(target.apiId);
+    const res = await updater(target.apiId);
+    const apiLead = res?.data && typeof res.data === 'object' && !Array.isArray(res.data) ? res.data : null;
+    if (apiLead?.id && apiLead.stage) {
+      skipRealtimeUntil.current = Date.now() + 4000;
+      setDbLeads((prev) => prev.map((l) => (l.apiId === apiLead.id ? patchUiLead(l, apiLead) : l)));
+      return;
+    }
     await loadDbLeads();
   };
 
@@ -538,37 +555,60 @@ function Select({ label, value, onChange, options }) {
 // ─────────────────────────────────────────────────────────────
 // Kanban
 // ─────────────────────────────────────────────────────────────
+// Columns are windowed: a stage with 900 leads renders COLUMN_PAGE cards and
+// a "show more" button, not 900 DOM nodes on every keystroke. Cards and
+// columns are memoised so patching one lead re-renders one card.
+const COLUMN_PAGE = 60;
+
 function KanbanView({ leads, onSelect }) {
+  const byStage = useMemo(() => {
+    const out = {};
+    for (const s of STAGES) out[s.key] = [];
+    for (const l of leads) (out[l.stage] || (out[l.stage] = [])).push(l);
+    return out;
+  }, [leads]);
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-      {STAGES.map((s) => {
-        const cards = leads.filter((l) => l.stage === s.key);
-        const total = cards.reduce((sum, l) => sum + l.value, 0);
-        return (
-          <div key={s.key} className={`flex flex-col rounded-xl border ${s.accent}`}>
-            <div className="flex items-center justify-between border-b border-slate-800/40 px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-200">{s.label}</span>
-                <span className="text-[10px] tabular-nums text-slate-500">· {cards.length}</span>
-              </div>
-              <span className="text-[10px] font-semibold tabular-nums text-slate-400">{formatPKR(total)}</span>
-            </div>
-            <div className="flex-1 space-y-2 overflow-y-auto p-2.5" style={{ maxHeight: 'calc(100vh - 320px)' }}>
-              {cards.length === 0 ? (
-                <div className="py-8 text-center text-[11px] text-slate-600">No leads</div>
-              ) : (
-                cards.map((c) => <LeadCard key={c.id} lead={c} onClick={() => onSelect(c.id)} />)
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {STAGES.map((s) => <KanbanColumn key={s.key} stage={s} cards={byStage[s.key] || []} onSelect={onSelect} />)}
     </div>
   );
 }
 
-function LeadCard({ lead, onClick }) {
+const KanbanColumn = React.memo(function KanbanColumn({ stage: s, cards, onSelect }) {
+  const [shown, setShown] = useState(COLUMN_PAGE);
+  const total = useMemo(() => cards.reduce((sum, l) => sum + l.value, 0), [cards]);
+  const visible = cards.length > shown ? cards.slice(0, shown) : cards;
+  return (
+    <div className={`flex flex-col rounded-xl border ${s.accent}`}>
+      <div className="flex items-center justify-between border-b border-slate-800/40 px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-200">{s.label}</span>
+          <span className="text-[10px] tabular-nums text-slate-500">· {cards.length}</span>
+        </div>
+        <span className="text-[10px] font-semibold tabular-nums text-slate-400">{formatPKR(total)}</span>
+      </div>
+      <div className="flex-1 space-y-2 overflow-y-auto p-2.5" style={{ maxHeight: 'calc(100vh - 320px)' }}>
+        {cards.length === 0 ? (
+          <div className="py-8 text-center text-[11px] text-slate-600">No leads</div>
+        ) : (
+          visible.map((c) => <LeadCard key={c.id} lead={c} onSelect={onSelect} />)
+        )}
+        {cards.length > shown && (
+          <button
+            onClick={() => setShown((n) => n + COLUMN_PAGE)}
+            className="w-full rounded-lg border border-dashed border-slate-700/60 py-2 text-[11px] text-slate-400 hover:border-accent/40 hover:text-accent"
+          >
+            Show {Math.min(COLUMN_PAGE, cards.length - shown)} more · {cards.length - shown} hidden
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+
+const LeadCard = React.memo(function LeadCard({ lead, onSelect }) {
+  const onClick = () => onSelect(lead.id);
   return (
     <button
       onClick={onClick}
@@ -608,7 +648,7 @@ function LeadCard({ lead, onClick }) {
       </div>
     </button>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────
 // Table
@@ -747,6 +787,8 @@ function DetailContent({ lead, onClose, onStageChange, onMarkWon, onAddNote, onU
   const timeline = buildTimeline(lead);
   const [stageDraft, setStageDraft] = useState(lead.stage);
   const [saving, setSaving] = useState(false);
+  // The card is patched in place after Mark as Won — keep the dropdown in sync.
+  useEffect(() => { setStageDraft(lead.stage); }, [lead.id, lead.stage]);
 
   const stageToApi = (uiStage) => {
     if (uiStage === 'QUALIFIED') return 'QUALIFYING';
@@ -889,7 +931,7 @@ function DetailContent({ lead, onClose, onStageChange, onMarkWon, onAddNote, onU
         <section className="border-b border-slate-800/60 px-5 py-4">
           <div className="mb-2 flex items-center justify-between">
             <h4 className="text-[10px] uppercase tracking-wider text-slate-500">Last 3 WhatsApp messages</h4>
-            <a href="/conversations" className="text-[11px] text-accent transition-colors hover:underline">Open thread →</a>
+            <a href={threadLink(lead)} className="text-[11px] text-accent transition-colors hover:underline">Open thread →</a>
           </div>
           <ul className="space-y-2">
             {lead.lastMessages.map((m, i) => (
@@ -926,7 +968,7 @@ function DetailContent({ lead, onClose, onStageChange, onMarkWon, onAddNote, onU
 
       {/* Sticky actions */}
       <footer className="grid grid-cols-2 gap-2 border-t border-slate-800/60 bg-surface/40 px-5 py-3">
-        <ActionBtn label="Open WhatsApp" onClick={() => (window.location.href = '/conversations')} primary />
+        <ActionBtn label="Open WhatsApp" onClick={() => (window.location.href = threadLink(lead))} primary />
         <ActionBtn label="Mark as Won"   onClick={async () => {
           setSaving(true);
           try {
@@ -1140,6 +1182,30 @@ function SourceBadge({ source }) {
       {source}
     </span>
   );
+}
+
+// Deep link to the lead's latest thread (Conversations resolves ?leadId=).
+function threadLink(lead) {
+  return lead?.apiId ? `/conversations?leadId=${lead.apiId}` : '/conversations';
+}
+
+// Merge a lead returned by a mutation (PATCH /leads/:id/stage etc., no
+// contact include) into the card already on the board.
+function patchUiLead(ui, apiLead) {
+  const stageMap = { NEW: 'NEW', QUALIFYING: 'QUALIFIED', DIAGNOSED: 'PROPOSAL', PROPOSED: 'PROPOSAL', CLOSED_WON: 'WON', CLOSED_LOST: 'LOST' };
+  const scoreMap = { HOT: 'HOT', WARM: 'WARM', COLD: 'COLD' };
+  return {
+    ...ui,
+    stage: stageMap[apiLead.stage] || ui.stage,
+    score: scoreMap[apiLead.scoreLabel] || ui.score,
+    value: apiLead.dealValue != null ? Number(apiLead.dealValue) : ui.value,
+    intent: apiLead.intent ?? ui.intent,
+    nextAction: apiLead.nextAction ?? ui.nextAction,
+    humanFollowupRequired: apiLead.humanFollowupRequired ?? ui.humanFollowupRequired,
+    leadTemperature: apiLead.leadTemperature ?? ui.leadTemperature,
+    aiScore: apiLead.aiScore != null ? (apiLead.aiScore ? Math.round(apiLead.aiScore / 10) : null) : ui.aiScore,
+    notes: apiLead.problemSummary || ui.notes,
+  };
 }
 
 function mapApiLeadToUi(lead) {

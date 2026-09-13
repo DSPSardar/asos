@@ -114,6 +114,8 @@ export function AppRoutes() {
         <Route path="/today"         element={<TenantRoute><TodayPage /></TenantRoute>}          />
         <Route path="/leads"         element={<TenantRoute><PipelinePage /></TenantRoute>}       />
         <Route path="/conversations" element={<TenantRoute><ConversationsPage /></TenantRoute>}  />
+        {/* Deep link straight to a thread (from /today, the lead panel, WhatsApp alerts). */}
+        <Route path="/conversations/:conversationId" element={<TenantRoute><ConversationsPage /></TenantRoute>}  />
         <Route path="/ai-insights"   element={<TenantRoute><AIInsightsPage /></TenantRoute>}     />
         <Route path="/ads"           element={<TenantRoute><AdsPage /></TenantRoute>}            />
         <Route path="/analytics"     element={<TenantRoute><AnalyticsPage /></TenantRoute>}      />

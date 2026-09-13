@@ -5,9 +5,21 @@ const { success, created, paginated } = require('../../utils/response');
 
 const list = async (req, res, next) => {
   try {
-    const { status, page = 1, limit = 20 } = req.query;
-    const { conversations, total } = await svc.listConversations({ tenantId: req.tenantId, status, page: +page, limit: +limit });
-    return paginated(res, conversations, total, page, limit);
+    const { status, page = 1, limit = 20, search, needsHuman, stage, leadId, aiEnabled } = req.query;
+    const safeLimit = Math.min(Math.max(+limit || 20, 1), 100);
+    const { conversations, total } = await svc.listConversations({
+      tenantId: req.tenantId, status, page: Math.max(+page || 1, 1), limit: safeLimit, search, needsHuman, stage, leadId, aiEnabled,
+    });
+    return paginated(res, conversations, total, page, safeLimit);
+  } catch (err) { next(err); }
+};
+
+// GET /conversations/by-lead/:leadId → the lead's latest thread (404 if none)
+const byLead = async (req, res, next) => {
+  try {
+    const conv = await svc.latestForLead({ tenantId: req.tenantId, leadId: req.params.leadId });
+    if (!conv) return require('../../utils/response').error(res, 'No conversation for this lead', 404);
+    return success(res, conv);
   } catch (err) { next(err); }
 };
 
@@ -99,4 +111,4 @@ const deleteConversation = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { list, getOne, sendMessage, toggleAI, takeover, handback, close, confirmPayment, summary, suggestion, byClient, clearMessages, deleteConversation };
+module.exports = { list, byLead, getOne, sendMessage, toggleAI, takeover, handback, close, confirmPayment, summary, suggestion, byClient, clearMessages, deleteConversation };

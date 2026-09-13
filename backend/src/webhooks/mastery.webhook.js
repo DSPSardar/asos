@@ -109,6 +109,27 @@ router.post('/', async (req, res) => {
             : `⚠️ Mastery enrolment reported at ${currency} ${fee} — not the PKR ${ENROLMENT_FEE_PKR} list price, lead held at PROPOSED for manual verification`,
           metadata: { masteryEvent: 'enrolled', source: body.data.source || 'mastery_site',
             ...(wonValid ? {} : { flag: 'enrolment_fee_mismatch', reportedFee: body.data.fee ?? null, reportedCurrency: body.data.currency ?? null }) } } });
+
+        if (wonValid) {
+          // The automation engine's `mastery_event` trigger (Mastery: Welcome to
+          // the dashboard) reads SYSTEM activities only — the STAGE_CHANGE row
+          // above is for analytics and never matched, which is why that rule sat
+          // at "Nothing sent yet". Record the event the way every other Mastery
+          // event is recorded (services/mastery.service.js recordEvent).
+          await prisma.activity.create({ data: { tenantId, leadId: lead.id, type: 'SYSTEM',
+            content: '🎓 Enrolled in AI Agent Mastery',
+            metadata: { masteryEvent: 'enrolled', source: body.data.source || 'mastery_site', enrolledAt: closedAt.toISOString() } } });
+
+          // The WhatsApp thread that carried the payment is parked in
+          // PENDING_VERIFICATION with AI off. Enrolment approved = verified:
+          // close it out so the student's next message opens a fresh thread in
+          // enrolled-student (support) mode instead of sitting in the human
+          // queue as "payment proof to verify".
+          await prisma.conversation.updateMany({
+            where: { tenantId, leadId: lead.id, status: { in: ['PENDING_VERIFICATION', 'HUMAN_TAKEOVER', 'ACTIVE', 'AI_HANDLING'] } },
+            data: { status: 'CLOSED', aiEnabled: false, handoffReason: 'Enrolment approved in the Mastery admin' },
+          }).catch((err) => logger.warn({ err, leadId: lead.id }, 'Mastery: could not close the payment thread'));
+        }
         return;
       }
       const leadId = await masteryService.recordEvent({ tenantId, email, event: body.event, data: body.data });

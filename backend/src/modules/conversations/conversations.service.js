@@ -26,8 +26,39 @@ const withSignedMediaUrls = (messages) => (messages || []).map((m) =>
 // Persists until the next manual takeover. Prevents Claude from auto-handing off HOT leads.
 const aiControlKey = (conversationId) => `asos:ai_control:${conversationId}`;
 
-const listConversations = async ({ tenantId, status, page = 1, limit = 20 }) => {
+// Server-side search + filters. The inbox used to load the 50 most recent
+// threads and filter in the browser, so anything older was unreachable —
+// including the humans-owed threads /today was listing.
+//   search      contact name / phone / lead problem summary (case-insensitive)
+//   needsHuman  parked or handed-over threads, AI off, or a lead flagged for follow-up
+//   stage       lead stage
+//   leadId      the lead's threads (deep link from the lead panel)
+//   aiEnabled   'true' | 'false'
+const listConversations = async ({ tenantId, status, page = 1, limit = 20, search, needsHuman, stage, leadId, aiEnabled }) => {
   const where = { tenantId, ...(status && { status }) };
+  if (leadId) where.leadId = leadId;
+  if (aiEnabled === 'true' || aiEnabled === true) where.aiEnabled = true;
+  if (aiEnabled === 'false' || aiEnabled === false) where.aiEnabled = false;
+  if (stage) where.lead = { ...(where.lead || {}), stage };
+  if (needsHuman === 'true' || needsHuman === true) {
+    where.OR = [
+      { status: { in: ['PENDING_VERIFICATION', 'HUMAN_TAKEOVER'] } },
+      { aiEnabled: false },
+      { lead: { humanFollowupRequired: true } },
+    ];
+  }
+  const q = String(search || '').trim();
+  if (q) {
+    const digits = q.replace(/\D/g, '');
+    const textMatch = [
+      { contact: { name: { contains: q, mode: 'insensitive' } } },
+      { lead: { problemSummary: { contains: q, mode: 'insensitive' } } },
+      ...(digits.length >= 4 ? [{ contact: { phone: { contains: digits } } }] : []),
+      ...(q.length >= 3 ? [{ messages: { some: { content: { contains: q, mode: 'insensitive' } } } }] : []),
+    ];
+    // Combine with any needsHuman OR without one clobbering the other.
+    where.AND = [...(where.AND || []), { OR: textMatch }];
+  }
   const [conversations, total] = await Promise.all([
     prisma.conversation.findMany({
       where,
@@ -36,14 +67,21 @@ const listConversations = async ({ tenantId, status, page = 1, limit = 20 }) => 
       orderBy: { lastMessageAt: 'desc' },
       include: {
         contact: { select: { name: true, phone: true, waProfilePic: true } },
-        lead:    { select: { stage: true, scoreLabel: true, aiScore: true } },
-        messages: { orderBy: { sentAt: 'desc' }, take: 1, select: { content: true, sender: true, sentAt: true, status: true } },
+        lead:    { select: { id: true, stage: true, scoreLabel: true, aiScore: true, humanFollowupRequired: true } },
+        messages: { orderBy: { sentAt: 'desc' }, take: 1, select: { content: true, sender: true, sentAt: true, status: true, direction: true } },
       },
     }),
     prisma.conversation.count({ where }),
   ]);
   return { conversations, total };
 };
+
+// Latest thread for a lead — the lead panel's "Open thread →" deep link.
+const latestForLead = async ({ tenantId, leadId }) => prisma.conversation.findFirst({
+  where: { tenantId, leadId },
+  orderBy: { lastMessageAt: 'desc' },
+  select: { id: true, status: true, aiEnabled: true, lastMessageAt: true },
+});
 
 const listByClient = async ({ tenantId, clientId }) => prisma.conversation.findMany({
   where: { tenantId, contactId: clientId },
@@ -409,5 +447,5 @@ const deleteConversation = async (tenantId, conversationId) => {
 module.exports = {
   listConversations, getConversation, sendMessage,
   toggleAI, takeover, handback, closeConversation, confirmPayment, getSummary, getSuggestedReply, listByClient,
-  clearMessages, deleteConversation,
+  clearMessages, deleteConversation, latestForLead,
 };

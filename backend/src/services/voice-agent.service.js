@@ -1,6 +1,7 @@
 const OpenAI = require('openai');
 const env = require('../config/env');
 const logger = require('../utils/logger');
+const { modelId, modelParams } = require('../config/models');
 
 const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
@@ -18,8 +19,8 @@ const createVoiceReply = async ({ speech, leadId }) => {
 
   try {
     const response = await client.responses.create({
-      model: env.OPENAI_MODEL,
-      max_output_tokens: 120,
+      model: modelId('voiceAgent'),
+      max_output_tokens: modelParams('voiceAgent').maxOutputTokens,
       instructions: `You are the DSP AI Assistant for Digital Services Program Bootcamp on a phone call.
 Speak in clear, friendly Roman Urdu with simple English only when helpful.
 Always state or preserve that you are an AI assistant, not Sardar Abdul Ghaffar Khan.

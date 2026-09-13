@@ -29,6 +29,9 @@ export const APP_ROUTES = [
   '/automations',
   '/billing',
   '/conversations',
+  // Deep link to one thread; a wildcard so the preview server's 404 guard
+  // lets any conversation id through.
+  '/conversations/*',
   '/dashboard',
   '/dsp-reports',
   '/leads',

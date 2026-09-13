@@ -28,7 +28,15 @@ const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
 const notFound = () => Object.assign(new Error('Conversation not found'), { statusCode: 404, expose: true });
 const conflict = (msg) => Object.assign(new Error(msg), { statusCode: 409, expose: true });
 
-const getQueue = (tenantId, viewer, { includeSnoozed = false } = {}) => needsYou.collectQueue(tenantId, { viewer, includeSnoozed });
+const getQueue = async (tenantId, viewer, { includeSnoozed = false } = {}) => {
+  const [queue, sweep] = await Promise.all([
+    needsYou.collectQueue(tenantId, { viewer, includeSnoozed }),
+    // Last backlog-sweep run (services/backlogSweep.service.js) — the page
+    // shows it as a dismissible banner.
+    require('../../services/backlogSweep.service').lastSummary(tenantId),
+  ]);
+  return { ...queue, sweep };
+};
 
 // Latest message id + last inbound time, the two facts every action needs.
 const threadFacts = async (tenantId, conversationId) => {
