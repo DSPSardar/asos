@@ -215,6 +215,7 @@ export const contactsAPI = {
 export const conversationsAPI = {
   list:       (params) => api.get('/conversations', { params }),
   byClient:   (clientId) => api.get(`/conversations/client/${clientId}`),
+  byLead:     (leadId) => api.get(`/conversations/by-lead/${leadId}`),
   get:        (id) => api.get(`/conversations/${id}`),
   sendMessage:(id, content) => api.post(`/conversations/${id}/messages`, { content }),
   suggestion: (id) => api.get(`/conversations/${id}/suggestion`),

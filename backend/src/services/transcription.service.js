@@ -13,7 +13,8 @@ const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 // are (OGG container, Opus codec) — no conversion needed, the buffer goes
 // straight in. It's also the more mature, cheaper endpoint, and short
 // sales-chat voice notes don't need gpt-4o-transcribe's extra accuracy.
-const TRANSCRIPTION_MODEL = 'whisper-1';
+// ID from config/models.js (OPENAI_TRANSCRIPTION_MODEL override).
+const TRANSCRIPTION_MODEL = require('../config/models').modelId('transcription');
 
 // Returns transcript text, or null on any failure. Must never throw — a
 // transcription failure has to fall back to a safe placeholder upstream,

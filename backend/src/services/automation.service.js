@@ -45,6 +45,7 @@ const { requestContext, runWithSystemScope } = require('../middleware/requestCon
 const {
   UNIT_MS, delayMs, UNTOUCHABLE_CONV, CANCEL_REASONS,
   normalizeSteps, validateSteps, planAfterTouch, cancelReasonFor, isChaseTrigger,
+  isSalesRule, suppressionWhere,
 } = require('./automation.steps');
 
 const TICK_MINUTES = 10;
@@ -59,7 +60,8 @@ const renderTemplate = (tpl, lead) => {
 
 const leadSelect = {
   id: true, tenantId: true, stage: true, dspPhase: true, updatedAt: true,
-  contact: { select: { id: true, name: true, phone: true } },
+  formSubmittedAt: true, alreadyEnrolledAt: true,
+  contact: { select: { id: true, name: true, phone: true, optedOutAt: true } },
   conversations: {
     orderBy: { lastMessageAt: 'desc' }, take: 1,
     select: { id: true, status: true, aiEnabled: true, lastMessageAt: true },
@@ -92,6 +94,9 @@ const baseLeadWhere = (rule, { excludeWon = false } = {}) => {
   if (condStage && condStage !== 'any') where.stage = condStage;
   // Never re-fire on a lead this rule already touched.
   where.automationRuns = { none: { ruleId: rule.id } };
+  // Suppression lists (automation.steps.js): opt-outs for every rule; for
+  // sales rules also formSubmittedAt / already-enrolled.
+  Object.assign(where, suppressionWhere(rule));
   return where;
 };
 
@@ -300,7 +305,7 @@ const advanceDue = async (tenant, rule, { limit = MAX_SENDS_PER_RULE_PER_TICK, n
     const lead = await prisma.lead.findFirst({ where: { id: run.leadId, tenantId: rule.tenantId }, select: leadSelect }); // eslint-disable-line no-await-in-loop
     const conv = lead?.conversations?.[0];
     const facts = conv ? await conversationFacts(conv.id) : null; // eslint-disable-line no-await-in-loop
-    const reason = cancelReasonFor({ lead, conv, facts, since: run.lastTouchAt, excludeWon: isChaseTrigger(rule) });
+    const reason = cancelReasonFor({ lead, conv, facts, since: run.lastTouchAt, excludeWon: isChaseTrigger(rule), sales: isSalesRule(rule) });
     if (reason) {
       await prisma.automationRun.update({ where: { id: run.id }, data: { status: 'CANCELLED', cancelReason: reason, nextDueAt: null } }).catch(() => {}); // eslint-disable-line no-await-in-loop
       results.push({ leadId: run.leadId, status: 'CANCELLED', reason });

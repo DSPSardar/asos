@@ -13,8 +13,10 @@ const { runWithSystemScope } = require('../middleware/requestContext.middleware'
 const OpenAI = require('openai');
 const env = require('../config/env');
 
+const { modelId, modelParams } = require('../config/models');
+
 const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
-const MODEL = env.OPENAI_QUALIFIER_MODEL || env.OPENAI_MODEL;
+const MODEL = modelId('insightsClassifier');
 
 const BATCH_SIZE = 25;      // messages per AI call
 const MAX_MESSAGES = 2000;  // hard cost cap per boot
@@ -37,7 +39,7 @@ const classifyBatch = async (messages) => {
   const input = messages.map((m) => ({ id: m.id, text: (m.content || '').slice(0, 300) }));
   const resp = await client.chat.completions.create({
     model: MODEL,
-    max_completion_tokens: 2048,
+    max_completion_tokens: modelParams('insightsClassifier').maxOutputTokens,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: INSTRUCTIONS },

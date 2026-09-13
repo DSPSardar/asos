@@ -94,7 +94,7 @@ const textToSpeech = async (text) => {
       `${ELEVENLABS_API_URL}/text-to-speech/${env.ELEVENLABS_VOICE_ID}`,
       {
         text: normalizeForSpeech(text),
-        model_id: 'eleven_multilingual_v2',
+        model_id: require('../config/models').modelId('tts'),
         voice_settings: { stability: 0.5, similarity_boost: 0.75 },
       },
       {

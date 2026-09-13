@@ -244,6 +244,10 @@ model Contact {
   tags          String[]  @default([])
   customFields  Json      @default("{}") @map("custom_fields")
   optIn         Boolean   @default(false) @map("opt_in")
+  // Set when the contact asks us to stop messaging them ("STOP", "message mat
+  // karo"). Every automation skips a contact with this set — see
+  // services/automation.steps.js suppression rules.
+  optedOutAt    DateTime? @map("opted_out_at")
   sentWelcomeVoice Boolean @default(false) @map("sent_welcome_voice")
 
   createdAt     DateTime  @default(now()) @map("created_at")
@@ -309,6 +313,17 @@ model Lead {
   // MASTERY is the only product and the default for new leads; BOOTCAMP remains
   // a valid stored value on historical rows and is never rewritten.
   product             String?    @default("MASTERY") @map("product")
+
+  // ── Agent guards (services/agent-guards/) ──
+  // formSubmittedAt: the lead told us they filled the enrolment form. Sales
+  // reminders stop; the Mastery webhook finishes the enrolment.
+  formSubmittedAt     DateTime?  @map("form_submitted_at")
+  // alreadyEnrolledAt: the lead said they are already a student. Sales
+  // automations skip them and the AI answers in support mode.
+  alreadyEnrolledAt   DateTime?  @map("already_enrolled_at")
+  // Language detected on the lead's first message: ur | roman_ur | en | ar |
+  // hi | mixed. The Closer replies in it (utils/language.js).
+  language            String?    @map("language")
 
   closedAt            DateTime?  @map("closed_at")
   createdAt           DateTime   @default(now()) @map("created_at")

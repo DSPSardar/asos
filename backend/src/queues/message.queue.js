@@ -164,6 +164,48 @@ const registerSheetsSyncTick = async () => {
   });
 };
 
+// Weekly model probe (services/modelHealth.service.js) — Monday 08:00
+// Asia/Karachi, before the 09:00 digest so a deprecated model is known first.
+const MODEL_HEALTH_PATTERN = '0 8 * * 1';
+const MODEL_HEALTH_TZ = 'Asia/Karachi';
+
+const registerModelHealthCheck = async () => {
+  const existing = await schedulerQueue.getRepeatableJobs();
+  await Promise.all(
+    existing
+      .filter((j) => j.name === 'model-health-check'
+        && (j.pattern !== MODEL_HEALTH_PATTERN || j.tz !== MODEL_HEALTH_TZ))
+      .map((j) => schedulerQueue.removeRepeatableByKey(j.key))
+  );
+
+  return schedulerQueue.add('model-health-check', {}, {
+    repeat: { pattern: MODEL_HEALTH_PATTERN, tz: MODEL_HEALTH_TZ },
+    jobId: 'model-health-check',
+    removeOnComplete: 10,
+    removeOnFail: 10,
+  });
+};
+
+// Backlog sweep (services/backlogSweep.service.js) — every 15 minutes, any
+// thread where the lead wrote last and nothing went out gets answered.
+const BACKLOG_SWEEP_PATTERN = '*/15 * * * *';
+
+const registerBacklogSweep = async () => {
+  const existing = await schedulerQueue.getRepeatableJobs();
+  await Promise.all(
+    existing
+      .filter((j) => j.name === 'backlog-sweep' && j.pattern !== BACKLOG_SWEEP_PATTERN)
+      .map((j) => schedulerQueue.removeRepeatableByKey(j.key))
+  );
+
+  return schedulerQueue.add('backlog-sweep', {}, {
+    repeat: { pattern: BACKLOG_SWEEP_PATTERN },
+    jobId: 'backlog-sweep',
+    removeOnComplete: 20,
+    removeOnFail: 50,
+  });
+};
+
 module.exports = {
   messageQueue,
   metaEventsQueue,
@@ -173,6 +215,8 @@ module.exports = {
   publishMetaEvent,
   scheduleFollowUp,
   registerWeeklyDigest,
+  registerModelHealthCheck,
+  registerBacklogSweep,
   registerDailyDigest,
   registerAutomationTick,
   registerSheetsSyncTick,

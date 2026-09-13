@@ -20,9 +20,9 @@ const emailService = require('./email.service');
 const logger = require('../utils/logger');
 
 // Events that ignore quiet hours entirely.
-const URGENT_EVENTS = new Set(['needsHuman']);
+const URGENT_EVENTS = new Set(['needsHuman', 'systemAlert']);
 // Events important enough to fall back to email when WhatsApp didn't go out.
-const EMAIL_FALLBACK_EVENTS = new Set(['hotLead', 'needsHuman']);
+const EMAIL_FALLBACK_EVENTS = new Set(['hotLead', 'needsHuman', 'systemAlert']);
 
 const DEFAULT_TZ = 'Asia/Karachi';
 
@@ -100,6 +100,11 @@ const buildMessage = (eventType, payload, tenant) => {
       // AI is still handling this lead — this is a heads-up, not a handoff.
       return `❓ *Knowledge Gap — ${brand}*\n\nContact: ${name}\nPhone: +${phone}\nQuestion: ${question || 'unspecified'}\n\nThe AI didn't have this in its knowledge base — worth adding an answer.`;
 
+    case 'systemAlert':
+      // Platform-level alert (model deprecated, sweep needs attention). No
+      // contact — `reason` carries the whole message.
+      return `🚨 *System Alert — ${brand}*\n\n${reason || 'Something needs attention.'}`;
+
     default:
       return `📢 *${brand} Alert*\n\nContact: ${name} (+${phone})`;
   }
@@ -108,6 +113,7 @@ const buildMessage = (eventType, payload, tenant) => {
 const EMAIL_SUBJECTS = {
   hotLead: (p) => `🔥 Hot lead: ${p.contactName || p.phone || 'Unknown'}`,
   needsHuman: (p) => `🙋 Handoff needed: ${p.contactName || p.phone || 'Unknown'}`,
+  systemAlert: (p) => `🚨 System alert: ${String(p.reason || '').split('\n')[0].slice(0, 80)}`,
 };
 
 /**
@@ -127,7 +133,9 @@ const notifyAdmin = async (tenant, eventType, payload = {}) => {
     const settings = tenant.settings || {};
     const adminPhone = settings.adminPhone;
     const prefs = settings.notifPrefs || {};
-    const pref = prefs[eventType] || {};
+    // systemAlert is opt-out (defaults on): nobody configures a pref for an
+    // alert type they don't know exists yet.
+    const pref = prefs[eventType] || (eventType === 'systemAlert' ? { whatsapp: true } : {});
 
     const msg = buildMessage(eventType, payload, tenant);
     let waDelivered = false;

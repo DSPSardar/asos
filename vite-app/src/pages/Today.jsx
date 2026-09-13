@@ -50,6 +50,11 @@ const waiting = (h) => {
   return `${Math.floor(h / 24)}d`;
 };
 const clock = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+const threadPath = (conversationId) => (conversationId ? `/conversations/${conversationId}` : '/leads');
+// The approved template closest to a generic re-open, for the one-click offer.
+const pickReopen = (templates) => templates.find((t) => /no_reply_followup/i.test(t.name))
+  || templates.find((t) => /reengage|re_engage|followup|follow_up/i.test(t.name)) || templates[0] || null;
+const SWEEP_DISMISS_KEY = 'today.sweep.dismissed';
 const stageLabel = (s) => String(s || '').replace('_', ' ');
 
 export default function Today() {
@@ -102,6 +107,7 @@ export default function Today() {
 
   const day = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const ctx = queue.context || {};
+  const sweep = queue.sweep || null;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -122,6 +128,8 @@ export default function Today() {
             Couldn't load the queue: {error}
           </div>
         )}
+
+        {sweep && <SweepBanner sweep={sweep} />}
 
         {/* Count chips */}
         <div className="flex gap-2 flex-wrap mb-5">
@@ -182,6 +190,51 @@ export default function Today() {
   );
 }
 
+// Last backlog-sweep run (backend services/backlogSweep.service.js): what the
+// machine answered on its own and what it left for a human. Dismissed per run.
+function SweepBanner({ sweep }) {
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem(SWEEP_DISMISS_KEY) === sweep.ranAt; } catch { return false; }
+  });
+  const [open, setOpen] = useState(false);
+  if (dismissed) return null;
+  const dismiss = () => { try { localStorage.setItem(SWEEP_DISMISS_KEY, sweep.ranAt); } catch { /* ignore */ } setDismissed(true); };
+  const r = sweep.replied || {};
+  const tpl = Object.entries(sweep.templates || {});
+  const skipped = Object.entries(sweep.skipped || {}).filter(([k]) => !['we_spoke_last', 'too_recent'].includes(k));
+  return (
+    <div className="mb-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2.5 text-xs text-indigo-100">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span className="font-semibold">🧹 Backlog sweep</span>
+          <span className="text-indigo-200/80"> · {clock(sweep.ranAt)}{sweep.dryRun ? ' · dry run' : ''}</span>
+          <div className="mt-1">
+            Replied to <b>{r.total || 0}</b> thread{r.total === 1 ? '' : 's'}
+            {r.total ? <> — {r.enrolled || 0} enrolled, {r.payment_pending || 0} payment-pending, {r.sales || 0} sales</> : null}
+            {tpl.length ? <> · templates: {tpl.map(([n, c]) => `${n} ×${c}`).join(', ')}</> : null}
+            {sweep.flagged?.length ? <> · <b>{sweep.flagged.length}</b> left for you (refund / legal / asked for a human)</> : null}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={() => setOpen((o) => !o)} className="underline underline-offset-2 hover:text-white">{open ? 'Hide' : 'Details'}</button>
+          <button onClick={dismiss} aria-label="Dismiss" className="rounded px-1.5 py-0.5 hover:bg-indigo-500/20">✕</button>
+        </div>
+      </div>
+      {open && (
+        <div className="mt-2 space-y-1.5 text-[11px] text-indigo-100/90">
+          {skipped.length ? <div>Skipped: {skipped.map(([k, c]) => `${k.replace(/_/g, ' ')} ×${c}`).join(', ')}</div> : null}
+          {(sweep.flagged || []).map((f) => (
+            <div key={f.conversationId}>🙋 <Link to={threadPath(f.conversationId)} className="underline underline-offset-2">{displayName(f.name, null)}</Link> — {String(f.reason || '').replace('flagged:', '').replace(/_/g, ' ')}</div>
+          ))}
+          {(sweep.skippedThreads || []).map((f) => (
+            <div key={`s-${f.conversationId}`}>⏭ <Link to={threadPath(f.conversationId)} className="underline underline-offset-2">{displayName(f.name, null)}</Link> — {String(f.reason || '').replace(/_/g, ' ')}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EmptyState({ ctx }) {
   return (
     <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 px-6 py-10 text-center">
@@ -207,6 +260,9 @@ function QueueRow({ row, open, onToggle, templates, onSent, onSkipped, onError }
   const [summaryState, setSummaryState] = useState('idle');
   const [sending, setSending] = useState(false);
   const [tplName, setTplName] = useState('');
+  // Flipped when a send comes back 409 (outside the 24h window): the row
+  // switches to the approved-template path instead of failing again.
+  const [forceTpl, setForceTpl] = useState(false);
   const loadedFor = useRef(null);
   const canDraft = !!row.conversationId;
 
@@ -238,7 +294,16 @@ function QueueRow({ row, open, onToggle, templates, onSent, onSkipped, onError }
   const send = async () => {
     if (!draft.trim() || sending) return;
     setSending(true);
-    try { await todayAPI.send(row.conversationId, draft.trim()); onSent('reply'); } catch (e) { onError(errMsg(e)); } finally { setSending(false); }
+    try { await todayAPI.send(row.conversationId, draft.trim()); onSent('reply'); }
+    catch (e) {
+      if (e?.response?.status === 409) {
+        // Backlog reply helper: the thread is outside Meta's 24h window, so
+        // offer the approved template right here instead of a dead Send.
+        setForceTpl(true);
+        if (!tplName) setTplName(pickReopen(templates)?.name || '');
+        onError('Outside the 24h window — free text cannot deliver. The approved template is ready below.');
+      } else onError(errMsg(e));
+    } finally { setSending(false); }
   };
   const sendTpl = async () => {
     if (!tplName || sending) return;
@@ -259,10 +324,15 @@ function QueueRow({ row, open, onToggle, templates, onSent, onSkipped, onError }
     </>
   );
 
-  const threadHref = row.conversationId ? `/conversations?id=${row.conversationId}` : '/leads';
+  const threadHref = threadPath(row.conversationId);
   const waHref = row.phone ? `https://wa.me/${String(row.phone).replace(/\D/g, '')}` : null;
   const isProof = row.reason === 'payment_proof';
-  const canFreeText = row.insideWindow && !isProof;
+  const canFreeText = row.insideWindow && !isProof && !forceTpl;
+  // Pre-select the closest generic re-open template when only a template can deliver.
+  useEffect(() => {
+    if (!canFreeText && !isProof && !tplName && templates.length) setTplName(pickReopen(templates)?.name || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canFreeText, templates.length]);
 
   return (
     <div className={`rounded-xl border bg-surface/60 transition-colors ${open ? 'border-indigo-500/40' : 'border-slate-800/60 hover:border-slate-700/80'}`}>

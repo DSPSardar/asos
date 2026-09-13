@@ -10,6 +10,7 @@ router.use(authenticate, requireActiveTenant);
 
 router.get('/',                     ctrl.list);
 router.get('/client/:clientId',     ctrl.byClient);
+router.get('/by-lead/:leadId',      ctrl.byLead);
 router.get('/:id',                  ctrl.getOne);
 router.post('/:id/messages',        ctrl.sendMessage);
 router.patch('/:id/ai',             ctrl.toggleAI);

@@ -41,9 +41,17 @@ const envSchema = z.object({
   MASTERY_ENROL_SECRET:    z.string().optional(),            // shared secret (x-mastery-secret) for the enrol API
   MASTERY_EVENTS_SECRET:   z.string().optional(),            // shared secret the site sends to POST /webhooks/mastery
   MASTERY_TENANT_ID:       z.string().optional(),            // the DSP tenant that owns Mastery leads/automations
+  // Model IDs. Every hardcoded model lives in config/models.js — these are the
+  // overrides Railway sets. Add new model vars here AND in models.js.
   OPENAI_MODEL:            z.string().default('gpt-5.4-mini'),
   OPENAI_QUALIFIER_MODEL:  z.string().optional(),
   OPENAI_CLOSER_MODEL:     z.string().optional(),
+  OPENAI_TRANSCRIPTION_MODEL: z.string().optional(),
+  OPENAI_IMAGE_MODEL:      z.string().optional(),
+  // Content Studio (Anthropic) copy model. ANTHROPIC_MODEL wins, CLAUDE_MODEL
+  // is the legacy name for the same thing.
+  ANTHROPIC_MODEL:         z.string().optional(),
+  ELEVENLABS_MODEL_ID:     z.string().optional(),
 
   // Twilio connects the existing WhatsApp Business sender to Calling.
   TWILIO_ACCOUNT_SID:      z.string().optional(),
@@ -60,9 +68,8 @@ const envSchema = z.object({
   CLAUDE_MAX_TOKENS:       z.string().default('512'),
   CLAUDE_TEMPERATURE:      z.string().default('0.3'),
 
-  // v1.5 dual-agent model overrides — optional, fall back to defaults in claude.service.js
-  // QUALIFIER → claude-haiku (fast/cheap analysis)
-  // CLOSER    → claude-sonnet (better persuasive copy)
+  // Legacy Content Studio model overrides (Anthropic). Still honoured by
+  // config/models.js; ANTHROPIC_MODEL / OPENAI_* are the preferred names.
   QUALIFIER_MODEL:         z.string().optional(),
   CLOSER_MODEL:            z.string().optional(),
 
