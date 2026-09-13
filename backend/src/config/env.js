@@ -74,6 +74,11 @@ const envSchema = z.object({
   ELEVENLABS_API_KEY:      z.string().optional(),
   ELEVENLABS_VOICE_ID:     z.string().optional(),
 
+  // Content Studio image generation. IMAGE_PROVIDER picks the primary provider;
+  // when unset the service defaults to openai → replicate → pollinations based
+  // on which credentials are present (see content-studio.service.js).
+  IMAGE_PROVIDER:          z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.enum(['openai', 'replicate', 'pollinations']).optional()),
+  OPENAI_IMAGE_QUALITY:    z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.enum(['low', 'medium', 'high', 'auto']).default('medium')),
   REPLICATE_API_TOKEN:     z.string().optional(),
   REPLICATE_MODEL:         z.string().default('black-forest-labs/flux-dev'),
   /** Optional. If set (e.g. https://api.yourdomain.com), draft image API returns imageAbsoluteUrl so the SPA works when only /api is proxied to Node and /uploads needs the full API origin. */
