@@ -4,6 +4,7 @@ const fs       = require('fs');
 const path     = require('path');
 const { randomUUID } = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
+const OpenAI   = require('openai');
 const prisma   = require('../../config/database');
 const env      = require('../../config/env');
 const whatsappService = require('../../services/whatsapp.service');
@@ -563,9 +564,10 @@ const generateVariants = async ({ tenantId, brandProfileId, count = 10, language
 // Images are downloaded and saved to disk at /app/uploads/content-images/
 // so they are self-hosted, permanent, and never depend on an external URL.
 //
-// Generator priority:
-//   1. Replicate (default flux-dev) — if REPLICATE_API_TOKEN is set; override with REPLICATE_MODEL
-//   2. Pollinations.ai              — free, no token, good quality (~5-15s)
+// Generator priority (IMAGE_PROVIDER overrides; on failure the next one is tried):
+//   1. OpenAI gpt-image-1           — if OPENAI_API_KEY is set; quality via OPENAI_IMAGE_QUALITY
+//   2. Replicate (default flux-dev) — if REPLICATE_API_TOKEN is set; override with REPLICATE_MODEL
+//   3. Pollinations.ai              — free, no token, good quality (~5-15s)
 //
 // Stored path: /uploads/content-images/{uuid}.{ext}
 // Served via:  nginx /uploads/ → /var/www/uploads (shared Docker volume)
@@ -600,10 +602,22 @@ const buildImagePrompt = (draft, brandProfile) => {
   return `${style} for ${brand} (${industry}), visual concept: "${anchor}"${colorHint}, photorealistic, high quality, 4k, no text overlay`;
 };
 
-// Download image bytes from a URL and save to disk.
-// Returns the local relative path: /uploads/content-images/{uuid}.{ext}
-const downloadAndSave = async (remoteUrl, ext = 'jpg') => {
+// Write raw image bytes to disk under /uploads/content-images/{uuid}.{ext}.
+// Returns { imageUrl (relative URL), path (absolute file path), bytes }.
+const saveImageBuffer = (buffer, ext) => {
   ensureContentImagesDir();
+  const filename = `${randomUUID()}.${ext}`;
+  const filepath = path.join(UPLOADS_DIR, filename);
+  fs.writeFileSync(filepath, buffer);
+  const rel   = `/uploads/content-images/${filename}`;
+  const bytes = buffer.length;
+  logger.info({ ev: CS_IMG, phase: 'saved', bytes, path: rel }, 'image file written');
+  return { imageUrl: rel, path: filepath, bytes };
+};
+
+// Download image bytes from a URL and save to disk.
+// Returns { imageUrl, path, bytes } — imageUrl is /uploads/content-images/{uuid}.{ext}
+const downloadAndSave = async (remoteUrl, ext = 'jpg') => {
   const response = await axios.get(remoteUrl, {
     responseType: 'arraybuffer',
     timeout:      60000,  // Pollinations can take ~15s on first generate
@@ -613,73 +627,164 @@ const downloadAndSave = async (remoteUrl, ext = 'jpg') => {
   const resolvedExt = contentType.includes('webp') ? 'webp'
                     : contentType.includes('png')  ? 'png'
                     : ext;
-  const filename = `${randomUUID()}.${resolvedExt}`;
-  const filepath = path.join(UPLOADS_DIR, filename);
-  fs.writeFileSync(filepath, Buffer.from(response.data));
-  const rel = `/uploads/content-images/${filename}`;
-  logger.info({ ev: CS_IMG, phase: 'saved', bytes: Buffer.byteLength(response.data), path: rel }, 'image file written');
-  return rel;
+  return saveImageBuffer(Buffer.from(response.data), resolvedExt);
 };
 
-// Low-level: generate image, download it, return local path.
-const generateImage = async ({ prompt }) => {
-  if (env.REPLICATE_API_TOKEN) {
-    // Replicate Models API — default model flux-dev (same input shape as flux-schnell: prompt, aspect_ratio, output_*)
-    const [owner, model] = (env.REPLICATE_MODEL || 'black-forest-labs/flux-dev').split('/');
-    logger.info({ ev: CS_IMG, phase: 'replicate-start', owner, model, promptLen: String(prompt || '').length }, 'Replicate prediction create');
+// ── Provider selection ──────────────────────────────────────────────────────
+// Order doubles as the fallback order: if the primary provider throws, the
+// next provider with credentials is tried.
+const IMAGE_PROVIDER_ORDER = ['openai', 'replicate', 'pollinations'];
 
-    let prediction;
-    try {
-      const createRes = await axios.post(
-        `https://api.replicate.com/v1/models/${owner}/${model}/predictions`,
-        { input: { prompt, aspect_ratio: '1:1', output_format: 'webp', output_quality: 80 } },
-        { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 15000 },
-      );
-      prediction = createRes.data;
-    } catch (err) {
-      const detail = err.response?.data || err.message;
-      logger.error({ ev: CS_IMG, phase: 'replicate-create', status: err.response?.status, detail }, 'Replicate create request failed');
-      throw Object.assign(new Error('Replicate create failed — check token and model'), { statusCode: 502, expose: true });
-    }
+const imageProviderAvailable = {
+  openai:       () => !!env.OPENAI_API_KEY,
+  replicate:    () => !!env.REPLICATE_API_TOKEN,
+  pollinations: () => true,   // free, no token
+};
 
-    logger.info({ ev: CS_IMG, phase: 'replicate-created', predictionId: prediction.id, status: prediction.status }, 'Replicate prediction created');
+// IMAGE_PROVIDER wins when set; otherwise the first provider with credentials.
+const resolveImageProvider = () => env.IMAGE_PROVIDER
+  || IMAGE_PROVIDER_ORDER.find((p) => imageProviderAvailable[p]());
 
-    // Poll until succeeded or failed (flux-dev can exceed schnell; max ~90s, 3s intervals)
-    for (let i = 0; i < 30 && ['starting', 'processing'].includes(prediction.status); i++) {
-      await new Promise((r) => setTimeout(r, 3000));
-      const pollRes = await axios.get(
-        `https://api.replicate.com/v1/predictions/${prediction.id}`,
-        { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}` }, timeout: 10000 },
-      );
-      prediction = pollRes.data;
-      logger.info({ ev: CS_IMG, phase: 'replicate-poll', predictionId: prediction.id, status: prediction.status, i }, 'Replicate poll');
-    }
+const buildImageProviderChain = () => {
+  const primary = resolveImageProvider();
+  const rest    = IMAGE_PROVIDER_ORDER.filter((p) => p !== primary && imageProviderAvailable[p]());
+  return [primary, ...rest];
+};
 
-    if (prediction.status !== 'succeeded') {
-      logger.error({
-        ev:            CS_IMG,
-        phase:         'replicate-final',
-        predictionId:  prediction.id,
-        status:        prediction.status,
-        replicateErr:  prediction.error,
-      }, 'Replicate did not succeed');
-      throw Object.assign(new Error('Replicate image generation failed or timed out'), { statusCode: 503, expose: true });
-    }
-    const remoteUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-    logger.info({ ev: CS_IMG, phase: 'replicate-output', predictionId: prediction.id, outputType: typeof remoteUrl }, 'Replicate succeeded; downloading');
-    try {
-      return await downloadAndSave(remoteUrl, 'webp');
-    } catch (err) {
-      logger.error({ ev: CS_IMG, phase: 'download-replicate-output', err: err.message, remoteUrl: String(remoteUrl).slice(0, 120) }, 'download Replicate output failed');
-      throw err;
-    }
+// ── OpenAI (gpt-image-1) ────────────────────────────────────────────────────
+const OPENAI_IMAGE_MODEL = 'gpt-image-1';
+
+// gpt-image-1 supports 1024x1024, 1024x1536 (portrait) and 1536x1024 (landscape).
+// Drafts carry a `channel`, not a platform: Instagram is portrait-first; meta_ad
+// targets both Facebook and Instagram feeds so it stays square like Replicate's 1:1.
+const CHANNEL_IMAGE_SIZE = {
+  instagram_caption: '1024x1536',
+};
+const openaiImageSize = (channel) => CHANNEL_IMAGE_SIZE[channel] || '1024x1024';
+
+let openaiClient;
+const getOpenAI = () => {
+  if (!openaiClient) openaiClient = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  return openaiClient;
+};
+
+const generateImageOpenAI = async ({ prompt, channel }) => {
+  if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
+  const size    = openaiImageSize(channel);
+  const quality = env.OPENAI_IMAGE_QUALITY || 'medium';
+  logger.info({ ev: CS_IMG, phase: 'openai-start', model: OPENAI_IMAGE_MODEL, size, quality, channel: channel || null, promptLen: String(prompt || '').length }, 'OpenAI image generate');
+
+  const res = await getOpenAI().images.generate(
+    { model: OPENAI_IMAGE_MODEL, prompt, n: 1, size, quality },
+    { timeout: 120000 },
+  );
+  const b64 = res?.data?.[0]?.b64_json;
+  if (!b64) throw new Error('OpenAI image response contained no b64_json');
+
+  const buffer = Buffer.from(b64, 'base64');
+  logger.info({ ev: CS_IMG, phase: 'openai-output', bytes: buffer.length, usage: res.usage || null }, 'OpenAI image received; saving');
+  return saveImageBuffer(buffer, 'png');
+};
+
+// ── Replicate ───────────────────────────────────────────────────────────────
+const generateImageReplicate = async ({ prompt }) => {
+  if (!env.REPLICATE_API_TOKEN) throw new Error('REPLICATE_API_TOKEN is not set');
+  // Replicate Models API — default model flux-dev (same input shape as flux-schnell: prompt, aspect_ratio, output_*)
+  const [owner, model] = (env.REPLICATE_MODEL || 'black-forest-labs/flux-dev').split('/');
+  logger.info({ ev: CS_IMG, phase: 'replicate-start', owner, model, promptLen: String(prompt || '').length }, 'Replicate prediction create');
+
+  let prediction;
+  try {
+    const createRes = await axios.post(
+      `https://api.replicate.com/v1/models/${owner}/${model}/predictions`,
+      { input: { prompt, aspect_ratio: '1:1', output_format: 'webp', output_quality: 80 } },
+      { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 15000 },
+    );
+    prediction = createRes.data;
+  } catch (err) {
+    const detail = err.response?.data || err.message;
+    logger.error({ ev: CS_IMG, phase: 'replicate-create', status: err.response?.status, detail }, 'Replicate create request failed');
+    throw Object.assign(new Error('Replicate create failed — check token and model'), { statusCode: 502, expose: true });
   }
 
-  // Free fallback: Pollinations.ai — triggers image generation on first fetch
-  logger.info({ ev: CS_IMG, phase: 'pollinations', promptLen: String(prompt || '').length }, 'Pollinations image (no Replicate token)');
+  logger.info({ ev: CS_IMG, phase: 'replicate-created', predictionId: prediction.id, status: prediction.status }, 'Replicate prediction created');
+
+  // Poll until succeeded or failed (flux-dev can exceed schnell; max ~90s, 3s intervals)
+  for (let i = 0; i < 30 && ['starting', 'processing'].includes(prediction.status); i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const pollRes = await axios.get(
+      `https://api.replicate.com/v1/predictions/${prediction.id}`,
+      { headers: { Authorization: `Token ${env.REPLICATE_API_TOKEN}` }, timeout: 10000 },
+    );
+    prediction = pollRes.data;
+    logger.info({ ev: CS_IMG, phase: 'replicate-poll', predictionId: prediction.id, status: prediction.status, i }, 'Replicate poll');
+  }
+
+  if (prediction.status !== 'succeeded' || !prediction.output) {
+    logger.error({
+      ev:            CS_IMG,
+      phase:         'replicate-final',
+      predictionId:  prediction.id,
+      status:        prediction.status,
+      replicateErr:  prediction.error,
+    }, 'Replicate did not succeed');
+    throw Object.assign(new Error('Replicate image generation failed or timed out'), { statusCode: 503, expose: true });
+  }
+  const remoteUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+  logger.info({ ev: CS_IMG, phase: 'replicate-output', predictionId: prediction.id, outputType: typeof remoteUrl }, 'Replicate succeeded; downloading');
+  try {
+    return await downloadAndSave(remoteUrl, 'webp');
+  } catch (err) {
+    logger.error({ ev: CS_IMG, phase: 'download-replicate-output', err: err.message, remoteUrl: String(remoteUrl).slice(0, 120) }, 'download Replicate output failed');
+    throw err;
+  }
+};
+
+// ── Pollinations.ai (free) ──────────────────────────────────────────────────
+const generateImagePollinations = async ({ prompt }) => {
+  // Triggers image generation on first fetch
+  logger.info({ ev: CS_IMG, phase: 'pollinations', promptLen: String(prompt || '').length }, 'Pollinations image');
   const seed      = Math.floor(Math.random() * 999999);
   const pollinUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
   return downloadAndSave(pollinUrl, 'jpg');
+};
+
+const IMAGE_GENERATORS = {
+  openai:       generateImageOpenAI,
+  replicate:    generateImageReplicate,
+  pollinations: generateImagePollinations,
+};
+
+// Walk the provider chain. Returns { imageUrl, path, bytes, provider } from the
+// first provider that succeeds; rethrows the last error if every provider fails.
+const generateImageWithFallback = async ({ prompt, channel }) => {
+  const chain = buildImageProviderChain();
+  let lastErr;
+  for (let i = 0; i < chain.length; i++) {
+    const provider = chain[i];
+    const next     = chain[i + 1] || null;
+    try {
+      const result = await IMAGE_GENERATORS[provider]({ prompt, channel });
+      return { ...result, provider };
+    } catch (err) {
+      lastErr = err;
+      logger.warn({
+        ev:       CS_IMG,
+        phase:    'provider-failed',
+        provider,
+        next,
+        status:   err.status || err.response?.status || err.statusCode || null,
+        err:      err.message,
+      }, next ? `${provider} image generation failed — falling back to ${next}` : `${provider} image generation failed — no fallback provider left`);
+    }
+  }
+  throw lastErr;
+};
+
+// Low-level: generate image, save it, return local path (string — consumed by POST /content-studio/image).
+const generateImage = async ({ prompt, channel }) => {
+  const { imageUrl } = await generateImageWithFallback({ prompt, channel });
+  return imageUrl;
 };
 
 // High-level: generate image for a specific draft, save to disk, persist path to DB.
@@ -695,11 +800,11 @@ const generateDraftImage = async ({ tenantId, draftId, prompt }) => {
   const imagePrompt = (typeof prompt === 'string' && prompt.trim()) ? prompt.trim()
                     : buildImagePrompt(draft, draft.brandProfile);
 
-  let imageUrl;
+  let imageUrl, provider, bytes;
   try {
-    imageUrl = await generateImage({ prompt: imagePrompt }); // local path
+    ({ imageUrl, provider, bytes } = await generateImageWithFallback({ prompt: imagePrompt, channel: draft.channel })); // local path
   } catch (err) {
-    logger.error({ ev: CS_IMG, phase: 'draft-generate-failed', tenantId, draftId, err: err.message }, 'generateImage threw');
+    logger.error({ ev: CS_IMG, phase: 'draft-generate-failed', tenantId, draftId, err: err.message }, 'image generation failed on every provider');
     throw err;
   }
 
@@ -718,7 +823,8 @@ const generateDraftImage = async ({ tenantId, draftId, prompt }) => {
     draftId,
     imageUrl,
     imageAbsoluteUrl: imageAbsoluteUrl || null,
-    provider:         env.REPLICATE_API_TOKEN ? 'replicate' : 'pollinations',
+    provider,
+    bytes,
   }, '🎨 Draft image generated and saved');
 
   return { draft: updated, imageUrl, ...(imageAbsoluteUrl ? { imageAbsoluteUrl } : {}), prompt: imagePrompt };
