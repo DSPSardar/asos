@@ -45,8 +45,6 @@ const getSubscription = async (tenantId) => {
 
   if (!sub) throw Object.assign(new Error('Subscription not found'), { statusCode: 404, expose: true });
 
-  const planConfig = PLANS[sub.plan] || PLANS.FREE;
-
   return {
     plan:              sub.plan,
     status:            sub.status,

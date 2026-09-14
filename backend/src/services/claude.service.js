@@ -1059,7 +1059,7 @@ const classifyPaymentProofImage = async (buffer, mimeType) => {
 // SUMMARY (unchanged from v1 — used by Conversations page)
 // =====================================================================
 
-const generateSummary = async ({ tenantId, messageHistory }) => {
+const generateSummary = async ({ tenantId: _tenantId, messageHistory }) => {
   const messages = (messageHistory || []).slice(-30).map(m => ({
     role: m.sender === 'CONTACT' ? 'user' : 'assistant',
     content: m.content || '[media]',

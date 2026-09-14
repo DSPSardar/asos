@@ -8,6 +8,7 @@ const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 const FALLBACK_REPLY = 'Maazrat, main abhi jawab record nahi kar pa raha. Hamari team aap se follow up karegi. Shukriya.';
 
 const cleanSpeech = (value) => String(value || '')
+  // eslint-disable-next-line no-control-regex -- stripping raw control characters is the point
   .replace(/[\u0000-\u001F]/g, ' ')
   .replace(/\s+/g, ' ')
   .trim()

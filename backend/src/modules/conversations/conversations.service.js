@@ -265,7 +265,7 @@ const handback = async (tenantId, conversationId, userId) => {
   return updated;
 };
 
-const closeConversation = async (tenantId, conversationId, userId) => {
+const closeConversation = async (tenantId, conversationId, _userId) => {
   const conv = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
   if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404, expose: true });
 

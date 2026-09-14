@@ -5,7 +5,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const env = require('../config/env');
 const logger = require('../utils/logger');
-const { decrypt, resolveCredential } = require('../utils/crypto');
+const { resolveCredential } = require('../utils/crypto');
 const prisma = require('../config/database');
 
 // ── Get axios instance for a specific tenant ──────────────────────────

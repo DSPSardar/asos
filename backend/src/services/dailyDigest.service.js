@@ -75,7 +75,6 @@ const pktDayLabel = (now = new Date()) => new Intl.DateTimeFormat('en-GB', {
   timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
 }).format(now);
 
-const daysBetween = (from, to) => Math.floor((to - new Date(from)) / DAY_MS);
 const hoursBetween = (from, to) => Math.floor((to - new Date(from)) / HOUR_MS);
 
 const ago = (from, now) => {
@@ -134,7 +133,7 @@ const buildOpener = (lead) => {
 // ── Selection logic (pure) ───────────────────────────────────────────
 
 // Shared with the Today's Queue page (needsYou.select.js).
-const { contactKey, dedupeByContact, lastActivityAt } = needsYou;
+const { dedupeByContact, lastActivityAt } = needsYou;
 
 // Today's call list: open HOT leads. Leads that talked to us in the last
 // CALL_LIST_ACTIVE_DAYS come first (highest score, then most recent), then

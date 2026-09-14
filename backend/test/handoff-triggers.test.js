@@ -51,6 +51,27 @@ test('does not flag an ordinary price question as a payment dispute', () => {
   assert.equal(detectPaymentDispute('installment mein ho sakta hai?'), false);
 });
 
+test('does not flag a refund-policy question as a payment dispute', () => {
+  // A bare "refund" token used to trip the dispute handoff and permanently set
+  // ai_enabled=false on the conversation — silencing the AI on a lead who had
+  // merely asked how refunds work. Asking about the policy never escalates.
+  assert.equal(detectPaymentDispute('Refund policy'), false);
+  assert.equal(detectPaymentDispute('Refund is on website'), false);
+  assert.equal(detectPaymentDispute('kya refund milta hai'), false);
+  assert.equal(detectPaymentDispute('what is your refund policy?'), false);
+});
+
+test('still flags a refund demand, even one phrased with a question word', () => {
+  // The inquiry short-circuit must not swallow a demand: the narrowed pattern
+  // needs a demand marker or possessive next to the refund token, and these
+  // all carry one.
+  assert.ok(detectPaymentDispute('refund karo'));
+  assert.ok(detectPaymentDispute('mujhe refund chahiye'));
+  assert.ok(detectPaymentDispute('where is my refund'));
+  assert.ok(detectPaymentDispute('can you refund my money'));
+  assert.ok(detectPaymentDispute('kya bakwas hai, refund karo'));
+});
+
 test('detects legal threats and complaints — the toggle that previously did nothing', () => {
   assert.ok(detectLegalThreat('I will sue you if this is not resolved'));
   assert.ok(detectLegalThreat('mera vakeel se baat karwaunga'));
