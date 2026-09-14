@@ -30,7 +30,7 @@ const { toDbMessageType } = require('../utils/messageType');
 const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
-const { publishStatusUpdate, registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick, registerModelHealthCheck, registerBacklogSweep } = require('../queues/message.queue');
+const { registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick, registerModelHealthCheck, registerBacklogSweep } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
 const { ENROLMENT_FEE_PKR } = require('../config/constants');
@@ -268,8 +268,6 @@ const handleInboundMessage = async (job) => {
         '🎓 Returning enrolled student — reusing CLOSED_WON lead instead of opening a new one');
     }
   }
-
-  const isNewLead = !lead;
 
   if (!lead) {
     // Extract Meta Ads attribution from WA referral (Click-to-WA)

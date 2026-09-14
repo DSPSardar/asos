@@ -1,7 +1,7 @@
 // src/modules/auth/auth.controller.js
 
 const authService = require('./auth.service');
-const { success, created, error } = require('../../utils/response');
+const { success, created } = require('../../utils/response');
 const { z } = require('zod');
 
 const registerSchema = z.object({

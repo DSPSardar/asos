@@ -18,7 +18,7 @@ const generateAccessToken = (userId, tenantId, role) => {
   });
 };
 
-const generateRefreshToken = (userId) => {
+const generateRefreshToken = (_userId) => {
   const token = crypto.randomBytes(64).toString('hex');
   const hash  = crypto.createHash('sha256').update(token).digest('hex');
   return { token, hash };
