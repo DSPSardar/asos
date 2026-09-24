@@ -4,9 +4,18 @@ const { Router } = require('express');
 const ctrl = require('./analytics.controller');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { requireActiveTenant } = require('../../middleware/tenant.middleware');
+const { readApiKey, unlessApiKey } = require('../../middleware/readApiKey');
 
 const router = Router();
-router.use(authenticate, requireActiveTenant, authorize('TENANT_ADMIN', 'SUPERADMIN'));
+// readApiKey only acts on requests carrying X-API-Key (GET /overview, which
+// backs the /dsp-reports KPIs); everything else goes through the JWT guard
+// and the admin role check exactly as before.
+router.use(
+  readApiKey,
+  unlessApiKey(authenticate),
+  unlessApiKey(requireActiveTenant),
+  unlessApiKey(authorize('TENANT_ADMIN', 'SUPERADMIN')),
+);
 
 router.get('/overview',       ctrl.overview);
 router.get('/funnel',         ctrl.funnel);

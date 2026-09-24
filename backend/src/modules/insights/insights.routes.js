@@ -5,9 +5,12 @@ const { Router } = require('express');
 const ctrl = require('./insights.controller');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { requireActiveTenant } = require('../../middleware/tenant.middleware');
+const { readApiKey, unlessApiKey } = require('../../middleware/readApiKey');
 
 const router = Router();
-router.use(authenticate, requireActiveTenant);
+// readApiKey only acts on requests carrying X-API-Key (the GET routes below);
+// everything else goes through the JWT guard exactly as before.
+router.use(readApiKey, unlessApiKey(authenticate), unlessApiKey(requireActiveTenant));
 
 router.get('/sentiment', ctrl.sentiment);
 router.get('/signals',   ctrl.signals);

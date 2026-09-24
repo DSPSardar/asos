@@ -122,6 +122,14 @@ All endpoints are prefixed with `/api/v1`.
 | GET | /admin/tenants | All tenants (superadmin) | Superadmin |
 | GET | /admin/metrics | Platform KPIs | Superadmin |
 
+### Read-only API key
+
+Set `ASOS_READ_API_KEY` and `ASOS_READ_API_TENANT_ID` (see `.env.example`) to enable a GET-only key path for the SARDAR showcase page.
+Send the key in an `X-API-Key` header; requests with that header never fall back to JWT (bad key or non-GET → `401 {"error":"invalid_api_key"}`).
+The key is limited to `GET /leads/pipeline`, `/leads/hot`, `/insights/{sentiment,signals,digest}` and `/analytics/overview`; anything else is `403`.
+Responses keep their shape but drop any field named like phone / email / bank / payment, and are capped at 60 requests/minute per key.
+Implementation: `src/middleware/readApiKey.js`; tests: `test/read-api-key.test.js`.
+
 ---
 
 ## Webhook Setup

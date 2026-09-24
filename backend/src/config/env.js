@@ -107,6 +107,12 @@ const envSchema = z.object({
   // production down before the role swap has been done.
   REQUIRE_RLS_ENFORCEMENT: z.enum(['true','false']).optional().default('false'),
 
+  // Read-only API key for the SARDAR showcase page (middleware/readApiKey.js).
+  // Both optional: unset means the key path is disabled and every X-API-Key
+  // request is a 401. The value is never logged.
+  ASOS_READ_API_KEY:       z.string().min(1).optional(),
+  ASOS_READ_API_TENANT_ID: z.string().min(1).optional(),
+
   APP_URL:                 z.string().url().default('http://localhost:3001'),
   ALLOWED_ORIGINS:         z.string().default('http://localhost:3001'),
   LOG_LEVEL:               z.enum(['fatal','error','warn','info','debug','trace']).default('info'),
