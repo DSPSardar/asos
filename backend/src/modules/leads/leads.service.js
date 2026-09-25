@@ -53,7 +53,9 @@ const listLeads = async ({ tenantId, stage, scoreLabel, assignedTo, search, from
     // enrollment — the AI marks conversations won on its own, so that stage
     // also holds bot-closed leads and internal test threads. Counting those as
     // students inflated the roster by 143.
-    ...(enrolledOnly && { dealValue: { not: null } }),
+    // Same test as services/enrollment.definition.js (fee > 0 on either
+    // column) — the roster must list exactly the people the KPIs count.
+    ...(enrolledOnly && { OR: [{ dealValue: { gt: 0 } }, { enrollmentFee: { gt: 0 } }] }),
     ...contactClause(fromDsp, search),
   };
 

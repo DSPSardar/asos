@@ -35,6 +35,7 @@ const ALLOWED_PATHS = new Set([
   `/api/${env.API_VERSION}/insights/digest`,
   // Backs the KPI tiles on /dsp-reports (vite-app/src/pages/DSPReports.jsx).
   `/api/${env.API_VERSION}/analytics/overview`,
+  `/api/${env.API_VERSION}/analytics/enrollments`,
 ]);
 
 // Any key (at any depth) whose name mentions one of these is dropped from a

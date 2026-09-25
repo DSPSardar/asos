@@ -244,6 +244,9 @@ export const campaignsAPI = {
 
 export const analyticsAPI = {
   overview:      (params) => api.get('/analytics/overview', { params }),
+  // Single source of truth for student count + revenue (backend
+  // services/enrollment.definition.js). Students + DSP Reports both use it.
+  enrollments:   (params) => api.get('/analytics/enrollments', { params }),
   funnel:        (params) => api.get('/analytics/funnel', { params }),
   revenue:       (params) => api.get('/analytics/revenue', { params }),
   aiPerformance: (params) => api.get('/analytics/ai-performance', { params }),

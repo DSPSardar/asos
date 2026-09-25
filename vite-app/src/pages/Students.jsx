@@ -1,6 +1,6 @@
 // src/pages/Students.jsx — DSP Student Lifecycle (Learn → Build → Earn)
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { leadsAPI } from '@lib/api';
+import { leadsAPI, analyticsAPI } from '@lib/api';
 
 // ── Phase config ──────────────────────────────────────────────────────────────
 const PHASES = {
@@ -114,6 +114,20 @@ const csvToStudents = (text) => {
   }).filter((o) => o.phone || o.name);
 };
 
+// One card per PERSON. A returning student can own more than one paid won
+// lead row; the KPI endpoint counts distinct contacts, so the roster must too
+// (keep the most recent enrollment). Mirrors backend dedupeByContact.
+const dedupeByContact = (leads) => {
+  const byContact = new Map();
+  for (const l of leads) {
+    const key = l.contactId || l.contact?.id || l.id;
+    const prev = byContact.get(key);
+    const newer = !prev || (l.closedAt && (!prev.closedAt || new Date(l.closedAt) > new Date(prev.closedAt)));
+    if (newer) byContact.set(key, l);
+  }
+  return [...byContact.values()];
+};
+
 // The backend clamps a page at 200 rows; request exactly that and paginate.
 const PAGE_SIZE = 200;
 // Upper bound so a runaway roster can't spin forever.
@@ -127,11 +141,18 @@ export default function Students() {
   const [selected, setSelected]   = useState(null);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
-  const [totalEnrolled, setTotalEnrolled] = useState(null);
+  // Header numbers come from /analytics/enrollments — the SAME endpoint the
+  // DSP Reports KPIs read — never from summing whatever rows this page loaded.
+  // The two pages used to compute "students" independently and disagreed
+  // (375 / Rs 4.93M here vs 373 / Rs 4.80M on Reports, Sep 2026).
+  const [summary, setSummary] = useState(null);
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    analyticsAPI.enrollments()
+      .then((res) => setSummary(res?.data?.data ?? res?.data ?? null))
+      .catch(() => setSummary(null));
     try {
       // enrolledOnly: a student is someone with a recorded fee. CLOSED_WON on
       // its own also contains AI-closed leads and test threads, which is why
@@ -144,7 +165,6 @@ export default function Students() {
       // same way Pipeline does.
       const collected = [];
       let page = 1;
-      let total = 0;
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -152,22 +172,19 @@ export default function Students() {
           stage: 'CLOSED_WON', enrolledOnly: true, limit: PAGE_SIZE, page,
         });
         const batch = res?.data ?? [];
-        total = res?.pagination?.total ?? batch.length;
         collected.push(...batch);
 
         // Render rows as they arrive so a large roster isn't a blank screen.
-        setStudents([...collected]);
+        setStudents(dedupeByContact(collected));
 
         const pages = res?.pagination?.pages ?? 1;
         if (batch.length === 0 || page >= pages || collected.length >= MAX_STUDENTS) break;
         page += 1;
       }
 
-      setStudents(collected);
-      setTotalEnrolled(total);
+      setStudents(dedupeByContact(collected));
     } catch {
       setStudents([]);
-      setTotalEnrolled(null);
     } finally {
       setLoading(false);
     }
@@ -211,9 +228,11 @@ export default function Students() {
   // ── Phase summary counts ──────────────────────────────────────────
   const phaseCounts = { LEARN: 0, BUILD: 0, EARN: 0 };
   students.forEach(s => { const p = s.dspPhase || 'LEARN'; if (phaseCounts[p] !== undefined) phaseCounts[p]++; });
-  // Real revenue: sum of each enrolled student's dealValue. Students with no
-  // recorded fee contribute 0 — no invented per-head amounts.
-  const totalRevenue = students.reduce((sum, s) => sum + (parseFloat(s.dealValue) || 0), 0);
+  // Header figures: shared endpoint first; the loaded roster is only a
+  // fallback while the summary request is in flight or if it failed.
+  const rosterRevenue = students.reduce((sum, s) => sum + (parseFloat(s.enrollmentFee ?? s.dealValue) || 0), 0);
+  const totalEnrolled = summary?.allTime?.students ?? students.length;
+  const totalRevenue  = summary?.allTime?.revenue  ?? rosterRevenue;
 
   return (
     <div className="flex flex-col h-full">
@@ -226,7 +245,7 @@ export default function Students() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400">Total enrolled:</span>
-            <span className="text-sm font-bold text-slate-100">{totalEnrolled ?? students.length}</span>
+            <span className="text-sm font-bold text-slate-100">{totalEnrolled}</span>
             <span className="ml-3 text-xs text-slate-400">Revenue:</span>
             <span className="text-sm font-bold text-emerald-400">{fmtPKR(totalRevenue)}</span>
             <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />

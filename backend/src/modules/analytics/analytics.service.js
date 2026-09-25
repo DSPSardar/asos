@@ -1,6 +1,7 @@
 // src/modules/analytics/analytics.service.js
 
 const prisma = require('../../config/database');
+const { getEnrollmentSummary } = require('../../services/enrollment.definition');
 
 // ── Helper: date range filter ─────────────────────────────────────────
 const dateRange = (from, to) => ({
@@ -18,7 +19,7 @@ const getOverview = async (tenantId, { from, to } = {}) => {
     totalMessages,
     aiMessages,
     totalContacts,
-    revenueData,
+    enrollment,
     subscription,
   ] = await Promise.all([
     // People, not lead rows — the same rule as getFunnel, so the KPI cards
@@ -33,10 +34,10 @@ const getOverview = async (tenantId, { from, to } = {}) => {
     prisma.message.count({ where: { tenantId, sentAt: range } }),
     prisma.message.count({ where: { tenantId, sender: 'AI', sentAt: range } }),
     prisma.contact.count({ where }),
-    prisma.lead.aggregate({
-      where: { tenantId, stage: 'CLOSED_WON', closedAt: range },
-      _sum: { dealValue: true },
-    }),
+    // Enrolled + revenue come from the ONE shared definition (closedAt-based,
+    // distinct contacts, fee > 0) so this card, the Students page header and
+    // /analytics/enrollments can never disagree again.
+    getEnrollmentSummary(tenantId, { from: range.gte, to: range.lte }),
     prisma.subscription.findUnique({ where: { tenantId } }),
   ]);
 
@@ -53,19 +54,24 @@ const getOverview = async (tenantId, { from, to } = {}) => {
   const all        = [...people.values()];
   const totalLeads = people.size;
   const hotLeads   = all.filter((p) => p.hot).length;
-  const enrolled   = all.filter((p) => p.paid).length;
-  const closedWon  = enrolled;
+  // Cohort figure: people who entered in the period AND paid. Kept for the
+  // funnel-consistent conversion rate below.
+  const cohortEnrolled = all.filter((p) => p.paid).length;
   const closedLost = all.filter((p) => p.lost && !p.paid).length;
 
-  const totalRevenue   = parseFloat(revenueData._sum.dealValue || 0);
+  // Headline enrolled / revenue = shared definition, by enrollment date.
+  const enrolled     = enrollment.period.students;
+  const closedWon    = enrolled;
+  const totalRevenue = enrollment.period.revenue;
   // Conversion is paying students over people who entered the funnel — the
   // same numerator and denominator the funnel's Won bar shows.
-  const conversionRate = totalLeads > 0 ? ((enrolled / totalLeads) * 100).toFixed(1) : 0;
+  const conversionRate = totalLeads > 0 ? ((cohortEnrolled / totalLeads) * 100).toFixed(1) : 0;
   const aiHandlingRate = totalMessages > 0 ? ((aiMessages / totalMessages) * 100).toFixed(1) : 0;
 
   return {
-    leads:          { total: totalLeads, hot: hotLeads, closedWon, closedLost, enrolled },
-    revenue:        { total: totalRevenue, currency: 'PKR' },
+    leads:          { total: totalLeads, hot: hotLeads, closedWon, closedLost, enrolled, cohortEnrolled },
+    revenue:        { total: totalRevenue, currency: enrollment.currency },
+    enrollment,     // { allTime: {students, revenue}, period: {...}, currency }
     messages:       { total: totalMessages, aiHandled: aiMessages, aiHandlingRate: `${aiHandlingRate}%` },
     contacts:       { total: totalContacts },
     conversionRate: `${conversionRate}%`,
@@ -349,4 +355,6 @@ const getHotByHour = async (tenantId) => {
   return { hours, total: hot.length };
 };
 
-module.exports = { getOverview, getFunnel, getRevenue, getAIPerformance, getAgentPerformance, getMessageVolume, getTeamPerformance, getLeadSources, getDailyConversions, getHotByHour };
+const getEnrollments = (tenantId, { from, to } = {}) => getEnrollmentSummary(tenantId, { from, to });
+
+module.exports = { getEnrollments, getOverview, getFunnel, getRevenue, getAIPerformance, getAgentPerformance, getMessageVolume, getTeamPerformance, getLeadSources, getDailyConversions, getHotByHour };

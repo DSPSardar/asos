@@ -18,6 +18,9 @@ router.use(
 );
 
 router.get('/overview',       ctrl.overview);
+// Single source of truth for student count + revenue (see
+// services/enrollment.definition.js). Students page and DSP Reports both read it.
+router.get('/enrollments',    ctrl.enrollments);
 router.get('/funnel',         ctrl.funnel);
 router.get('/revenue',        ctrl.revenue);
 router.get('/ai-performance', ctrl.aiPerf);

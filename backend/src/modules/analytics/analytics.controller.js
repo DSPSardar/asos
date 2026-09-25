@@ -4,6 +4,7 @@ const svc = require('./analytics.service');
 const { success } = require('../../utils/response');
 
 const overview  = async (req, res, next) => { try { return success(res, await svc.getOverview(req.tenantId, req.query)); } catch(e){next(e);} };
+const enrollments = async (req, res, next) => { try { return success(res, await svc.getEnrollments(req.tenantId, req.query)); } catch(e){next(e);} };
 const funnel    = async (req, res, next) => { try { return success(res, await svc.getFunnel(req.tenantId, req.query)); } catch(e){next(e);} };
 const revenue   = async (req, res, next) => { try { return success(res, await svc.getRevenue(req.tenantId, req.query)); } catch(e){next(e);} };
 const aiPerf    = async (req, res, next) => { try { return success(res, await svc.getAIPerformance(req.tenantId, req.query)); } catch(e){next(e);} };
@@ -15,4 +16,4 @@ const sources     = async (req, res, next) => { try { return success(res, await 
 const conversions = async (req, res, next) => { try { return success(res, await svc.getDailyConversions(req.tenantId, req.query)); } catch (e) { next(e); } };
 const hotByHour   = async (req, res, next) => { try { return success(res, await svc.getHotByHour(req.tenantId)); } catch (e) { next(e); } };
 
-module.exports = { sources, conversions, hotByHour, overview, funnel, revenue, aiPerf, agents, messages, teamPerformance };
+module.exports = { enrollments, sources, conversions, hotByHour, overview, funnel, revenue, aiPerf, agents, messages, teamPerformance };

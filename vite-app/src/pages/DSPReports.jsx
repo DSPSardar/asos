@@ -90,14 +90,20 @@ export default function DSPReports() {
         if (ov) {
           const total   = ov.leads?.total   || 0;
           const won     = ov.leads?.closedWon || 0;
-          // Enrolled = fee recorded. Falls back to won only if the API predates
-          // the split, so an older backend doesn't blank the KPI.
-          const enrolled = ov.leads?.enrolled ?? won;
-          const convPct = total > 0 ? ((enrolled / total) * 100).toFixed(1) + '%' : '0%';
+          // Enrolled + Revenue: the SAME numbers as the Students page header —
+          // both read the shared enrollment definition (all-time, distinct
+          // people, fee recorded). The period figure is shown underneath.
+          // Falls back to the period-only fields on an older backend.
+          const allStudents = ov.enrollment?.allTime?.students ?? ov.leads?.enrolled ?? won;
+          const allRevenue  = ov.enrollment?.allTime?.revenue  ?? ov.revenue?.total ?? 0;
+          const perStudents = ov.enrollment?.period?.students  ?? ov.leads?.enrolled ?? won;
+          const perRevenue  = ov.enrollment?.period?.revenue   ?? ov.revenue?.total ?? 0;
+          const cohort  = ov.leads?.cohortEnrolled ?? perStudents;
+          const convPct = total > 0 ? ((cohort / total) * 100).toFixed(1) + '%' : '0%';
           setKpiData([
-            { label: 'Total Leads',     value: total.toLocaleString(),            sub: `${ov.leads?.hot||0} hot`,           icon: '👥', color: 'indigo'  },
-            { label: 'Enrolled',        value: enrolled.toLocaleString(),         sub: `${convPct} conversion`,             icon: '🎓', color: 'violet'  },
-            { label: 'Revenue',         value: fmtPKR(ov.revenue?.total || 0),   sub: `${enrolled} enrolled`,              icon: '💰', color: 'emerald' },
+            { label: 'Total Leads',     value: total.toLocaleString(),            sub: `${ov.leads?.hot||0} hot · ${convPct} convert`, icon: '👥', color: 'indigo'  },
+            { label: 'Enrolled',        value: allStudents.toLocaleString(),      sub: `${perStudents} in last ${days}d`,   icon: '🎓', color: 'violet'  },
+            { label: 'Revenue',         value: fmtPKR(allRevenue),                sub: `${fmtPKR(perRevenue)} in last ${days}d`, icon: '💰', color: 'emerald' },
             { label: 'Hot Leads',       value: (ov.leads?.hot||0).toLocaleString(), sub: 'ready to close',                  icon: '🔥', color: 'rose'    },
             { label: 'AI Handle Rate',  value: ov.messages?.aiHandlingRate||'0%', sub: 'no human takeover needed',          icon: '🤖', color: 'sky'     },
             { label: 'Messages Sent',   value: (ov.messages?.total||0).toLocaleString(), sub: `${ov.messages?.aiHandled||0} by AI`, icon: '💬', color: 'amber' },
@@ -108,18 +114,16 @@ export default function DSPReports() {
       // Enrollment funnel from API funnel
       if (fnRes.status === 'fulfilled') {
         const arr = fnRes.value.data?.data?.funnel || fnRes.value.data?.funnel || [];
-        const enrolledCount = fnRes.value.data?.data?.enrolled ?? fnRes.value.data?.enrolled ?? null;
-        // CLOSED_WON is "Won", not "Enrolled" — the AI closes conversations won
-        // on its own, so that bucket includes deals with no fee behind them.
-        // Enrolled is appended as its own final step when the API reports it.
-        const STAGE_LABEL = { NEW:'New Leads', QUALIFYING:'Contacted', DIAGNOSED:'Interested', PROPOSED:'Proposed', CLOSED_WON:'Won' };
+        // Won already means PAID on the backend (unpaid claimed wins are
+        // demoted to Proposed), so the separate "Enrolled" row that used to be
+        // appended here always equalled Won and only invited comparison with
+        // the KPI card above, which is all-time. Label it as what it is: the
+        // cohort of leads created in the period who paid.
+        const STAGE_LABEL = { NEW:'New Leads', QUALIFYING:'Contacted', DIAGNOSED:'Interested', PROPOSED:'Proposed', CLOSED_WON:'Won (paid)' };
         const STAGE_FILL  = { NEW: COLORS.indigo, QUALIFYING: COLORS.violet, DIAGNOSED: COLORS.sky, PROPOSED: COLORS.amber, CLOSED_WON: COLORS.emerald };
         const mapped = arr
           .filter(f => f.stage !== 'CLOSED_LOST')
           .map(f => ({ name: STAGE_LABEL[f.stage]||f.stage, value: f.count, fill: STAGE_FILL[f.stage]||COLORS.slate }));
-        if (enrolledCount !== null) {
-          mapped.push({ name: 'Enrolled', value: enrolledCount, fill: COLORS.emerald });
-        }
         if (mapped.some(f => f.value > 0)) setFunnelData(mapped);
       }
 
@@ -233,7 +237,7 @@ export default function DSPReports() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Enrollment funnel */}
           <div className="bg-surface/60 border border-slate-800/60 rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-slate-200 mb-4">Enrollment Funnel</h3>
+            <h3 className="text-sm font-semibold text-slate-200 mb-4">Enrollment Funnel <span className="text-xs font-normal text-slate-500">· leads created in last {period}d</span></h3>
             <div className="space-y-2">
               {funnelData.map((item, i) => (
                 <div key={item.name}>
