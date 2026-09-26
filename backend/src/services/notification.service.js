@@ -94,7 +94,7 @@ const buildMessage = (eventType, payload, tenant) => {
     }
 
     case 'needsHuman':
-      return `🙋 *Human Handoff — ${brand}*\n\nContact: ${name}\nPhone: +${phone}\nReason: ${reason || 'AI escalated'}\n\nPlease take over this conversation.`;
+      return `🙋 *Human Handoff — ${brand}*\n\nContact: ${name}\nPhone: +${phone}\nReason: ${reason || 'AI escalated'}\n\n${conversationUrl ? `Open the thread: ${conversationUrl}` : 'Please take over this conversation.'}`;
 
     case 'unansweredQuestion':
       // AI is still handling this lead — this is a heads-up, not a handoff.

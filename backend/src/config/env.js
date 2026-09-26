@@ -41,6 +41,9 @@ const envSchema = z.object({
   MASTERY_ENROL_SECRET:    z.string().optional(),            // shared secret (x-mastery-secret) for the enrol API
   MASTERY_EVENTS_SECRET:   z.string().optional(),            // shared secret the site sends to POST /webhooks/mastery
   MASTERY_TENANT_ID:       z.string().optional(),            // the DSP tenant that owns Mastery leads/automations
+  // Where a verified student signs in. Sent on WhatsApp the moment payment is
+  // confirmed, so the student never has to hunt through email for it.
+  MASTERY_LOGIN_URL:       z.string().url().default('https://www.digitalservicesprogram.com/app'),
   // Model IDs. Every hardcoded model lives in config/models.js — these are the
   // overrides Railway sets. Add new model vars here AND in models.js.
   OPENAI_MODEL:            z.string().default('gpt-5.4-mini'),

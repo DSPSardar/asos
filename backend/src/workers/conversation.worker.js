@@ -24,6 +24,7 @@ const { guardAiStageTransition } = require('../services/agent-guards/won-guard')
 const formSubmitted = require('../services/agent-guards/form-submitted');
 const neverSilent = require('../services/agent-guards/never-silent');
 const escalation = require('../services/agent-guards/escalation');
+const paymentGate = require('../services/paymentGate.service');
 const { detectLanguage } = require('../utils/language');
 const billingService = require('../modules/billing/billing.service');
 const { toDbMessageType } = require('../utils/messageType');
@@ -696,10 +697,13 @@ const handleInboundMessage = async (job) => {
 
     // A suspicious proof gets the neutral "we'll verify" wording, never the
     // configured "payment received" celebration.
-    const ackMessage = suspicious
+    const ackMessage = (suspicious
       ? 'Thank you for the screenshot! Our team will verify the payment and confirm your seat shortly. 🙏'
       : (tenant.aiConfig?.paymentProofMessage?.trim()
-        || 'Thank you! We have received your payment confirmation. Our team will verify it and confirm your seat shortly. 🙏');
+        || 'Thank you! We have received your payment confirmation. Our team will verify it and confirm your seat shortly. 🙏'))
+      // Mastery needs an email to create the account — ask now, while the
+      // student is waiting anyway, instead of discovering it after the win.
+      + paymentGate.emailRequestForAck({ tenant, lead, contact });
 
     await sendAndSaveReply({
       tenant, conversation, tenantId,
@@ -744,6 +748,7 @@ const handleInboundMessage = async (job) => {
         : amountMismatch
           ? `🚨 Payment proof received but the amount (${extractedAmount}) does not match the fee (${expectedFee}) — check before confirming`
           : 'Payment proof received — verify and confirm the seat',
+      conversationUrl: `${env.APP_URL}/conversations?id=${conversation.id}`,
     });
 
     logger.info({ leadId: lead.id, conversationId: conversation.id },
@@ -757,6 +762,14 @@ const handleInboundMessage = async (job) => {
   // so checking status would block AI even after a valid handback/toggle.
   const freshConv = await prisma.conversation.findUnique({ where: { id: conversation.id } });
   if (!freshConv?.aiEnabled) {
+    // Payment gate: a student waiting on verification (or verified but with
+    // no email on file) must never read silence. The gate service answers
+    // those two states itself — holding reply, email capture, post-win
+    // enrolment — and leaves every other AI-off thread to the agent inbox.
+    const gated = await paymentGate.handleInboundWhileGated({
+      tenant, tenantId, conversation: freshConv, lead, contact, content, phone: normalizedPhone,
+    }).catch((err) => { logger.error({ err, conversationId: conversation.id }, 'payment gate handler failed'); return false; });
+    if (gated) return;
     logger.info({ conversationId: conversation.id }, 'AI disabled — message delivered to agent inbox only');
     return;
   }

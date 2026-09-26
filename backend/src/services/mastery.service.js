@@ -18,6 +18,7 @@
 const prisma = require('../config/database');
 const env = require('../config/env');
 const logger = require('../utils/logger');
+const paymentGate = require('./paymentGate.service');
 
 const isMasteryLead = (lead) => String(lead?.product || '').toUpperCase() === 'MASTERY';
 
@@ -42,8 +43,11 @@ const enrolIfMastery = async ({ tenantId, leadId, userId = null }) => {
   const email = (lead.contact?.email || '').trim().toLowerCase();
   if (!email) {
     await prisma.activity.create({ data: { tenantId, leadId, userId, type: 'SYSTEM',
-      content: '⚠️ Paid for AI Agent Mastery but no email on the contact — add their email, then re-confirm to enrol',
+      content: '⚠️ Paid for AI Agent Mastery but no email on the contact — asked the student for it on WhatsApp; enrolment completes automatically when they reply',
       metadata: { flag: 'mastery_enrol_missing_email' } } }).catch(() => {});
+    // Don't leave a paid student silent: ask them directly. The worker's
+    // payment gate captures the reply, saves it and re-runs this enrolment.
+    paymentGate.askEmailAfterWin({ tenantId, leadId }).catch((err) => logger.error({ err, leadId }, 'ask-email-after-win failed'));
     return { error: 'missing_email' };
   }
 
@@ -60,7 +64,14 @@ const enrolIfMastery = async ({ tenantId, leadId, userId = null }) => {
       content: `🎓 Enrolled in AI Agent Mastery — sign-in email sent to ${email}`,
       metadata: { flag: 'mastery_enrolled', support_until: body.support_until || null } } }).catch(() => {});
     logger.info({ leadId, email }, 'Mastery: lead enrolled');
-    return { ok: true };
+    // The sale happened on WhatsApp — the login goes there too, not only to
+    // an inbox the student may not be watching.
+    const sent = await paymentGate.sendLoginWelcome({ tenantId, leadId, email }).catch((err) => { logger.error({ err, leadId }, 'login welcome failed'); return false; });
+    if (sent) {
+      await prisma.activity.create({ data: { tenantId, leadId, userId, type: 'SYSTEM',
+        content: '📲 Login link sent to the student on WhatsApp', metadata: { flag: 'mastery_login_sent', email } } }).catch(() => {});
+    }
+    return { ok: true, loginSent: sent };
   } catch (err) {
     logger.error({ err, leadId }, 'Mastery enrol failed');
     await prisma.activity.create({ data: { tenantId, leadId, userId, type: 'SYSTEM',
