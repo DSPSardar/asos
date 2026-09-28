@@ -128,12 +128,13 @@ const sendAndSaveReply = async ({ tenant, conversation, tenantId, phone, content
   // Best-effort and fully isolated: the text reply above has already been
   // sent and saved, so nothing here can affect it.
   //
-  // Per-tenant opt-out: the ElevenLabs credentials are platform-global, so
-  // without this gate every tenant's leads would hear the platform owner's
-  // cloned voice at the owner's expense. settings.voiceNotesEnabled = false
-  // turns it off for a tenant; default stays on so current behavior for the
-  // owner's own tenant is unchanged.
-  const tenantVoiceEnabled = tenant.settings?.voiceNotesEnabled !== false;
+  // OFF by default (Sardar, 28 Sep 2026): the only voice message ASOS sends
+  // is the pre-recorded welcome note (worker, first-contact hook). Per-reply
+  // TTS twins in the cloned voice are opt-in per tenant via
+  // settings.voiceNotesEnabled = true. The ElevenLabs credentials are
+  // platform-global, so an opt-in default would also have every tenant's
+  // leads hearing the platform owner's voice at the owner's expense.
+  const tenantVoiceEnabled = tenant.settings?.voiceNotesEnabled === true;
   if (voiceNote && tenantVoiceEnabled && elevenlabsService.isVoiceCloneConfigured()) {
     try {
       const tts = await elevenlabsService.textToSpeech(content);
