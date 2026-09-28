@@ -39,6 +39,24 @@ const extractEmail = (text) => {
 
 const isMastery = (lead) => String(lead?.product || '').toUpperCase() === 'MASTERY';
 
+// The enrolment form is NOT access — it's the registration request the admin
+// approves. It must reach the student the moment they say they've paid, and
+// again while they wait, so "payment ki, form kahan hai?" never happens.
+const ENROL_FORM_URL = env.MASTERY_ENROL_FORM_URL || 'https://www.digitalservicesprogram.com/mastery/enrol';
+const ENROL_FORM_RE = /digitalservicesprogram\.com\/mastery\/enrol/i;
+
+/**
+ * Append the enrolment-form line to a message for a Mastery lead unless the
+ * text already carries the link. Pure. Tenant override: settings.enrolFormMessage.
+ */
+const withEnrolForm = (text, { tenant, lead } = {}) => {
+  const base = String(text || '').trim();
+  if (!isMastery(lead)) return base;
+  if (ENROL_FORM_RE.test(base)) return base;
+  const line = cfg(tenant, 'enrolFormMessage', DEFAULTS.enrolFormLine).replaceAll('{formUrl}', ENROL_FORM_URL);
+  return base ? `${base}\n\n${line}` : line;
+};
+
 const cfg = (tenant, key, fallback) => {
   const v = tenant?.settings?.[key];
   return typeof v === 'string' && v.trim() ? v.trim() : fallback;
@@ -46,6 +64,9 @@ const cfg = (tenant, key, fallback) => {
 
 // ── Message copy (per-tenant override via tenant.settings.<key>) ─────────
 const DEFAULTS = {
+  // Appended to every payment ack / hold for a Mastery lead.
+  enrolFormLine:
+    '📝 Next step — fill the enrolment form now so your account is created as soon as the payment is verified: {formUrl}',
   // Appended to the screenshot ack when the contact has no email yet.
   askEmailAfterProof:
     "📧 One thing so your account is ready the moment it's verified: reply with the email address you'd like to use for your AI Agent Mastery login.",
@@ -137,6 +158,7 @@ const handleInboundWhileGated = async ({ tenant, tenantId, conversation, lead, c
   }
 
   let text = cfg(tenant, 'paymentPendingMessage', DEFAULTS.pendingHold);
+  text = withEnrolForm(text, { tenant, lead });
   if (isMastery(lead) && !(contact?.email || '').trim()) {
     text += '\n\n' + cfg(tenant, 'paymentAskEmailMessage', DEFAULTS.askEmailAfterProof);
   }
@@ -183,5 +205,6 @@ const askEmailAfterWin = async ({ tenantId, leadId }) => {
 };
 
 module.exports = {
-  extractEmail, emailRequestForAck, handleInboundWhileGated, sendLoginWelcome, askEmailAfterWin, DEFAULTS, HOLD_WINDOW_SEC,
+  extractEmail, emailRequestForAck, withEnrolForm, ENROL_FORM_URL, handleInboundWhileGated, sendLoginWelcome, askEmailAfterWin,
+  DEFAULTS, HOLD_WINDOW_SEC,
 };

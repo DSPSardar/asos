@@ -12,7 +12,7 @@ process.env.OPENAI_API_KEY ||= 'sk-test-placeholder-not-a-real-key';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { installFakePrisma } = require('./_fakePrisma');
-installFakePrisma();
+const db = installFakePrisma();
 const sweep = require('../src/services/backlogSweep.service');
 
 const now = new Date('2026-09-13T12:00:00Z');
@@ -72,4 +72,33 @@ test('the enrolled-student backlog reply has no pitch and points at the app', ()
   assert.match(sweep.ENROLLED_BACKLOG_REPLY, /registration/i);
   assert.match(sweep.ENROLLED_BACKLOG_REPLY, /digitalservicesprogram\.com\/app/);
   assert.doesNotMatch(sweep.ENROLLED_BACKLOG_REPLY, /28,?000|\$100|reserve/i);
+});
+
+// ── Stale "Lead confirmed enrollment" holds are released back to the AI ──
+const redis = require('../src/config/redis');
+
+test('releaseStaleEnrollmentHandoffs: expired holds with no agent reply → AI on; fresh or agent-touched holds stay', async () => {
+  for (const m of ['tenant', 'lead', 'conversation', 'message', 'activity']) db._tables[m].length = 0;
+  redis._store.clear();
+  const T = 't1';
+  const mk = async (id, over = {}, stage = 'PROPOSED') => {
+    await db.lead.create({ data: { id: `l-${id}`, tenantId: T, stage, product: 'MASTERY' } });
+    return db.conversation.create({ data: { id, tenantId: T, leadId: `l-${id}`, aiEnabled: false, status: 'HUMAN_TAKEOVER',
+      handoffReason: 'Lead confirmed enrollment (score=90, intent=high)', handoffAt: ago(180), lastMessageAt: ago(180), ...over } });
+  };
+  await mk('stale');                                         // → released
+  await mk('fresh', { handoffAt: ago(30) });                 // inside grace → kept
+  await mk('human', {});                                     // agent replied → kept
+  await db.message.create({ data: { id: 'mx', conversationId: 'human', tenantId: T, direction: 'OUTBOUND', sender: 'AGENT', sentAt: ago(100), content: 'hi' } });
+  await mk('won', {}, 'CLOSED_WON');                         // paid → not ours
+  await mk('other', { handoffReason: 'Payment dispute detected — human required' }); // different rule → kept
+
+  const released = await sweep.releaseStaleEnrollmentHandoffs(T, now);
+  assert.equal(released, 1);
+  const byId = Object.fromEntries(db._tables.conversation.map((c) => [c.id, c]));
+  assert.equal(byId.stale.aiEnabled, true);
+  assert.equal(byId.stale.status, 'AI_HANDLING');
+  assert.equal(byId.stale.handoffReason, null);
+  assert.equal(await redis.get('asos:ai_control:stale'), '1', 'persistent AI control so the Qualifier does not re-confirm');
+  for (const id of ['fresh', 'human', 'won', 'other']) assert.equal(byId[id].aiEnabled, false, id);
 });

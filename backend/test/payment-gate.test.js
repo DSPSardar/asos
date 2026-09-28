@@ -113,3 +113,19 @@ test('enrol path with no email asks on WhatsApp instead of going quiet', async (
   assert.equal(sent.length, 1);
   assert.match(sent[0].content, /email/i);
 });
+
+// ── Enrolment form link ──────────────────────────────────────────────
+test('withEnrolForm: Mastery lead gets the form link once; non-Mastery and already-linked text untouched', () => {
+  const out = gate.withEnrolForm('Thank you! Payment received.', { tenant, lead });
+  assert.match(out, /digitalservicesprogram\.com\/mastery\/enrol/);
+  assert.equal(gate.withEnrolForm(out, { tenant, lead }), out, 'idempotent — never two links');
+  assert.equal(gate.withEnrolForm('hi', { tenant, lead: { ...lead, product: 'BOOTCAMP' } }), 'hi');
+  const custom = gate.withEnrolForm('x', { tenant: { settings: { enrolFormMessage: 'Form: {formUrl}' } }, lead });
+  assert.equal(custom, `x\n\nForm: ${gate.ENROL_FORM_URL}`);
+});
+
+test('the pending hold carries the enrolment form link', async () => {
+  await inbound('paisa bhej diya, form?');
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].content, /mastery\/enrol/);
+});

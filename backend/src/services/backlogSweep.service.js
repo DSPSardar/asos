@@ -224,12 +224,52 @@ const replyToThread = async (tenant, { conversation, lead, last, verdict }, { dr
   return { ...result, sent: r.sent, reason: r.reason };
 };
 
+// ── Stale "confirmed enrollment" handoffs → AI back on ───────────────
+const ENROLLMENT_HANDOFF_PREFIX = 'Lead confirmed enrollment';
+
+const releaseStaleEnrollmentHandoffs = async (tenantId, now, humanGraceHours = HUMAN_GRACE_HOURS) => {
+  const cutoff = new Date(now.getTime() - humanGraceHours * 3_600_000);
+  const parked = await prisma.conversation.findMany({
+    where: {
+      tenantId, aiEnabled: false, status: 'HUMAN_TAKEOVER',
+      handoffReason: { startsWith: ENROLLMENT_HANDOFF_PREFIX },
+      OR: [{ handoffAt: { lte: cutoff } }, { handoffAt: null, lastMessageAt: { lte: cutoff } }],
+      lead: { stage: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] } },
+    },
+    select: { id: true, leadId: true, handoffAt: true },
+    take: 500,
+  });
+  let released = 0;
+  for (const c of parked) {
+    // A human who actually picked the thread up keeps it.
+    const agentReplied = await prisma.message.count({
+      where: { conversationId: c.id, direction: 'OUTBOUND', sender: 'AGENT', ...(c.handoffAt ? { sentAt: { gte: c.handoffAt } } : {}) },
+    });
+    if (agentReplied > 0) continue;
+    await prisma.conversation.update({ where: { id: c.id }, data: { aiEnabled: true, status: 'AI_HANDLING', handoffReason: null } });
+    await redis.set(`asos:ai_control:${c.id}`, '1').catch(() => {});
+    await prisma.activity.create({ data: {
+      tenantId, leadId: c.leadId, type: 'AI_ACTION',
+      content: `AI resumed — "${ENROLLMENT_HANDOFF_PREFIX}" hold expired with no human reply (${humanGraceHours}h)`,
+      metadata: { flag: 'enrollment_handoff_released' },
+    } }).catch(() => {});
+    released += 1;
+  }
+  if (released) logger.info({ ev: EV, tenantId, released, parked: parked.length }, 'backlog-sweep: stale enrollment handoffs released to AI');
+  return released;
+};
+
 // ── Tenant sweep ──────────────────────────────────────────────────────
 const loadCandidates = async (tenantId, now) => {
   const since = new Date(now.getTime() - LOOKBACK_DAYS * 86_400_000);
+  // NEWEST first. This was `asc`, which with CANDIDATE_CAP meant the sweep
+  // examined the 800 OLDEST threads of the last 30 days and never reached the
+  // ones that had just gone silent — production logged `candidates: 800,
+  // replied: 0` on every tick for weeks while students waited. A thread that
+  // needs the sweep is by definition recent, so recent is what we look at.
   return prisma.conversation.findMany({
     where: { tenantId, lastMessageAt: { gte: since }, lead: { stage: { not: 'CLOSED_LOST' } } },
-    orderBy: { lastMessageAt: 'asc' },
+    orderBy: { lastMessageAt: 'desc' },
     take: CANDIDATE_CAP,
     select: {
       id: true, tenantId: true, leadId: true, contactId: true, status: true, aiEnabled: true, lastMessageAt: true,
@@ -245,7 +285,7 @@ const loadCandidates = async (tenantId, now) => {
 const emptySummary = (tenantId, { dryRun, now }) => ({
   tenantId, ranAt: now.toISOString(), dryRun, candidates: 0,
   replied: { total: 0, enrolled: 0, payment_pending: 0, sales: 0 },
-  templates: {}, skipped: {}, alerts: 0,
+  templates: {}, skipped: {}, alerts: 0, released: 0,
   replies: [], flagged: [], skippedThreads: [],
 });
 
@@ -255,8 +295,18 @@ const sweepTenant = async (tenantId, { dryRun = false, now = new Date(), limit =
     const summary = emptySummary(tenantId, { dryRun, now });
     if (!tenant) return { ...summary, error: 'tenant_not_found' };
 
+    // Threads the old rule parked: "Lead confirmed enrollment" switched AI off
+    // and nothing ever switched it back. The worker no longer does that, but
+    // the ones already parked stay silent until a human clicks. Release any
+    // such thread once the human grace period has passed with no agent
+    // reply — no message is sent here; the next inbound simply gets answered.
+    summary.released = dryRun ? 0 : await releaseStaleEnrollmentHandoffs(tenantId, now, humanGraceHours);
+
     const candidates = await loadCandidates(tenantId, now);
     summary.candidates = candidates.length;
+    if (candidates.length >= CANDIDATE_CAP) {
+      logger.warn({ ev: EV, tenantId, cap: CANDIDATE_CAP }, 'backlog-sweep: candidate cap reached — oldest threads in the window were not examined');
+    }
     const bump = (obj, key) => { obj[key] = (obj[key] || 0) + 1; };
 
     for (const conversation of candidates) {
@@ -334,5 +384,5 @@ const lastSummary = async (tenantId) => {
 
 module.exports = {
   EV, SILENT_MINUTES, HUMAN_GRACE_HOURS, ENROLLED_BACKLOG_REPLY, ENROL_URL,
-  classifyThread, sweepTenant, runTick, lastSummary, replyToThread, pickReopenTemplate,
+  classifyThread, sweepTenant, runTick, lastSummary, replyToThread, pickReopenTemplate, releaseStaleEnrollmentHandoffs,
 };

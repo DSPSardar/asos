@@ -38,6 +38,7 @@ const envSchema = z.object({
   OPENAI_API_KEY:          z.string().startsWith('sk-'),
   // ── DSP AI Agent Mastery (self-paced course on digitalservicesprogram.com) ──
   MASTERY_ENROL_URL:       z.string().url().optional(),      // https://digitalservicesprogram.com/api/mastery/enrol
+  MASTERY_ENROL_FORM_URL:  z.string().url().optional(),      // public enrolment form sent to paying students
   MASTERY_ENROL_SECRET:    z.string().optional(),            // shared secret (x-mastery-secret) for the enrol API
   MASTERY_EVENTS_SECRET:   z.string().optional(),            // shared secret the site sends to POST /webhooks/mastery
   MASTERY_TENANT_ID:       z.string().optional(),            // the DSP tenant that owns Mastery leads/automations

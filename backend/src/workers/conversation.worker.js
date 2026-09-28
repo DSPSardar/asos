@@ -610,8 +610,10 @@ const handleInboundMessage = async (job) => {
         },
       });
 
-      const ackMessage = tenant.aiConfig?.paymentProofMessage?.trim()
-        || "Thank you for the screenshot! I'm having a little trouble verifying it automatically, but our team will check it and confirm your seat shortly. 🙏";
+      const ackMessage = paymentGate.withEnrolForm(
+        tenant.aiConfig?.paymentProofMessage?.trim()
+        || "Thank you for the screenshot! I'm having a little trouble verifying it automatically, but our team will check it and confirm your seat shortly. 🙏",
+        { tenant, lead });
 
       await sendAndSaveReply({
         tenant, conversation, tenantId,
@@ -697,10 +699,13 @@ const handleInboundMessage = async (job) => {
 
     // A suspicious proof gets the neutral "we'll verify" wording, never the
     // configured "payment received" celebration.
-    const ackMessage = (suspicious
+    // The enrolment form goes out with the ack, every time — a student who
+    // has just paid must never have to ask "form kahan hai?".
+    const ackMessage = paymentGate.withEnrolForm(suspicious
       ? 'Thank you for the screenshot! Our team will verify the payment and confirm your seat shortly. 🙏'
       : (tenant.aiConfig?.paymentProofMessage?.trim()
-        || 'Thank you! We have received your payment confirmation. Our team will verify it and confirm your seat shortly. 🙏'))
+        || 'Thank you! We have received your payment confirmation. Our team will verify it and confirm your seat shortly. 🙏'),
+    { tenant, lead })
       // Mastery needs an email to create the account — ask now, while the
       // student is waiting anyway, instead of discovering it after the win.
       + paymentGate.emailRequestForAck({ tenant, lead, contact });
@@ -1056,6 +1061,34 @@ const handleInboundMessage = async (job) => {
     if (!handoffOutbound) {
       logger.warn({ ev: neverSilent.EV, leadId: lead.id, conversationId: conversation.id, outcome: 'handoff_without_outbound' },
         'Handoff turn ended without a delivered outbound');
+    }
+
+    // "Lead confirmed enrollment" is NOT a reason to switch the AI off. It
+    // used to be: the moment a student said yes, AI went silent and every
+    // follow-up ("account number?", "kal karta hun", "screenshot bhej di")
+    // landed in an inbox nobody opened — 198 threads were found parked this
+    // way on 3 Sep 2026. Now the AI stays on in awaiting-payment mode: the
+    // account details have gone out, the owner gets the same alert, and the
+    // persistent-AI-control flag (the one handback() sets) stops the
+    // Qualifier from "confirming enrollment" again on every later turn.
+    // Rule-based handoffs (disputes, consecutive negatives, AI failure) still
+    // hand off exactly as before.
+    if (aiResult.enrollmentConfirmed && /^Lead confirmed enrollment/.test(aiResult.handoffReason || '')) {
+      await redis.set(`asos:ai_control:${conversation.id}`, '1').catch(() => {});
+      await prisma.activity.create({
+        data: {
+          tenantId, leadId: lead.id, type: 'AI_ACTION',
+          content: `Lead confirmed enrollment — payment details sent, AI stays on awaiting payment. (${aiResult.handoffReason})`,
+          metadata: { flag: 'enrollment_confirmed_ai_on', handoffReason: aiResult.handoffReason },
+        },
+      }).catch(() => {});
+      logger.info({ leadId: lead.id, conversationId: conversation.id }, '✅ Enrollment confirmed — AI kept on, awaiting payment');
+      notificationService.notifyAdmin(tenant, 'needsHuman', {
+        contactName: contact.name,
+        phone: normalizedPhone,
+        reason: `${aiResult.handoffReason} — payment details sent, AI still answering`,
+      });
+      return;
     }
 
     await handleHandoff(tenant, conversation, lead, aiResult.handoffReason);
