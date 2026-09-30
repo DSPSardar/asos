@@ -40,6 +40,8 @@ const { isPaymentPending } = require('./agent-guards/form-submitted');
 const { guardAiStageTransition, isMasteryGuardedTenant } = require('./agent-guards/won-guard');
 const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const { requestContext, runWithSystemScope } = require('../middleware/requestContext.middleware');
+const { TOKEN_LIMIT_HANDOFF_REASON } = require('../config/constants');
+const usageCycle = require('./usageCycle.service');
 
 const EV = 'backlog-sweep';
 const SILENT_MINUTES = 30;
@@ -78,6 +80,10 @@ const classifyThread = ({ conversation, lead, last, now = new Date(), silentMinu
   const waitedMs = now.getTime() - new Date(last.sentAt).getTime();
   const hard = escalation.detectHardEscalation(last.content || '');
   if (hard.escalate) return { action: 'skip', reason: `flagged:${hard.kind}`, flagged: hard.kind };
+  // The AI-token cap paused this thread. The usage tick hands it back (and
+  // answers it) the moment the tenant has headroom — answering it here would
+  // spend past the cap.
+  if (conversation.handoffReason === TOKEN_LIMIT_HANDOFF_REASON) return { action: 'skip', reason: 'token_limit_hold' };
 
   const humanHeld = conversation.aiEnabled === false || ['HUMAN_TAKEOVER', 'PENDING_VERIFICATION'].includes(conversation.status);
   if (humanHeld && waitedMs < humanGraceHours * 3_600_000) return { action: 'skip', reason: 'human_grace' };
@@ -259,6 +265,13 @@ const releaseStaleEnrollmentHandoffs = async (tenantId, now, humanGraceHours = H
   return released;
 };
 
+// Would replyToThread spend AI tokens on this thread? Mirrors its branches:
+// outside the 24h window → template; enrolled → fixed reply; payment proof
+// already in → fixed form-link reply; everything else → an AI turn.
+const needsAiTurn = (verdict, conversation) => verdict.insideWindow
+  && verdict.category !== 'enrolled'
+  && !(verdict.category === 'payment_pending' && conversation.paymentProofDetected);
+
 // ── Tenant sweep ──────────────────────────────────────────────────────
 const loadCandidates = async (tenantId, now) => {
   const since = new Date(now.getTime() - LOOKBACK_DAYS * 86_400_000);
@@ -272,7 +285,7 @@ const loadCandidates = async (tenantId, now) => {
     orderBy: { lastMessageAt: 'desc' },
     take: CANDIDATE_CAP,
     select: {
-      id: true, tenantId: true, leadId: true, contactId: true, status: true, aiEnabled: true, lastMessageAt: true,
+      id: true, tenantId: true, leadId: true, contactId: true, status: true, aiEnabled: true, lastMessageAt: true, handoffReason: true,
       paymentDetailsSentAt: true, paymentProofDetected: true,
       lead: { select: { id: true, tenantId: true, stage: true, product: true, scoreLabel: true, aiScore: true, intent: true, problemSummary: true,
         nextAction: true, businessUnit: true, language: true, alreadyEnrolledAt: true, formSubmittedAt: true, qualificationData: true,
@@ -302,6 +315,12 @@ const sweepTenant = async (tenantId, { dryRun = false, now = new Date(), limit =
     // reply — no message is sent here; the next inbound simply gets answered.
     summary.released = dryRun ? 0 : await releaseStaleEnrollmentHandoffs(tenantId, now, humanGraceHours);
 
+    // A capped tenant gets no AI turns from the sweep: the cap is a spend
+    // limit, and the sweep calls the AI directly (not through the worker's
+    // check). Fixed replies and reopen templates cost no tokens and still go.
+    const sub = await prisma.subscription.findUnique({ where: { tenantId } });
+    const capped = !usageCycle.hasHeadroom(tenant, sub);
+
     const candidates = await loadCandidates(tenantId, now);
     summary.candidates = candidates.length;
     if (candidates.length >= CANDIDATE_CAP) {
@@ -328,6 +347,12 @@ const sweepTenant = async (tenantId, { dryRun = false, now = new Date(), limit =
       }
 
       if (summary.replied.total >= limit) { bump(summary.skipped, 'run_limit'); continue; }
+
+      if (capped && needsAiTurn(verdict, conversation)) {
+        bump(summary.skipped, 'token_limit');
+        summary.skippedThreads.push({ ...label, reason: 'token_limit', category: verdict.category });
+        continue;
+      }
 
       let out;
       try {
