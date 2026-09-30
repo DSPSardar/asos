@@ -29,6 +29,7 @@ const env = require('../config/env');
 const logger = require('../utils/logger');
 const notificationService = require('./notification.service');
 const outbound = require('./outbound.service');
+const { isInsideWindow } = require('./agent-guards/never-silent');
 const { TOKEN_LIMIT_HANDOFF_REASON } = require('../config/constants');
 const { requestContext, runWithSystemScope } = require('../middleware/requestContext.middleware');
 
@@ -156,25 +157,55 @@ const hasHeadroom = (tenant, sub) => isBillingExempt(tenant)
   || !sub
   || BigInt(sub.aiTokensUsed || 0) < BigInt(sub.aiTokensLimit || 0);
 
-// Hand every conversation the cap paused back to the AI, and re-queue the
-// lead's newest unanswered message so it actually gets a reply. Unlike a
-// human handback (conversations.service.js) no asos:ai_control flag is set —
-// the thread simply resumes the normal AI flow it was in before the cap.
+// At most this many cap-held threads per tenant go back to the AI per tick
+// (every 5 min). A month reset can free hundreds at once; pacing them keeps
+// the replays from burning the new period in minutes, and headroom is
+// re-checked before every batch.
+const RELEASE_PER_TICK = 20;
+
+// Only a thread the cap paused, still parked, whose lead is still open. A
+// conversation the owner CLOSED (closeConversation keeps handoffReason) or a
+// lead marked won/lost during the hold must never be reopened: the replay
+// would find no open lead and create a new one from a weeks-old message.
+const heldWhere = (tenantId) => ({
+  tenantId,
+  aiEnabled: false,
+  status: 'HUMAN_TAKEOVER',
+  handoffReason: TOKEN_LIMIT_HANDOFF_REASON,
+  lead: { stage: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] } },
+});
+
+// Hand conversations the cap paused back to the AI, and re-queue the lead's
+// newest unanswered message when it can still get a normal reply (inside
+// WhatsApp's 24h window — older ones just get the AI back for their next
+// message, rather than a wasted turn that can only become a template). A
+// thread a human has replied in since the handoff stays with the human.
+// Unlike a human handback (conversations.service.js) no asos:ai_control flag
+// is set — the thread resumes the normal AI flow it was in before the cap.
 // Caller must already be inside this tenant's request context.
-const releaseTokenLimitHolds = async (tenant) => {
+const releaseTokenLimitHolds = async (tenant, { now = new Date(), limit = RELEASE_PER_TICK } = {}) => {
   const tenantId = tenant.id;
   const { publishInboundMessage } = require('../queues/message.queue');
   const held = await prisma.conversation.findMany({
-    where: { tenantId, aiEnabled: false, handoffReason: TOKEN_LIMIT_HANDOFF_REASON },
+    where: heldWhere(tenantId),
+    orderBy: { lastMessageAt: 'desc' },   // most recently active first
     select: { id: true, leadId: true, contactId: true, handoffAt: true },
   });
 
   let released = 0;
   for (const c of held) {
-    // Guarded on the reason: a human who took the thread over since the scan
-    // changed handoffReason, so this matches nothing and their hold stands.
+    if (released >= limit) break;
+
+    // A human picked the thread up during the hold → it's theirs.
+    const agentReplied = await prisma.message.count({
+      where: { conversationId: c.id, tenantId, direction: 'OUTBOUND', sender: 'AGENT', ...(c.handoffAt ? { sentAt: { gt: c.handoffAt } } : {}) },
+    });
+    if (agentReplied > 0) continue;
+
+    // Guarded on the same conditions as the scan: a human who took over,
+    // closed it, or closed the lead since then matches nothing here.
     const { count } = await prisma.conversation.updateMany({
-      where: { id: c.id, tenantId, aiEnabled: false, handoffReason: TOKEN_LIMIT_HANDOFF_REASON },
+      where: { ...heldWhere(tenantId), id: c.id },
       data: { aiEnabled: true, status: 'AI_HANDLING', handoffReason: null },
     });
     if (!count) continue;
@@ -195,7 +226,7 @@ const releaseTokenLimitHolds = async (tenant) => {
         where: { conversationId: c.id, tenantId, direction: 'INBOUND', sender: 'CONTACT', waMessageId: { not: null } },
         orderBy: { sentAt: 'desc' },
       });
-      if (!last) continue;
+      if (!last || !isInsideWindow(last.sentAt, now)) continue;
       const answeredAfter = c.handoffAt ? new Date(c.handoffAt).toISOString() : null;
       if (await outbound.repliesSince({ tenantId, inbound: last, answeredAfter }) > 0) continue; // a human answered
       const contact = await prisma.contact.findFirst({ where: { id: c.contactId, tenantId }, select: { phone: true, name: true } });
@@ -222,9 +253,9 @@ const releaseTokenLimitHolds = async (tenant) => {
 
 // Every tenant with cap-held threads and headroom again → release them.
 // Returns { [tenantId]: releasedCount } for tenants where anything moved.
-const releaseAllEligibleHolds = () => runWithSystemScope(async () => {
+const releaseAllEligibleHolds = ({ now = new Date() } = {}) => runWithSystemScope(async () => {
   const tenants = await prisma.conversation.findMany({
-    where: { aiEnabled: false, handoffReason: TOKEN_LIMIT_HANDOFF_REASON },
+    where: { aiEnabled: false, status: 'HUMAN_TAKEOVER', handoffReason: TOKEN_LIMIT_HANDOFF_REASON },
     select: { tenantId: true },
     distinct: ['tenantId'],
   });
@@ -236,7 +267,7 @@ const releaseAllEligibleHolds = () => runWithSystemScope(async () => {
         prisma.subscription.findUnique({ where: { tenantId } }),
       ]);
       if (!tenant || !hasHeadroom(tenant, sub)) return;
-      const n = await releaseTokenLimitHolds(tenant).catch((err) => {
+      const n = await releaseTokenLimitHolds(tenant, { now }).catch((err) => {
         logger.error({ err, tenantId }, 'token-limit release failed');
         return 0;
       });
@@ -287,7 +318,7 @@ const resetExpiredPeriods = async (now) => {
 const runUsageTick = ({ now = new Date() } = {}) => runWithSystemScope(async () => {
   await initialiseMissingPeriods(now);
   const reset = await resetExpiredPeriods(now);
-  const released = await releaseAllEligibleHolds();
+  const released = await releaseAllEligibleHolds({ now });
   return { reset, released };
 });
 
@@ -300,6 +331,7 @@ module.exports = {
   rollPeriod,
   periodContaining,
   hasHeadroom,
+  RELEASE_PER_TICK,
   releaseTokenLimitHolds,
   releaseAllEligibleHolds,
   runUsageTick,

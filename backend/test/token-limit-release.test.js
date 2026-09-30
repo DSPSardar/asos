@@ -51,7 +51,7 @@ beforeEach(() => { for (const t of Object.values(db._tables)) t.length = 0; publ
 
 test('headroom again → cap-held thread released and the unanswered question re-queued past the farewell', async () => {
   seed({ used: 0 });
-  const r = await usage.releaseAllEligibleHolds();
+  const r = await usage.releaseAllEligibleHolds({ now: T(60) });
   assert.deepEqual(r, { t1: 1 });
   assert.equal(conv('c1').aiEnabled, true);
   assert.equal(conv('c1').status, 'AI_HANDLING');
@@ -69,28 +69,66 @@ test('headroom again → cap-held thread released and the unanswered question re
 
 test('still at the cap → nothing released', async () => {
   seed({ used: 1000 });
-  assert.deepEqual(await usage.releaseAllEligibleHolds(), {});
+  assert.deepEqual(await usage.releaseAllEligibleHolds({ now: T(60) }), {});
   assert.equal(conv('c1').aiEnabled, false);
   assert.equal(published.length, 0);
 });
 
 test('exempt tenant at the cap → released', async () => {
   seed({ used: 5000, exempt: true });
-  assert.deepEqual(await usage.releaseAllEligibleHolds(), { t1: 1 });
+  assert.deepEqual(await usage.releaseAllEligibleHolds({ now: T(60) }), { t1: 1 });
 });
 
-test('a human answered during the hold → released, but nothing re-queued', async () => {
+test('a human answered during the hold → the thread stays with the human', async () => {
   seed({ used: 0 });
   db._tables.message.push({ id: 'm3', tenantId: 't1', conversationId: 'c1', direction: 'OUTBOUND', sender: 'AGENT', content: 'Fee is 28k', sentAt: T(5) });
-  await usage.releaseAllEligibleHolds();
+  assert.deepEqual(await usage.releaseAllEligibleHolds({ now: T(60) }), {});
+  assert.equal(conv('c1').aiEnabled, false);
+  assert.equal(published.length, 0);
+});
+
+test('a conversation the owner CLOSED during the hold is never reopened', async () => {
+  seed({ used: 0 });
+  Object.assign(conv('c1'), { status: 'CLOSED' });           // closeConversation keeps handoffReason
+  assert.deepEqual(await usage.releaseAllEligibleHolds({ now: T(60) }), {});
+  assert.equal(conv('c1').status, 'CLOSED');
+  assert.equal(published.length, 0);
+});
+
+test('a lead marked CLOSED_LOST / CLOSED_WON during the hold is never re-engaged', async () => {
+  for (const stage of ['CLOSED_LOST', 'CLOSED_WON']) {
+    for (const t of Object.values(db._tables)) t.length = 0;
+    published.length = 0;
+    seed({ used: 0 });
+    db._tables.lead[0].stage = stage;
+    assert.deepEqual(await usage.releaseAllEligibleHolds({ now: T(60) }), {}, stage);
+    assert.equal(conv('c1').aiEnabled, false);
+    assert.equal(published.length, 0);
+  }
+});
+
+test('last inbound older than the 24h window → AI back on, but no replay (no wasted turn, no second farewell)', async () => {
+  seed({ used: 0 });
+  assert.deepEqual(await usage.releaseAllEligibleHolds({ now: new Date(T(1).getTime() + 25 * 3600_000) }), { t1: 1 });
   assert.equal(conv('c1').aiEnabled, true);
   assert.equal(published.length, 0);
+});
+
+test('a month-reset burst is paced: at most RELEASE_PER_TICK threads per tenant per tick', async () => {
+  seed({ used: 0 });
+  for (let i = 0; i < usage.RELEASE_PER_TICK + 5; i += 1) {
+    db._tables.conversation.push({ id: `x${i}`, tenantId: 't1', leadId: 'l1', contactId: 'k1', aiEnabled: false, status: 'HUMAN_TAKEOVER',
+      handoffReason: TOKEN_LIMIT_HANDOFF_REASON, handoffAt: T(2), lastMessageAt: T(1) });
+  }
+  const total = usage.RELEASE_PER_TICK + 6;                    // + c1
+  assert.equal((await usage.releaseAllEligibleHolds({ now: T(60) })).t1, usage.RELEASE_PER_TICK);
+  assert.equal((await usage.releaseAllEligibleHolds({ now: T(60) })).t1, total - usage.RELEASE_PER_TICK);
 });
 
 test('lead wrote again during the hold → the NEWEST inbound is re-queued', async () => {
   seed({ used: 0 });
   db._tables.message.push({ id: 'm4', tenantId: 't1', conversationId: 'c1', direction: 'INBOUND', sender: 'CONTACT', content: 'hello??', waMessageId: 'wamid.4', sentAt: T(30) });
-  await usage.releaseAllEligibleHolds();
+  await usage.releaseAllEligibleHolds({ now: T(60) });
   assert.deepEqual(published.map((p) => p.waMessageId), ['wamid.4']);
 });
 
@@ -103,7 +141,7 @@ test('a human took the thread over between scan and release → not overridden',
     if (args?.where?.tenantId) conv('c1').handoffReason = 'Manual takeover'; // after the per-tenant read
     return rows;
   };
-  try { await usage.releaseAllEligibleHolds(); } finally { db.conversation.findMany = orig; }
+  try { await usage.releaseAllEligibleHolds({ now: T(60) }); } finally { db.conversation.findMany = orig; }
   assert.equal(conv('c1').aiEnabled, false);
   assert.equal(published.length, 0);
 });
@@ -121,6 +159,13 @@ test('period reset → the same tick resets and releases', async () => {
   const r = await usage.runUsageTick({ now: T(10) });
   assert.deepEqual(r.reset, ['t1']);
   assert.deepEqual(r.released, { t1: 1 });
+});
+
+test('toggling AI back on clears a stale token-limit reason', async () => {
+  seed({ used: 0 });
+  const conversations = require('../src/modules/conversations/conversations.service');
+  await conversations.toggleAI('t1', 'c1', true);
+  assert.equal(conv('c1').handoffReason, null);
 });
 
 test('repliesSince ignores outbound at or before answeredAfter', async () => {

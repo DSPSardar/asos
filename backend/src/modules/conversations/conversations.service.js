@@ -163,7 +163,12 @@ const toggleAI = async (tenantId, conversationId, aiEnabled) => {
 
   return prisma.conversation.update({
     where: { id: conversationId },
-    data: { aiEnabled, status: aiEnabled ? 'AI_HANDLING' : conv.status },
+    // Switching AI back on ends any handoff: a stale reason (e.g. the token
+    // cap's) would otherwise let the usage tick or the backlog sweep act on
+    // this thread as if it were still parked.
+    data: aiEnabled
+      ? { aiEnabled, status: 'AI_HANDLING', handoffReason: null }
+      : { aiEnabled, status: conv.status },
   });
 };
 

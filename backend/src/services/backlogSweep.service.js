@@ -320,8 +320,10 @@ const sweepTenant = async (tenantId, { dryRun = false, now = new Date(), limit =
     // A capped tenant gets no AI turns from the sweep: the cap is a spend
     // limit, and the sweep calls the AI directly (not through the worker's
     // check). Fixed replies and reopen templates cost no tokens and still go.
-    const sub = await prisma.subscription.findUnique({ where: { tenantId } });
-    const capped = !usageCycle.hasHeadroom(tenant, sub);
+    // Re-checked after every AI turn below: one run can take up to
+    // MAX_REPLIES_PER_RUN turns, far more than a nearly-capped plan has left.
+    const isCapped = async () => !usageCycle.hasHeadroom(tenant, await prisma.subscription.findUnique({ where: { tenantId } }));
+    let capped = await isCapped();
 
     const candidates = await loadCandidates(tenantId, now);
     summary.candidates = candidates.length;
@@ -368,6 +370,7 @@ const sweepTenant = async (tenantId, { dryRun = false, now = new Date(), limit =
         summary.skippedThreads.push({ ...label, reason: out.skipped, category: verdict.category });
         continue;
       }
+      if (!capped && !dryRun && needsAiTurn(verdict, conversation)) capped = await isCapped();
       if (out.template) bump(summary.templates, out.template);
       summary.replied.total += 1;
       bump(summary.replied, verdict.category);

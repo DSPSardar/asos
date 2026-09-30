@@ -83,6 +83,19 @@ test('exempt tenant over its limit still gets answered', async () => {
   assert.equal(aiCalls, 1);
 });
 
+test('headroom is re-checked after every AI turn — one run cannot overshoot the cap', async () => {
+  seed({ used: 990 });
+  db._tables.conversation.push({ id: 'c2', tenantId: 't1', leadId: 'l1', contactId: 'k1', status: 'AI_HANDLING', aiEnabled: true, lastMessageAt: ago(61), paymentProofDetected: false });
+  db._tables.message.push({ id: 'm2', tenantId: 't1', conversationId: 'c2', direction: 'INBOUND', sender: 'CONTACT', content: 'kab start hai?', sentAt: ago(61) });
+  const orig = claude.processMessage;
+  claude.processMessage = async (args) => { db._tables.subscription[0].aiTokensUsed += 50n; return orig(args); };
+  try {
+    const s = await sweep.sweepTenant('t1', { now });
+    assert.equal(aiCalls, 1);
+    assert.equal(s.skipped.token_limit, 1);
+  } finally { claude.processMessage = orig; }
+});
+
 test('control: under the cap the sweep answers as before', async () => {
   seed({ used: 10 });
   await sweep.sweepTenant('t1', { now });
