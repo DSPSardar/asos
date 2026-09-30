@@ -127,6 +127,9 @@ const EMAIL_SUBJECTS = {
  * @param {object} payload       - { contactName, phone, score, reason, question,
  *                                   problemSummary, nextAction, urgencyTrigger,
  *                                   conversationUrl }
+ * @returns {Promise<{ delivered: boolean, whatsapp: boolean, email: boolean }>}
+ *   whether any copy actually went out — callers that dedupe an alert (e.g.
+ *   usage thresholds) mark it sent only when it was delivered. Never throws.
  */
 const notifyAdmin = async (tenant, eventType, payload = {}) => {
   try {
@@ -139,6 +142,7 @@ const notifyAdmin = async (tenant, eventType, payload = {}) => {
 
     const msg = buildMessage(eventType, payload, tenant);
     let waDelivered = false;
+    let emailDelivered = false;
 
     if (adminPhone && pref.whatsapp) {
       if (!URGENT_EVENTS.has(eventType) && inQuietHours(settings.quietHours)) {
@@ -172,14 +176,17 @@ const notifyAdmin = async (tenant, eventType, payload = {}) => {
           ctaUrl: payload.conversationUrl || null,
           ctaLabel: 'Open the conversation',
         });
+        emailDelivered = true;
         logger.info({ tenantId: tenant.id, eventType }, '📧 Admin email alert sent (WA fallback)');
       } catch (err) {
         logger.warn({ err, tenantId: tenant.id, eventType }, 'Admin email alert failed');
       }
     }
+    return { delivered: waDelivered || emailDelivered, whatsapp: waDelivered, email: emailDelivered };
   } catch (err) {
     // Non-fatal — never block the main pipeline
     logger.warn({ err, tenantId: tenant.id, eventType }, 'Admin notification failed');
+    return { delivered: false, whatsapp: false, email: false };
   }
 };
 

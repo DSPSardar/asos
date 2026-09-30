@@ -21,8 +21,12 @@ const queuePath = path.resolve(__dirname, '../src/queues/message.queue.js');
 require.cache[queuePath] = { id: queuePath, filename: queuePath, loaded: true, exports: { publishInboundMessage: async () => {} } };
 
 const notifications = [];
+let deliver = true;                                   // what notifyAdmin reports back
 const notification = require('../src/services/notification.service');
-notification.notifyAdmin = async (tenant, eventType, payload) => { notifications.push({ tenantId: tenant.id, eventType, payload }); };
+notification.notifyAdmin = async (tenant, eventType, payload) => {
+  notifications.push({ tenantId: tenant.id, eventType, payload });
+  return { delivered: deliver, whatsapp: deliver, email: false };
+};
 
 const usage = require('../src/services/usageCycle.service');
 const digest = require('../src/services/dailyDigest.service');
@@ -31,7 +35,7 @@ const tenant = { id: 't1', name: 'Acme', settings: { adminPhone: '923001234567' 
 const sub = (used, over = {}) => ({ tenantId: 't1', aiTokensUsed: BigInt(used), aiTokensLimit: 1000n, stripeSubId: null,
   usagePeriodStart: new Date('2026-09-15T00:00Z'), usagePeriodEnd: new Date('2026-10-15T00:00Z'), ...over });
 
-beforeEach(() => { for (const t of Object.values(db._tables)) t.length = 0; notifications.length = 0; redis._store.clear(); });
+beforeEach(() => { for (const t of Object.values(db._tables)) t.length = 0; notifications.length = 0; redis._store.clear(); deliver = true; });
 
 test('crossedThresholds', () => {
   assert.deepEqual(usage.crossedThresholds(790n, 1000n), []);
@@ -59,6 +63,38 @@ test('80 then later 95 → two separate alerts', async () => {
   assert.deepEqual(await usage.maybeAlertUsage(tenant), [95]);
   assert.equal(notifications.length, 2);
   assert.match(notifications[0].payload.reason, /80%/);
+});
+
+test('a FAILED delivery does not mark the threshold — the next attempt retries it', async () => {
+  db._tables.subscription.push(sub(960));
+  deliver = false;
+  assert.deepEqual(await usage.maybeAlertUsage(tenant), []);
+  assert.equal(notifications.length, 1);
+  deliver = true;
+  assert.deepEqual(await usage.maybeAlertUsage(tenant), [80, 95]);
+  assert.equal(notifications.length, 2);
+  assert.deepEqual(await usage.maybeAlertUsage(tenant), []);   // now marked
+  assert.equal(notifications.length, 2);
+});
+
+test('two concurrent attempts send one alert, not two', async () => {
+  db._tables.subscription.push(sub(960));
+  const [a, b] = await Promise.all([usage.maybeAlertUsage(tenant), usage.maybeAlertUsage(tenant)]);
+  assert.equal(notifications.length, 1);
+  assert.deepEqual([...a, ...b].sort(), [80, 95]);
+});
+
+test('the 5-minute usage tick retries alerts — a capped tenant has no replies left to trigger them', async () => {
+  db._tables.tenant.push({ ...tenant });
+  db._tables.subscription.push(sub(1000));
+  deliver = false;
+  await usage.maybeAlertUsage(tenant);                           // failed on the last reply before the cap
+  deliver = true;
+  await usage.runUsageTick({ now: new Date('2026-09-30T00:00Z') });
+  assert.equal(notifications.length, 2);
+  assert.match(notifications[1].payload.reason, /95%/);
+  await usage.runUsageTick({ now: new Date('2026-09-30T00:05Z') });
+  assert.equal(notifications.length, 2);                         // delivered → not repeated
 });
 
 test('a new usage period re-arms the alerts', async () => {

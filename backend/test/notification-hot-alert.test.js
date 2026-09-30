@@ -92,3 +92,27 @@ test('other event messages are unchanged in shape', () => {
   assert.match(buildMessage('needsHuman', { contactName: 'X', phone: '92300', reason: 'r' }, t), /Human Handoff — DSP/);
   assert.match(buildMessage('unansweredQuestion', { contactName: 'X', phone: '92300', question: 'q' }, t), /Knowledge Gap — DSP/);
 });
+
+// ── notifyAdmin reports whether anything was delivered ────────────────
+// Deduped alerts (AI-usage thresholds) are marked sent only on delivery.
+test('notifyAdmin returns delivered=true only when a copy actually went out', async () => {
+  const wa = require('../src/services/whatsapp.service');
+  const email = require('../src/services/email.service');
+  const { notifyAdmin } = require('../src/services/notification.service');
+  const origSend = wa.sendText;
+  const origConfigured = email.isAlertEmailConfigured;
+  const tenant = { id: 't1', name: 'Acme', settings: { adminPhone: '923001234567' } };
+  try {
+    wa.sendText = async () => ({});
+    assert.deepEqual(await notifyAdmin(tenant, 'systemAlert', { reason: 'x' }), { delivered: true, whatsapp: true, email: false });
+
+    wa.sendText = async () => { throw new Error('131047 outside window'); };
+    email.isAlertEmailConfigured = () => false;
+    assert.deepEqual(await notifyAdmin(tenant, 'systemAlert', { reason: 'x' }), { delivered: false, whatsapp: false, email: false });
+
+    assert.equal((await notifyAdmin({ id: 't2', name: 'NoPhone', settings: {} }, 'systemAlert', { reason: 'x' })).delivered, false);
+  } finally {
+    wa.sendText = origSend;
+    email.isAlertEmailConfigured = origConfigured;
+  }
+});

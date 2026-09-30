@@ -111,14 +111,21 @@ const usageSummary = (sub) => {
 const fmtTokens = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
 const fmtDay = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Karachi', day: 'numeric', month: 'short' }).format(d) : null);
 
+const ALERT_LOCK_SECONDS = 60;
+
 // Alert the owner the first time this period that usage crossed 80% / 95%.
-// One Redis NX key per threshold per period; when one reply jumps both, both
-// keys are claimed and ONE message names the higher threshold. Delivery goes
-// through notifyAdmin's systemAlert channel: WhatsApp to adminPhone (on by
-// default, ignores quiet hours), email fallback to alertEmail when the
-// WhatsApp copy doesn't go out (e.g. Meta's 24h window is closed).
-// Never throws — it runs after the reply has already been sent.
+// A threshold is marked sent (one Redis key per threshold per period) only
+// AFTER a copy was actually delivered; a failed send leaves it unmarked, so
+// the next attempt — the next AI reply, or the 5-minute usage tick, which
+// matters once the tenant is capped and no replies are left — retries it. A
+// short NX lock keeps two concurrent attempts from both sending. When one
+// reply jumps both thresholds, ONE message names the higher one and both are
+// marked. Delivery goes through notifyAdmin's systemAlert channel: WhatsApp to
+// adminPhone (on by default, ignores quiet hours), email fallback to
+// alertEmail when the WhatsApp copy doesn't go out (e.g. Meta's 24h window is
+// closed). Never throws; called fire-and-forget after processMessage.
 const maybeAlertUsage = async (tenant, { sub } = {}) => {
+  let lockKey = null;
   try {
     if (!tenant || isBillingExempt(tenant)) return [];
     const s = sub || await prisma.subscription.findUnique({ where: { tenantId: tenant.id } });
@@ -127,27 +134,54 @@ const maybeAlertUsage = async (tenant, { sub } = {}) => {
     if (!crossed.length) return [];
 
     const cycleKey = cycleOf(s).start ? new Date(cycleOf(s).start).toISOString() : 'no-period';
+    const sentKey = (pct) => `asos:usage_alert:${tenant.id}:${cycleKey}:${pct}`;
     const fresh = [];
     for (const pct of crossed) {
-      const ok = await redis.set(`asos:usage_alert:${tenant.id}:${cycleKey}:${pct}`, '1', 'EX', ALERT_TTL_SECONDS, 'NX').catch(() => null);
-      if (ok) fresh.push(pct);
+      if (!(await redis.get(sentKey(pct)).catch(() => null))) fresh.push(pct);
     }
     if (!fresh.length) return [];
+
+    lockKey = `asos:usage_alert_lock:${tenant.id}:${cycleKey}`;
+    if (!(await redis.set(lockKey, '1', 'EX', ALERT_LOCK_SECONDS, 'NX').catch(() => null))) { lockKey = null; return []; }
 
     const top = Math.max(...fresh);
     const u = usageSummary(s);
     const resets = fmtDay(u.resetsAt);
-    await notificationService.notifyAdmin(tenant, 'systemAlert', {
+    const delivery = await notificationService.notifyAdmin(tenant, 'systemAlert', {
       reason: `AI usage has reached ${top}% of this month's plan (${fmtTokens(u.used)} / ${fmtTokens(u.limit)} tokens)`
         + `${resets ? ` — it resets on ${resets}` : ''}.\n\n`
         + 'At 100% the AI stops replying to leads and hands every new conversation to your inbox until the limit is raised or the month resets.\n\n'
         + `Plan & usage: ${env.APP_URL}/billing`,
     });
-    logger.info({ tenantId: tenant.id, thresholds: fresh, pct: u.pct }, '📈 AI usage threshold alert sent');
+    if (!delivery?.delivered) {
+      logger.warn({ tenantId: tenant.id, thresholds: fresh, pct: u.pct }, 'AI usage alert not delivered — will retry');
+      return [];
+    }
+    await Promise.all(fresh.map((pct) => redis.set(sentKey(pct), '1', 'EX', ALERT_TTL_SECONDS)));
+    logger.info({ tenantId: tenant.id, thresholds: fresh, pct: u.pct, via: delivery }, '📈 AI usage threshold alert sent');
     return fresh;
   } catch (err) {
     logger.warn({ err, tenantId: tenant?.id }, 'AI usage alert failed (non-blocking)');
     return [];
+  } finally {
+    if (lockKey) await redis.del(lockKey).catch(() => {});
+  }
+};
+
+// The tick's retry path: every non-exempt tenant at ≥80% gets another
+// maybeAlertUsage (a no-op once its thresholds are marked). One row per
+// tenant in subscriptions, so this scan stays small.
+const retryPendingAlerts = async () => {
+  const subs = await prisma.subscription.findMany({
+    select: { tenantId: true, aiTokensUsed: true, aiTokensLimit: true, stripeSubId: true,
+      usagePeriodStart: true, usagePeriodEnd: true, currentPeriodStart: true, currentPeriodEnd: true },
+  });
+  for (const s of subs) {
+    if (!crossedThresholds(s.aiTokensUsed, s.aiTokensLimit).length) continue;
+    await requestContext.run({ tenantId: s.tenantId }, async () => {
+      const tenant = await prisma.tenant.findUnique({ where: { id: s.tenantId }, select: { id: true, name: true, settings: true } });
+      if (tenant) await maybeAlertUsage(tenant, { sub: s });
+    });
   }
 };
 
@@ -319,6 +353,7 @@ const runUsageTick = ({ now = new Date() } = {}) => runWithSystemScope(async () 
   await initialiseMissingPeriods(now);
   const reset = await resetExpiredPeriods(now);
   const released = await releaseAllEligibleHolds({ now });
+  await retryPendingAlerts().catch((err) => logger.warn({ err }, 'usage alert retry failed'));
   return { reset, released };
 });
 
