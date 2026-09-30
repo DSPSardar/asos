@@ -35,7 +35,7 @@ const { requestContext } = require('../middleware/requestContext.middleware');
 const { registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick, registerModelHealthCheck, registerBacklogSweep, registerUsageTick } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
-const { ENROLMENT_FEE_PKR } = require('../config/constants');
+const { ENROLMENT_FEE_PKR, TOKEN_LIMIT_HANDOFF_REASON } = require('../config/constants');
 
 // See server.js for the matching handlers and why they exist. concurrency:10
 // below means several unrelated jobs may be in flight when one throws
@@ -139,7 +139,7 @@ const processInboundMessage = async (job) => {
 
 const handleInboundMessage = async (job) => {
   let { tenantId, phone, contactName, content, waMessageId, messageType,
-        referral, mediaId, timestamp, replay } = job.data;
+        referral, mediaId, timestamp, replay, answeredAfter } = job.data;
 
   logger.info({ jobId: job.id, tenantId, phone, waMessageId }, '▶ Processing inbound message');
 
@@ -381,14 +381,9 @@ const handleInboundMessage = async (job) => {
     // already answered — if something went out after it, replying again means
     // the lead reads the same message twice. If nothing did, the earlier run
     // died before it could reply and finishing the job is the right call.
-    const outboundSince = await prisma.message.count({
-      where: {
-        conversationId: existingInbound.conversationId,
-        tenantId,
-        direction: 'OUTBOUND',
-        sentAt: { gte: existingInbound.sentAt },
-      },
-    });
+    // answeredAfter: set only by the token-limit release, so the cap's own
+    // farewell message isn't mistaken for an answer (outbound.repliesSince).
+    const outboundSince = await outbound.repliesSince({ tenantId, inbound: existingInbound, answeredAfter });
 
     if (outboundSince > 0) {
       logger.info({ waMessageId, conversationId: conversation.id, replay: !!replay },
@@ -800,7 +795,7 @@ const handleInboundMessage = async (job) => {
       // Never silent: the lead still gets the configured farewell.
       await deliverWithNeverSilent({ tenant, conversation, tenantId, lead: { ...lead, contact }, phone: normalizedPhone, inboundMessage,
         content: tenant.aiConfig?.handoffMessage || DEFAULT_FAREWELL, tokensUsed: 0, rawResponse: null, retry: null });
-      await handleHandoff(tenant, conversation, lead, 'AI token limit reached — plan upgrade required');
+      await handleHandoff(tenant, conversation, lead, TOKEN_LIMIT_HANDOFF_REASON);
       notificationService.notifyAdmin(tenant, 'needsHuman', {
         contactName: contact.name,
         phone: normalizedPhone,

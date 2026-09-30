@@ -197,6 +197,20 @@ const sendAndSaveTemplate = async ({ tenant, conversation, tenantId, phone, lead
   return { sent: !!waMessageId, reason: waMessageId ? `template:${tpl.name}` : (sendError || 'wa_send_failed'), waMessageId, template: tpl.name };
 };
 
+// How many outbound messages went out after `inbound` — i.e. has it been
+// answered? `answeredAfter` (ISO) additionally ignores anything sent at or
+// before that instant: the token-limit release uses the handoff time, so the
+// farewell the lead got when the cap hit doesn't count as an answer, while a
+// human's reply during the hold still does.
+const repliesSince = ({ tenantId, inbound, answeredAfter = null }) => prisma.message.count({
+  where: {
+    conversationId: inbound.conversationId,
+    tenantId,
+    direction: 'OUTBOUND',
+    sentAt: { gte: inbound.sentAt, ...(answeredAfter ? { gt: new Date(answeredAfter) } : {}) },
+  },
+});
+
 const handleHandoff = async (tenant, conversation, lead, reason) => {
   await prisma.conversation.update({
     where: { id: conversation.id },
@@ -229,4 +243,5 @@ module.exports = {
   sendAndSaveReply,
   sendAndSaveTemplate,
   handleHandoff,
+  repliesSince,
 };

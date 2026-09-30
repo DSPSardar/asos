@@ -28,6 +28,8 @@ const redis = require('../config/redis');
 const env = require('../config/env');
 const logger = require('../utils/logger');
 const notificationService = require('./notification.service');
+const outbound = require('./outbound.service');
+const { TOKEN_LIMIT_HANDOFF_REASON } = require('../config/constants');
 const { requestContext, runWithSystemScope } = require('../middleware/requestContext.middleware');
 
 // ── Exemption ─────────────────────────────────────────────────────────
@@ -148,6 +150,102 @@ const maybeAlertUsage = async (tenant, { sub } = {}) => {
   }
 };
 
+// ── Releasing cap-held conversations ──────────────────────────────────
+
+const hasHeadroom = (tenant, sub) => isBillingExempt(tenant)
+  || !sub
+  || BigInt(sub.aiTokensUsed || 0) < BigInt(sub.aiTokensLimit || 0);
+
+// Hand every conversation the cap paused back to the AI, and re-queue the
+// lead's newest unanswered message so it actually gets a reply. Unlike a
+// human handback (conversations.service.js) no asos:ai_control flag is set —
+// the thread simply resumes the normal AI flow it was in before the cap.
+// Caller must already be inside this tenant's request context.
+const releaseTokenLimitHolds = async (tenant) => {
+  const tenantId = tenant.id;
+  const { publishInboundMessage } = require('../queues/message.queue');
+  const held = await prisma.conversation.findMany({
+    where: { tenantId, aiEnabled: false, handoffReason: TOKEN_LIMIT_HANDOFF_REASON },
+    select: { id: true, leadId: true, contactId: true, handoffAt: true },
+  });
+
+  let released = 0;
+  for (const c of held) {
+    // Guarded on the reason: a human who took the thread over since the scan
+    // changed handoffReason, so this matches nothing and their hold stands.
+    const { count } = await prisma.conversation.updateMany({
+      where: { id: c.id, tenantId, aiEnabled: false, handoffReason: TOKEN_LIMIT_HANDOFF_REASON },
+      data: { aiEnabled: true, status: 'AI_HANDLING', handoffReason: null },
+    });
+    if (!count) continue;
+    released += 1;
+
+    await prisma.activity.create({
+      data: {
+        tenantId,
+        leadId: c.leadId,
+        type: 'AI_ACTION',
+        content: 'AI resumed — token limit cleared (limit raised or new usage period)',
+        metadata: { action: 'token_limit_release' },
+      },
+    }).catch((err) => logger.warn({ err, conversationId: c.id }, 'token-limit release: activity write failed'));
+
+    try {
+      const last = await prisma.message.findFirst({
+        where: { conversationId: c.id, tenantId, direction: 'INBOUND', sender: 'CONTACT', waMessageId: { not: null } },
+        orderBy: { sentAt: 'desc' },
+      });
+      if (!last) continue;
+      const answeredAfter = c.handoffAt ? new Date(c.handoffAt).toISOString() : null;
+      if (await outbound.repliesSince({ tenantId, inbound: last, answeredAfter }) > 0) continue; // a human answered
+      const contact = await prisma.contact.findFirst({ where: { id: c.contactId, tenantId }, select: { phone: true, name: true } });
+      if (!contact?.phone) continue;
+      await publishInboundMessage({
+        tenantId,
+        phone: contact.phone,
+        contactName: contact.name || null,
+        content: last.content || '',
+        waMessageId: last.waMessageId,
+        messageType: 'text',
+        timestamp: Math.floor(new Date(last.sentAt).getTime() / 1000).toString(),
+        replay: true,
+        answeredAfter,
+      });
+    } catch (err) {
+      logger.warn({ err, conversationId: c.id }, 'token-limit release: re-queue failed — AI is back on, next inbound will be answered');
+    }
+  }
+
+  if (released) logger.info({ tenantId, released }, '♻️ Token-limit holds released back to AI');
+  return released;
+};
+
+// Every tenant with cap-held threads and headroom again → release them.
+// Returns { [tenantId]: releasedCount } for tenants where anything moved.
+const releaseAllEligibleHolds = () => runWithSystemScope(async () => {
+  const tenants = await prisma.conversation.findMany({
+    where: { aiEnabled: false, handoffReason: TOKEN_LIMIT_HANDOFF_REASON },
+    select: { tenantId: true },
+    distinct: ['tenantId'],
+  });
+  const out = {};
+  for (const { tenantId } of tenants) {
+    await requestContext.run({ tenantId }, async () => {
+      const [tenant, sub] = await Promise.all([
+        prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, name: true, settings: true } }),
+        prisma.subscription.findUnique({ where: { tenantId } }),
+      ]);
+      if (!tenant || !hasHeadroom(tenant, sub)) return;
+      const n = await releaseTokenLimitHolds(tenant).catch((err) => {
+        logger.error({ err, tenantId }, 'token-limit release failed');
+        return 0;
+      });
+      if (n) out[tenantId] = n;
+    });
+  }
+  return out;
+});
+
 // ── The tick ──────────────────────────────────────────────────────────
 
 const initialiseMissingPeriods = async (now) => {
@@ -189,7 +287,8 @@ const resetExpiredPeriods = async (now) => {
 const runUsageTick = ({ now = new Date() } = {}) => runWithSystemScope(async () => {
   await initialiseMissingPeriods(now);
   const reset = await resetExpiredPeriods(now);
-  return { reset };
+  const released = await releaseAllEligibleHolds();
+  return { reset, released };
 });
 
 module.exports = {
@@ -200,5 +299,8 @@ module.exports = {
   addMonthsClamped,
   rollPeriod,
   periodContaining,
+  hasHeadroom,
+  releaseTokenLimitHolds,
+  releaseAllEligibleHolds,
   runUsageTick,
 };
