@@ -418,6 +418,8 @@ model Conversation {
   @@index([tenantId, status])
   @@index([tenantId, lastMessageAt])
   @@index([tenantId, paymentProofDetected])
+  // usage-tick release scan: threads the AI-token cap parked, across tenants
+  @@index([handoffReason, aiEnabled, status])
   @@map("conversations")
 }
 
@@ -802,6 +804,8 @@ model Subscription {
 
   tenant               Tenant             @relation(fields: [tenantId], references: [id])
 
+  // usage-tick scans: periods to initialise (IS NULL) and to roll (<= now)
+  @@index([usagePeriodEnd])
   @@map("subscriptions")
 }
 
