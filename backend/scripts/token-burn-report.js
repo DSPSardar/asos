@@ -21,6 +21,8 @@
 //                     output. Costs a few cents; still writes nothing.
 //
 // Raw message content never leaves this process; only aggregates print.
+// Every query selects pre-existing columns explicitly, so the script runs
+// against a database that hasn't applied this branch's migrations yet.
 'use strict';
 
 require('dotenv').config();
@@ -58,7 +60,18 @@ const promptsFor = ({ aiConfig, lead, contact, history, summary, contactCount, n
 };
 
 const threadReport = async (conversationId, aiConfig) => {
-  const conv = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId: TENANT }, include: { lead: true, contact: true } });
+  // Explicit selects of pre-existing columns only: this script must run
+  // against a database that has NOT yet applied this branch's migrations
+  // (e.g. prod before merge), so it never asks for leads.history_summary*
+  // or ai_agent_logs.*_cached_tokens.
+  const conv = await prisma.conversation.findFirst({
+    where: { id: conversationId, tenantId: TENANT },
+    select: {
+      id: true,
+      lead: { select: { id: true, stage: true, aiScore: true, language: true } },
+      contact: { select: { id: true, name: true } },
+    },
+  });
   const all = sanitizeHistoryForAI((await prisma.message.findMany({
     where: { conversationId, tenantId: TENANT, NOT: { type: 'AUDIO', direction: 'OUTBOUND' } },
     orderBy: { sentAt: 'asc' },
@@ -135,7 +148,10 @@ const main = () => runWithSystemScope(async () => {
     take: THREADS,
   });
   return requestContext.run({ tenantId: TENANT }, async () => {
-    const aiConfig = await prisma.aiConfig.findUnique({ where: { tenantId: TENANT } });
+    const aiConfig = await prisma.aiConfig.findUnique({
+      where: { tenantId: TENANT },
+      select: { systemPrompt: true, closingScript: true, paymentDetails: true },
+    });
     const rows = [];
     for (const [i, t] of top.entries()) {
       rows.push({ thread: `#${i + 1}`, ...(await threadReport(t.conversationId, aiConfig)) });
