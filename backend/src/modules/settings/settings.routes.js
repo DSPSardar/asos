@@ -2,6 +2,7 @@
 
 const { Router } = require('express');
 const ctrl = require('./settings.controller');
+const apiKeys = require('../mcp/apiKeys.controller');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { requireActiveTenant } = require('../../middleware/tenant.middleware');
 
@@ -22,5 +23,10 @@ router.get('/sheets',            ctrl.getSheets);
 router.post('/sheets/connect',   ctrl.connectSheets);
 router.post('/sheets/disconnect', ctrl.disconnectSheets);
 router.post('/sheets/sync',      ctrl.syncSheets);
+
+// AI Assistants (MCP connector) — per-tenant API keys
+router.get('/api-keys',              apiKeys.list);
+router.post('/api-keys',             apiKeys.create);
+router.post('/api-keys/:id/revoke',  apiKeys.revoke);
 
 module.exports = router;

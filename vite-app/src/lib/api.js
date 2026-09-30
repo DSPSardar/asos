@@ -323,6 +323,10 @@ export const settingsAPI = {
   connectSheets:    (sheetUrl) => api.post('/settings/sheets/connect', { sheetUrl }),
   disconnectSheets: () => api.post('/settings/sheets/disconnect'),
   syncSheets:       () => api.post('/settings/sheets/sync'),
+  // AI Assistants (MCP connector)
+  listApiKeys:      () => api.get('/settings/api-keys'),
+  createApiKey:     (name) => api.post('/settings/api-keys', { name }),
+  revokeApiKey:     (id) => api.post(`/settings/api-keys/${id}/revoke`),
 };
 
 export const usersAPI = {

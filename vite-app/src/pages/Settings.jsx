@@ -14,7 +14,7 @@ const TABS = [
   { id:'ai',            label:'AI Configuration', icon:IconSparkles,    desc:'System prompt, model selection, and AI→human handoff rules.' },
   { id:'team',          label:'Team',             icon:IconTeam,        desc:'Invite teammates and manage roles.' },
   { id:'notifications', label:'Notifications',    icon:IconBell,        desc:'Email and WhatsApp alerts on lead activity.' },
-  { id:'integrations',  label:'Integrations',     icon:IconPlug,        desc:'Connect external tools (CRM, Sheets, Slack).' },
+  { id:'integrations',  label:'Integrations',     icon:IconPlug,        desc:'Connect AI assistants and external tools (ChatGPT, Claude, Sheets).' },
   { id:'billing',       label:'Billing & Plan',   icon:IconCard,        desc:'Manage your subscription and view invoices.' },
   { id:'account',       label:'Account',          icon:IconUser,        desc:'Update your email address, password, and account security.' },
 ];
@@ -1732,12 +1732,125 @@ function GoogleSheetsCard() {
   );
 }
 
+// AI Assistants — one key per assistant (ChatGPT, Claude, Gemini…). The raw
+// key comes back exactly once, on create; after that only its prefix shows.
+function AIAssistantsCard() {
+  const [data, setData] = useState(null);
+  const [name, setName] = useState('');
+  const [fresh, setFresh] = useState(null); // { key, connectorUrl, endpoint } — shown once
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [copied, setCopied] = useState('');
+
+  const load = useCallback(async () => {
+    try { const res = await settingsAPI.listApiKeys(); setData(res.data); } catch (e) { setErr(e.message); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const copy = async (text, what) => {
+    try { await navigator.clipboard.writeText(text); setCopied(what); setTimeout(() => setCopied(''), 1500); } catch { /* clipboard blocked */ }
+  };
+
+  const create = async () => {
+    setBusy(true); setErr('');
+    try {
+      const res = await settingsAPI.createApiKey(name.trim());
+      setFresh(res.data); setName(''); await load();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const revoke = async (id) => {
+    if (!window.confirm('Revoke this key? The assistant using it stops working immediately.')) return;
+    setBusy(true); setErr('');
+    try { await settingsAPI.revokeApiKey(id); await load(); } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  if (!data) {
+    return <div className="rounded-lg border border-slate-800/60 bg-surface/30 p-4 text-xs text-slate-500">{err || 'Loading AI Assistants...'}</div>;
+  }
+  const active = data.keys.filter((k) => !k.revokedAt);
+
+  return (
+    <div className="rounded-lg border border-slate-800/60 bg-surface/30 p-4">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-slate-100">AI Assistants</span>
+        <span className="rounded-full border border-slate-700/60 bg-surface px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-500">MCP</span>
+        <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-sky-300">Read-only</span>
+        {active.length > 0 && (
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-300">{active.length} active</span>
+        )}
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+        Ask ChatGPT, Claude or Gemini about your sales — "what needs me today?", "revenue this week", "find Ayesha".
+        Read-only: the assistant can report, never send messages or verify payments. Customer phones are masked.
+      </p>
+
+      <div className="mt-3 flex gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder='Name this key, e.g. "ChatGPT – Sardar"'
+          maxLength={60}
+          className="min-w-0 flex-1 rounded-md border border-slate-700/60 bg-surface2/40 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-accent/50"
+        />
+        <button
+          disabled={busy || !name.trim()}
+          onClick={create}
+          className="shrink-0 rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
+        >
+          {busy ? 'Working...' : 'Create key'}
+        </button>
+      </div>
+
+      {fresh && (
+        <div className="mt-3 space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+          <p className="text-xs font-medium text-amber-200">Copy this now — it will not be shown again.</p>
+          {[['Connector URL (paste into ChatGPT or Claude as a custom connector)', fresh.connectorUrl, 'url'],
+            ['Or: server URL + key as a Bearer token', `${fresh.endpoint}   ·   ${fresh.key}`, 'key']].map(([label, value, what]) => (
+            <div key={what}>
+              <div className="text-[11px] text-slate-400">{label}</div>
+              <div className="mt-1 flex gap-2">
+                <code className="min-w-0 flex-1 truncate rounded bg-surface2/60 px-2 py-1 text-[11px] text-slate-200">{value}</code>
+                <button onClick={() => copy(what === 'url' ? fresh.connectorUrl : fresh.key, what)}
+                  className="shrink-0 rounded-md border border-slate-700/60 bg-surface2/40 px-2 py-1 text-[11px] text-slate-300 hover:bg-surface2/80">
+                  {copied === what ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          ))}
+          <button onClick={() => setFresh(null)} className="text-[11px] text-slate-400 hover:text-slate-200">I've saved it — hide</button>
+        </div>
+      )}
+
+      {data.keys.length > 0 && (
+        <ul className="mt-3 divide-y divide-slate-800/60 rounded-md border border-slate-800/60">
+          {data.keys.map((k) => (
+            <li key={k.id} className="flex items-center gap-3 px-3 py-2 text-xs">
+              <span className={`min-w-0 flex-1 truncate ${k.revokedAt ? 'text-slate-600 line-through' : 'text-slate-200'}`}>{k.name}</span>
+              <code className="text-[11px] text-slate-500">{k.prefix}…</code>
+              <span className="hidden text-[11px] text-slate-500 sm:inline">used {fmtWhen(k.lastUsedAt)}</span>
+              {k.revokedAt
+                ? <span className="text-[11px] text-slate-600">revoked</span>
+                : <button disabled={busy} onClick={() => revoke(k.id)} className="text-[11px] text-red-300 hover:text-red-200 disabled:opacity-50">Revoke</button>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {err && <p className="mt-2 text-xs text-red-300">{err}</p>}
+    </div>
+  );
+}
+
 function IntegrationsTab() {
   return (
     <Section
       title="Integrations"
-      description="Connect external tools. Google Sheets is live; the rest are on the roadmap."
+      description="Connect external tools. AI Assistants and Google Sheets are live; the rest are on the roadmap."
     >
+      <div className="mb-3">
+        <AIAssistantsCard />
+      </div>
       <div className="mb-3">
         <GoogleSheetsCard />
       </div>

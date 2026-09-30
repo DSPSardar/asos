@@ -190,6 +190,8 @@ model Tenant {
   manualPayments  ManualPayment[]
   automationRules AutomationRule[]
   automationRuns  AutomationRun[]
+  apiKeys         ApiKey[]
+  mcpCallLogs     McpCallLog[]
 
   @@map("tenants")
 }
@@ -914,4 +916,48 @@ model AutomationRun {
   @@index([tenantId, ruleId, createdAt])
   @@index([status, nextDueAt])
   @@map("automation_runs")
+}
+
+// ─────────────────────────────────────────────
+// AI ASSISTANT CONNECTOR (MCP) — per-tenant API keys + call audit
+// ─────────────────────────────────────────────
+// A tenant admin creates a key in Settings → AI Assistants and pastes it
+// into ChatGPT / Claude / Gemini as a custom connector. Only the SHA-256 of
+// the key is stored; the raw value is shown once at creation. scopes:
+// 'read' today; 'write' and 'pii' are reserved for Phase 2. See
+// src/modules/mcp/.
+model ApiKey {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  name        String
+  keyHash     String    @unique @map("key_hash")
+  prefix      String                                 // first chars, for display only
+  scopes      String[]  @default(["read"])
+  createdBy   String?   @map("created_by")
+  lastUsedAt  DateTime? @map("last_used_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calls       McpCallLog[]
+
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+model McpCallLog {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  apiKeyId    String?   @map("api_key_id")
+  tool        String
+  ok          Boolean
+  error       String?
+  durationMs  Int       @map("duration_ms")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKey      ApiKey?   @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@map("mcp_call_logs")
 }

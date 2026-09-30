@@ -37,6 +37,7 @@ const contentStudioRoutes = require('./modules/content-studio/content-studio.rou
 const reportsRoutes = require('./modules/reports/reports.routes');
 const automationsRoutes = require('./modules/automations/automations.routes');
 const todayRoutes = require('./modules/today/today.routes');
+const mcpRoutes = require('./modules/mcp/mcp.routes');
 const webhookRoutes      = require('./webhooks/webhook.routes');
 const twilioVoiceWebhook = require('./webhooks/twilio.webhook');
 // Dev-only routes: inject fake inbound WhatsApp messages into any tenant's
@@ -121,6 +122,11 @@ const createApp = () => {
 
   // Meta and Stripe webhooks need the original raw body for signature verification.
   app.use('/webhooks', express.raw({ type: '*/*', limit: '5mb' }));
+
+  // ── AI Assistant connector (MCP). Before morgan on purpose: /mcp/k/:key
+  // carries the key in the URL and must never reach the access log. The
+  // router has its own body parser, rate limit and redacted logging.
+  app.use('/mcp', mcpRoutes);
 
   // ── HTTP request logging
   app.use(morgan('combined', {

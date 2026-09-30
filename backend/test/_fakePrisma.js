@@ -11,7 +11,7 @@ const path = require('path');
 const { randomUUID } = require('crypto');
 
 const MODELS = ['tenant', 'contact', 'lead', 'leadStageHistory', 'activity', 'conversation', 'message',
-  'automationRule', 'automationRun', 'aiAgentLog', 'subscription', 'aiConfig', 'inboundMedia'];
+  'automationRule', 'automationRun', 'aiAgentLog', 'subscription', 'aiConfig', 'inboundMedia', 'apiKey', 'mcpCallLog'];
 
 const RELATIONS = {
   // model: { field: [relatedModel, localKey, foreignKey, isList] }
@@ -19,6 +19,7 @@ const RELATIONS = {
   conversation: { lead: ['lead', 'leadId', 'id', false], contact: ['contact', 'contactId', 'id', false], messages: ['message', 'id', 'conversationId', true] },
   contact: { leads: ['lead', 'id', 'contactId', true] },
   automationRule: { runs: ['automationRun', 'id', 'ruleId', true] },
+  apiKey: { tenant: ['tenant', 'tenantId', 'id', false] },
 };
 
 const cmp = (a, b) => {
