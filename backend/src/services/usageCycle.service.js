@@ -8,6 +8,9 @@
 //                            2. roll expired periods forward, reset counters
 //                            3. release conversations the cap paused, for any
 //                               tenant that has headroom again
+//   maybeAlertUsage     → after every AI reply (conversation.worker.js): tell
+//                          the owner once per period at 80% and at 95%
+//   usageSummary        → the AI-usage line in the daily digest
 //
 // usagePeriodStart/End is the tenant's USAGE cycle, deliberately separate from
 // currentPeriodStart/End, which is the paid-through date (Stripe, or a manual
@@ -21,7 +24,10 @@
 // inside requestContext.run({ tenantId }) so Postgres sees that tenant only.
 
 const prisma = require('../config/database');
+const redis = require('../config/redis');
+const env = require('../config/env');
 const logger = require('../utils/logger');
+const notificationService = require('./notification.service');
 const { requestContext, runWithSystemScope } = require('../middleware/requestContext.middleware');
 
 // ── Exemption ─────────────────────────────────────────────────────────
@@ -62,6 +68,84 @@ const periodContaining = (anchor, now) => {
   if (anchor > now) return first;
   const r = rollPeriod({ ...first, now });
   return { start: r.start, end: r.end };
+};
+
+// ── Usage thresholds + alerts ─────────────────────────────────────────
+
+const ALERT_THRESHOLDS = [80, 95];
+const ALERT_TTL_SECONDS = 40 * 24 * 60 * 60; // outlives any monthly period
+
+// Pure: which alert thresholds `used` has reached. BigInt-safe; no limit
+// (0) means nothing to warn about.
+const crossedThresholds = (used, limit) => {
+  const u = BigInt(used || 0);
+  const l = BigInt(limit || 0);
+  if (l <= 0n) return [];
+  return ALERT_THRESHOLDS.filter((pct) => u * 100n >= l * BigInt(pct));
+};
+
+// Stripe tenants' usage resets on their Stripe renewal (the usage period
+// never rolls for them), so their cycle is the Stripe period.
+const cycleOf = (sub) => (sub.stripeSubId
+  ? { start: sub.currentPeriodStart, end: sub.currentPeriodEnd }
+  : { start: sub.usagePeriodStart, end: sub.usagePeriodEnd });
+
+// Pure: the digest's view of AI usage. null when there is no limit to show.
+const usageSummary = (sub) => {
+  if (!sub) return null;
+  const used = BigInt(sub.aiTokensUsed || 0);
+  const limit = BigInt(sub.aiTokensLimit || 0);
+  if (limit <= 0n) return null;
+  return {
+    used: Number(used),
+    limit: Number(limit),
+    pct: Number((used * 100n) / limit),
+    capped: used >= limit,
+    resetsAt: cycleOf(sub).end || null,
+  };
+};
+
+const fmtTokens = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+const fmtDay = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Karachi', day: 'numeric', month: 'short' }).format(d) : null);
+
+// Alert the owner the first time this period that usage crossed 80% / 95%.
+// One Redis NX key per threshold per period; when one reply jumps both, both
+// keys are claimed and ONE message names the higher threshold. Delivery goes
+// through notifyAdmin's systemAlert channel: WhatsApp to adminPhone (on by
+// default, ignores quiet hours), email fallback to alertEmail when the
+// WhatsApp copy doesn't go out (e.g. Meta's 24h window is closed).
+// Never throws — it runs after the reply has already been sent.
+const maybeAlertUsage = async (tenant, { sub } = {}) => {
+  try {
+    if (!tenant || isBillingExempt(tenant)) return [];
+    const s = sub || await prisma.subscription.findUnique({ where: { tenantId: tenant.id } });
+    if (!s) return [];
+    const crossed = crossedThresholds(s.aiTokensUsed, s.aiTokensLimit);
+    if (!crossed.length) return [];
+
+    const cycleKey = cycleOf(s).start ? new Date(cycleOf(s).start).toISOString() : 'no-period';
+    const fresh = [];
+    for (const pct of crossed) {
+      const ok = await redis.set(`asos:usage_alert:${tenant.id}:${cycleKey}:${pct}`, '1', 'EX', ALERT_TTL_SECONDS, 'NX').catch(() => null);
+      if (ok) fresh.push(pct);
+    }
+    if (!fresh.length) return [];
+
+    const top = Math.max(...fresh);
+    const u = usageSummary(s);
+    const resets = fmtDay(u.resetsAt);
+    await notificationService.notifyAdmin(tenant, 'systemAlert', {
+      reason: `AI usage has reached ${top}% of this month's plan (${fmtTokens(u.used)} / ${fmtTokens(u.limit)} tokens)`
+        + `${resets ? ` — it resets on ${resets}` : ''}.\n\n`
+        + 'At 100% the AI stops replying to leads and hands every new conversation to your inbox until the limit is raised or the month resets.\n\n'
+        + `Plan & usage: ${env.APP_URL}/billing`,
+    });
+    logger.info({ tenantId: tenant.id, thresholds: fresh, pct: u.pct }, '📈 AI usage threshold alert sent');
+    return fresh;
+  } catch (err) {
+    logger.warn({ err, tenantId: tenant?.id }, 'AI usage alert failed (non-blocking)');
+    return [];
+  }
 };
 
 // ── The tick ──────────────────────────────────────────────────────────
@@ -110,6 +194,9 @@ const runUsageTick = ({ now = new Date() } = {}) => runWithSystemScope(async () 
 
 module.exports = {
   isBillingExempt,
+  crossedThresholds,
+  usageSummary,
+  maybeAlertUsage,
   addMonthsClamped,
   rollPeriod,
   periodContaining,

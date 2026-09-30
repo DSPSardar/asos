@@ -27,6 +27,7 @@ const escalation = require('../services/agent-guards/escalation');
 const paymentGate = require('../services/paymentGate.service');
 const { detectLanguage } = require('../utils/language');
 const billingService = require('../modules/billing/billing.service');
+const usageCycle = require('../services/usageCycle.service');
 const { toDbMessageType } = require('../utils/messageType');
 const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
@@ -864,6 +865,11 @@ const handleInboundMessage = async (job) => {
     return;
   }
 
+  // ── 9-usage. Warn the owner at 80% / 95% of the monthly AI tokens ──
+  // processMessage has already metered this turn. Fire-and-forget: the alert
+  // is once-per-period (Redis NX) and must never delay or break the reply.
+  usageCycle.maybeAlertUsage(tenant);
+
   // ── 9a. Won guard (belt and braces — claude.service applies it too) ──
   // For the Mastery tenant the AI may never write CLOSED_WON; only the
   // Mastery webhook or a human can. Logged with ev "won-guard".
@@ -1436,7 +1442,7 @@ const schedulerWorker = new Worker(
       if (job.name === 'sheets-sync') return sheetsSyncService.syncTenant(job.data?.tenantId);
       if (job.name === 'model-health-check') return require('../services/modelHealth.service').checkAllModels();
       if (job.name === 'backlog-sweep') return require('../services/backlogSweep.service').runTick();
-      if (job.name === 'usage-tick') return require('../services/usageCycle.service').runUsageTick();
+      if (job.name === 'usage-tick') return usageCycle.runUsageTick();
       // 'follow-up' intentionally unhandled for now: returning cleanly drains
       // the backlog these accumulated instead of failing them in a loop.
       logger.warn({ jobName: job.name, jobId: job.id }, 'Scheduler job has no handler — draining');
