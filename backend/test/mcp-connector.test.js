@@ -223,3 +223,24 @@ test('scrub / maskPhone units', () => {
   assert.equal(cleanName('  '), 'Unknown');
   assert.equal(cleanName('Ayesha Khan'), 'Ayesha Khan');
 });
+
+// Real Prisma queries are lazy: they execute when awaited, not when called.
+// The fake is eager, which once hid a bug where the key lookup ran outside
+// its RLS context in production. Make the fake's findUnique lazy and record
+// the context it actually executes in.
+test('key lookup executes inside its system RLS scope even with a lazy Prisma', async () => {
+  const { getRequestContext } = require('../src/middleware/requestContext.middleware');
+  const svc = require('../src/modules/mcp/apiKeys.service');
+  const eager = db.apiKey.findUnique;
+  const seen = [];
+  db.apiKey.findUnique = (args) => ({
+    then: (ok, fail) => { seen.push(getRequestContext().rlsScope); return eager(args).then(ok, fail); },
+  });
+  try {
+    const found = await svc.resolveKey(keyA);
+    assert.ok(found, 'valid key resolves');
+    assert.deepEqual(seen, ['system'], 'query executed inside the system scope');
+  } finally {
+    db.apiKey.findUnique = eager;
+  }
+});

@@ -65,10 +65,17 @@ const resolveKey = async (raw) => {
   // A fresh, isolated system-scope context — NOT runWithSystemScope, which
   // mutates the caller's store and would leave the rest of this request
   // running with rlsScope 'system' after the lookup returns.
-  const row = await requestContext.run({ requestId: getRequestContext().requestId, rlsScope: 'system' }, () => prisma.apiKey.findUnique({
-    where: { keyHash: hashKey(raw) },
-    select: { id: true, tenantId: true, scopes: true, revokedAt: true, tenant: { select: { status: true } } },
-  }));
+  // The callback MUST await inside the context: a Prisma query is lazy and
+  // only executes when awaited, so returning the bare promise would run it
+  // after run() has exited — with no RLS scope, i.e. zero rows (this shipped
+  // once and rejected every valid key in production).
+  const row = await requestContext.run({ requestId: getRequestContext().requestId, rlsScope: 'system' }, async () => {
+    const found = await prisma.apiKey.findUnique({
+      where: { keyHash: hashKey(raw) },
+      select: { id: true, tenantId: true, scopes: true, revokedAt: true, tenant: { select: { status: true } } },
+    });
+    return found;
+  });
   if (!row || row.revokedAt) return null;
   if (!row.tenant || ['SUSPENDED', 'CANCELLED'].includes(row.tenant.status)) return null;
   return { apiKeyId: row.id, tenantId: row.tenantId, scopes: row.scopes || [] };
