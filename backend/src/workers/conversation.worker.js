@@ -31,7 +31,7 @@ const { toDbMessageType } = require('../utils/messageType');
 const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
-const { registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick, registerModelHealthCheck, registerBacklogSweep } = require('../queues/message.queue');
+const { registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick, registerModelHealthCheck, registerBacklogSweep, registerUsageTick } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
 const { ENROLMENT_FEE_PKR } = require('../config/constants');
@@ -1436,6 +1436,7 @@ const schedulerWorker = new Worker(
       if (job.name === 'sheets-sync') return sheetsSyncService.syncTenant(job.data?.tenantId);
       if (job.name === 'model-health-check') return require('../services/modelHealth.service').checkAllModels();
       if (job.name === 'backlog-sweep') return require('../services/backlogSweep.service').runTick();
+      if (job.name === 'usage-tick') return require('../services/usageCycle.service').runUsageTick();
       // 'follow-up' intentionally unhandled for now: returning cleanly drains
       // the backlog these accumulated instead of failing them in a loop.
       logger.warn({ jobName: job.name, jobId: job.id }, 'Scheduler job has no handler — draining');
@@ -1474,5 +1475,9 @@ registerModelHealthCheck()
 registerBacklogSweep()
   .then(() => logger.info('🧹 Backlog sweep scheduled — every 15 min'))
   .catch((err) => logger.warn({ err }, 'Could not register backlog sweep'));
+
+registerUsageTick()
+  .then(() => logger.info('🔄 AI usage tick scheduled — every 5 min'))
+  .catch((err) => logger.warn({ err }, 'Could not register usage tick'));
 
 module.exports = worker;

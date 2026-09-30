@@ -782,6 +782,11 @@ model Subscription {
   aiTokensUsed         BigInt             @default(0) @map("ai_tokens_used")
   messagesLimit        Int                @default(1000) @map("messages_limit")
   messagesUsed         Int                @default(0) @map("messages_used")
+  // The AI-usage cycle (services/usageCycle.service.js) — reset monthly by
+  // the usage-tick job. Separate from currentPeriod*, which is the
+  // paid-through date and can span several months for manual payments.
+  usagePeriodStart     DateTime?          @map("usage_period_start")
+  usagePeriodEnd       DateTime?          @map("usage_period_end")
 
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
