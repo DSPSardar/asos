@@ -242,7 +242,7 @@ const getMessageVolume = async (tenantId, { from, to } = {}) => {
   const messages = await prisma.message.findMany({
     where: { tenantId, sentAt: range },
     select: { sentAt: true, direction: true, sender: true, status: true },
-    orderBy: { sentAt: 'asc' },
+    orderBy: [{ sentAt: 'asc' }, { id: 'asc' }],
   });
 
   const byDate = {};

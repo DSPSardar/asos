@@ -61,7 +61,7 @@ const runInsightsBackfill = () => runWithSystemScope(async () => {
       type: 'TEXT',
       content: { not: null },
     },
-    orderBy: { sentAt: 'desc' },
+    orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
     take: MAX_MESSAGES,
     select: { id: true, content: true },
   });

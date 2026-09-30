@@ -167,6 +167,7 @@ const buildDailyDigestHtml = ({ digest }) => {
             <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">ASOS</div>
             <div style="font-size:13px;color:#64748b;margin-bottom:24px">${escapeHtml(digest.brand)} — ${escapeHtml(digest.dayLabel)}</div>
             <h1 style="font-size:24px;line-height:1.3;color:#fff;margin:0 0 20px">${digest.empty ? 'Nothing needs you today' : 'Your daily digest'}</h1>
+            ${digest.usageLine ? `<div style="background:#3b1d0a;border:1px solid #9a3412;border-radius:12px;padding:14px 16px;margin:0 0 20px;font-size:15px;line-height:1.6;color:#fed7aa">${escapeHtml(digest.usageLine)}</div>` : ''}
             ${body}
             <a href="${escapeHtml(digest.dashboardUrl)}" style="display:inline-block;margin-top:28px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:10px">
               Open the dashboard

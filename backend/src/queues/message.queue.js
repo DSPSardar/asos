@@ -206,6 +206,28 @@ const registerBacklogSweep = async () => {
   });
 };
 
+// AI usage cycle (services/usageCycle.service.js) — every 5 minutes: roll
+// expired usage periods, reset counters, release conversations the token cap
+// paused once the tenant has headroom again. Short interval on purpose: a
+// raised limit should put the AI back within minutes, not hours.
+const USAGE_TICK_PATTERN = '*/5 * * * *';
+
+const registerUsageTick = async () => {
+  const existing = await schedulerQueue.getRepeatableJobs();
+  await Promise.all(
+    existing
+      .filter((j) => j.name === 'usage-tick' && j.pattern !== USAGE_TICK_PATTERN)
+      .map((j) => schedulerQueue.removeRepeatableByKey(j.key))
+  );
+
+  return schedulerQueue.add('usage-tick', {}, {
+    repeat: { pattern: USAGE_TICK_PATTERN },
+    jobId: 'usage-tick',
+    removeOnComplete: 20,
+    removeOnFail: 50,
+  });
+};
+
 module.exports = {
   messageQueue,
   metaEventsQueue,
@@ -217,6 +239,7 @@ module.exports = {
   registerWeeklyDigest,
   registerModelHealthCheck,
   registerBacklogSweep,
+  registerUsageTick,
   registerDailyDigest,
   registerAutomationTick,
   registerSheetsSyncTick,

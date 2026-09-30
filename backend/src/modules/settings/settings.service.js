@@ -52,6 +52,11 @@ const updateSettings = async (tenantId, data) => {
     });
     const incoming = { ...data.settings };
 
+    // billingExempt lifts the AI-token cap. It is an operator decision
+    // (migration / SQL), never something a tenant admin can grant or revoke
+    // on their own account — drop it and keep whatever is stored.
+    delete incoming.billingExempt;
+
     // defaultCurrency reaches the Meta Conversions API, where a wrong code
     // silently misprices conversions rather than erroring. Reject it here
     // instead of letting it through as free-form text.

@@ -42,6 +42,7 @@ const { tenantCurrency } = require('../utils/currency');
 const whatsappService = require('./whatsapp.service');
 const emailService = require('./email.service');
 const needsYou = require('./needsYou.select');
+const usageCycle = require('./usageCycle.service');
 
 // ── Tunables ─────────────────────────────────────────────────────────
 const TZ = 'Asia/Karachi';
@@ -288,6 +289,19 @@ const buildSections = (s) => {
   return sections;
 };
 
+// AI usage line — shown from 80% of the plan's monthly tokens, on empty days
+// too: an owner who is about to lose the AI must hear it either way.
+const USAGE_LINE_FROM_PCT = 80;
+const usageLine = (u) => {
+  if (!u || u.pct < USAGE_LINE_FROM_PCT) return null;
+  const resets = u.resetsAt
+    ? new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: 'numeric', month: 'short' }).format(new Date(u.resetsAt))
+    : null;
+  return u.capped
+    ? `⛔ AI usage: 100% of this month's plan — the AI is paused and new conversations go to your inbox${resets ? ` until ${resets}` : ''}. Raise the limit to resume.`
+    : `⚠️ AI usage: ${u.pct}% of this month's plan${resets ? ` (resets ${resets})` : ''}. At 100% the AI pauses.`;
+};
+
 const buildDigest = (s, tenant) => {
   const brand = tenant?.name || 'ASOS';
   const dayLabel = pktDayLabel(s.now);
@@ -296,7 +310,9 @@ const buildDigest = (s, tenant) => {
     brand,
     dayLabel,
     empty,
-    subject: empty ? `Nothing needs you today — ${brand}` : `Today's call list — ${brand}`,
+    subject: s.usage?.capped
+      ? `AI paused — usage limit reached — ${brand}`
+      : empty ? `Nothing needs you today — ${brand}` : `Today's call list — ${brand}`,
     sections: empty ? [] : buildSections(s),
     actions: empty ? [] : rankActions(s),
     counts: {
@@ -310,6 +326,7 @@ const buildDigest = (s, tenant) => {
       currency: s.wins.currency,
       needsEmail: s.needsEmail.length,
     },
+    usageLine: usageLine(s.usage),
     dashboardUrl: env.APP_URL,
   };
 };
@@ -317,6 +334,7 @@ const buildDigest = (s, tenant) => {
 // Plain-text rendering — used for the email text part and the dry-run.
 const renderText = (d) => {
   const out = [`☀️ Daily digest — ${d.brand}`, d.dayLabel, ''];
+  if (d.usageLine) out.push(d.usageLine, '');
   if (d.empty) {
     out.push('Nothing needs you today — no new leads, no open hot leads, nobody waiting on a reply, nothing stalled.');
     out.push('', `Dashboard: ${d.dashboardUrl}`);
@@ -351,7 +369,7 @@ const waParams = (d) => {
 
 const renderWhatsAppText = (d) => {
   const p = waParams(d);
-  return `☀️ *Daily digest — ${p[0]}*\n${d.dayLabel}\n\n🆕 ${p[1]} new leads\n📞 ${p[2]} to call today\n💬 ${p[3]} awaiting your reply\n⏳ ${p[4]} stalled\n🏆 Yesterday: ${p[5]}\n\n*Top action:* ${p[6]}\n\nFull list is in your inbox.`;
+  return `☀️ *Daily digest — ${p[0]}*\n${d.dayLabel}\n\n${d.usageLine ? `${d.usageLine}\n\n` : ''}🆕 ${p[1]} new leads\n📞 ${p[2]} to call today\n💬 ${p[3]} awaiting your reply\n⏳ ${p[4]} stalled\n🏆 Yesterday: ${p[5]}\n\n*Top action:* ${p[6]}\n\nFull list is in your inbox.`;
 };
 
 // ── Data collection (per tenant, inside its RLS context) ─────────────
@@ -362,7 +380,7 @@ const leadInclude = {
     orderBy: { lastMessageAt: 'desc' }, take: 1,
     select: {
       id: true, status: true, aiEnabled: true, lastMessageAt: true,
-      messages: { where: { direction: 'INBOUND' }, orderBy: { sentAt: 'desc' }, take: 1, select: { content: true, sentAt: true } },
+      messages: { where: { direction: 'INBOUND' }, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { content: true, sentAt: true } },
     },
   },
 };
@@ -406,7 +424,7 @@ const collectSections = async (tenantId, tenant, now = new Date()) => {
       select: {
         id: true, status: true, aiEnabled: true, lastMessageAt: true,
         lead: { select: { id: true, stage: true, aiScore: true, scoreLabel: true, problemSummary: true, contact: { select: { name: true, phone: true } } } },
-        messages: { orderBy: { sentAt: 'desc' }, take: 1, select: { direction: true, sentAt: true, content: true } },
+        messages: { orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { direction: true, sentAt: true, content: true } },
       },
     }),
     // 4. Stall candidates: every open lead in a stage that can stall.
@@ -462,6 +480,10 @@ const collectSections = async (tenantId, tenant, now = new Date()) => {
     stalled: findStalled(openLeads, historyRows, now),
     wins: summarizeWins(wonYesterday, currency),
     needsEmail: dedupeByContact(needsEmail),
+    // Exempt tenants are never capped, so their usage is not news.
+    usage: usageCycle.isBillingExempt(tenant)
+      ? null
+      : usageCycle.usageSummary(await prisma.subscription.findUnique({ where: { tenantId } })),
   };
 };
 

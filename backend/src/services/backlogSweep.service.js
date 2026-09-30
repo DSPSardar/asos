@@ -38,8 +38,10 @@ const neverSilent = require('./agent-guards/never-silent');
 const { isEnrolledStudent } = require('./agent-guards/enrolled-support');
 const { isPaymentPending } = require('./agent-guards/form-submitted');
 const { guardAiStageTransition, isMasteryGuardedTenant } = require('./agent-guards/won-guard');
-const { sanitizeHistoryForAI } = require('../utils/aiHistory');
+const { loadConversationContext } = require('../utils/conversationContext');
 const { requestContext, runWithSystemScope } = require('../middleware/requestContext.middleware');
+const { TOKEN_LIMIT_HANDOFF_REASON } = require('../config/constants');
+const usageCycle = require('./usageCycle.service');
 
 const EV = 'backlog-sweep';
 const SILENT_MINUTES = 30;
@@ -78,6 +80,10 @@ const classifyThread = ({ conversation, lead, last, now = new Date(), silentMinu
   const waitedMs = now.getTime() - new Date(last.sentAt).getTime();
   const hard = escalation.detectHardEscalation(last.content || '');
   if (hard.escalate) return { action: 'skip', reason: `flagged:${hard.kind}`, flagged: hard.kind };
+  // The AI-token cap paused this thread. The usage tick hands it back (and
+  // answers it) the moment the tenant has headroom — answering it here would
+  // spend past the cap.
+  if (conversation.handoffReason === TOKEN_LIMIT_HANDOFF_REASON) return { action: 'skip', reason: 'token_limit_hold' };
 
   const humanHeld = conversation.aiEnabled === false || ['HUMAN_TAKEOVER', 'PENDING_VERIFICATION'].includes(conversation.status);
   if (humanHeld && waitedMs < humanGraceHours * 3_600_000) return { action: 'skip', reason: 'human_grace' };
@@ -161,13 +167,12 @@ const replyToThread = async (tenant, { conversation, lead, last, verdict }, { dr
     return { ...result, sent: r.sent, reason: r.reason };
   }
 
-  // Sales / payment-pending without proof → a real AI turn on their last message.
-  const history = (await prisma.message.findMany({
-    where: { conversationId: conversation.id, tenantId },
-    orderBy: { sentAt: 'asc' },
-    select: { id: true, sender: true, content: true, sentAt: true, type: true, direction: true, sentiment: true },
-  })).filter((m) => !(m.type === 'AUDIO' && m.direction === 'OUTBOUND'));
-  const previousInbound = [...history].reverse().find((m) => m.sender === 'CONTACT' && m.id !== last.id);
+  // Sales / payment-pending without proof → a real AI turn on their last
+  // message, on the same bounded context the worker uses.
+  const { messageHistory, contactMessageCount, earlierSummary } = await loadConversationContext({
+    tenantId, conversationId: conversation.id, lead, excludeMessageId: last.id, paymentDetails: tenant.aiConfig?.paymentDetails,
+  });
+  const previousInbound = [...messageHistory].reverse().find((m) => m.sender === 'CONTACT');
   const contact = lead.contact;
 
   let ai;
@@ -175,7 +180,9 @@ const replyToThread = async (tenant, { conversation, lead, last, verdict }, { dr
     ai = await claudeService.processMessage({
       tenantId, lead, contact, conversation,
       newMessage: last.content || '[non-text message]',
-      messageHistory: sanitizeHistoryForAI(history.filter((m) => m.id !== last.id), tenant.aiConfig?.paymentDetails),
+      messageHistory,
+      earlierSummary,
+      contactMessageCount,
       handedBackToAI: true,
       welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact?.sentWelcomeVoice),
       lastInboundSentiment: previousInbound?.sentiment || null,
@@ -259,6 +266,13 @@ const releaseStaleEnrollmentHandoffs = async (tenantId, now, humanGraceHours = H
   return released;
 };
 
+// Would replyToThread spend AI tokens on this thread? Mirrors its branches:
+// outside the 24h window → template; enrolled → fixed reply; payment proof
+// already in → fixed form-link reply; everything else → an AI turn.
+const needsAiTurn = (verdict, conversation) => verdict.insideWindow
+  && verdict.category !== 'enrolled'
+  && !(verdict.category === 'payment_pending' && conversation.paymentProofDetected);
+
 // ── Tenant sweep ──────────────────────────────────────────────────────
 const loadCandidates = async (tenantId, now) => {
   const since = new Date(now.getTime() - LOOKBACK_DAYS * 86_400_000);
@@ -272,12 +286,13 @@ const loadCandidates = async (tenantId, now) => {
     orderBy: { lastMessageAt: 'desc' },
     take: CANDIDATE_CAP,
     select: {
-      id: true, tenantId: true, leadId: true, contactId: true, status: true, aiEnabled: true, lastMessageAt: true,
+      id: true, tenantId: true, leadId: true, contactId: true, status: true, aiEnabled: true, lastMessageAt: true, handoffReason: true,
       paymentDetailsSentAt: true, paymentProofDetected: true,
       lead: { select: { id: true, tenantId: true, stage: true, product: true, scoreLabel: true, aiScore: true, intent: true, problemSummary: true,
         nextAction: true, businessUnit: true, language: true, alreadyEnrolledAt: true, formSubmittedAt: true, qualificationData: true,
+        historySummary: true, historySummaryCount: true, historySummaryConversationId: true,
         contact: { select: { id: true, name: true, phone: true, optedOutAt: true, sentWelcomeVoice: true } } } },
-      messages: { orderBy: { sentAt: 'desc' }, take: 1, select: { id: true, direction: true, content: true, sentAt: true } },
+      messages: { orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { id: true, direction: true, content: true, sentAt: true } },
     },
   });
 };
@@ -301,6 +316,14 @@ const sweepTenant = async (tenantId, { dryRun = false, now = new Date(), limit =
     // such thread once the human grace period has passed with no agent
     // reply — no message is sent here; the next inbound simply gets answered.
     summary.released = dryRun ? 0 : await releaseStaleEnrollmentHandoffs(tenantId, now, humanGraceHours);
+
+    // A capped tenant gets no AI turns from the sweep: the cap is a spend
+    // limit, and the sweep calls the AI directly (not through the worker's
+    // check). Fixed replies and reopen templates cost no tokens and still go.
+    // Re-checked after every AI turn below: one run can take up to
+    // MAX_REPLIES_PER_RUN turns, far more than a nearly-capped plan has left.
+    const isCapped = async () => !usageCycle.hasHeadroom(tenant, await prisma.subscription.findUnique({ where: { tenantId } }));
+    let capped = await isCapped();
 
     const candidates = await loadCandidates(tenantId, now);
     summary.candidates = candidates.length;
@@ -329,6 +352,12 @@ const sweepTenant = async (tenantId, { dryRun = false, now = new Date(), limit =
 
       if (summary.replied.total >= limit) { bump(summary.skipped, 'run_limit'); continue; }
 
+      if (capped && needsAiTurn(verdict, conversation)) {
+        bump(summary.skipped, 'token_limit');
+        summary.skippedThreads.push({ ...label, reason: 'token_limit', category: verdict.category });
+        continue;
+      }
+
       let out;
       try {
         out = await replyToThread(tenant, { conversation, lead, last, verdict }, { dryRun });
@@ -341,6 +370,7 @@ const sweepTenant = async (tenantId, { dryRun = false, now = new Date(), limit =
         summary.skippedThreads.push({ ...label, reason: out.skipped, category: verdict.category });
         continue;
       }
+      if (!capped && !dryRun && needsAiTurn(verdict, conversation)) capped = await isCapped();
       if (out.template) bump(summary.templates, out.template);
       summary.replied.total += 1;
       bump(summary.replied, verdict.category);

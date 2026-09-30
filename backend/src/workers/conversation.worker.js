@@ -27,14 +27,15 @@ const escalation = require('../services/agent-guards/escalation');
 const paymentGate = require('../services/paymentGate.service');
 const { detectLanguage } = require('../utils/language');
 const billingService = require('../modules/billing/billing.service');
+const usageCycle = require('../services/usageCycle.service');
+const { loadConversationContext, refreshSummaryIfDue } = require('../utils/conversationContext');
 const { toDbMessageType } = require('../utils/messageType');
-const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
-const { registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick, registerModelHealthCheck, registerBacklogSweep } = require('../queues/message.queue');
+const { registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick, registerModelHealthCheck, registerBacklogSweep, registerUsageTick } = require('../queues/message.queue');
 const { QUEUE_NAMES } = require('../queues/message.queue');
 const env = require('../config/env');
-const { ENROLMENT_FEE_PKR } = require('../config/constants');
+const { ENROLMENT_FEE_PKR, TOKEN_LIMIT_HANDOFF_REASON } = require('../config/constants');
 
 // See server.js for the matching handlers and why they exist. concurrency:10
 // below means several unrelated jobs may be in flight when one throws
@@ -138,7 +139,7 @@ const processInboundMessage = async (job) => {
 
 const handleInboundMessage = async (job) => {
   let { tenantId, phone, contactName, content, waMessageId, messageType,
-        referral, mediaId, timestamp, replay } = job.data;
+        referral, mediaId, timestamp, replay, answeredAfter } = job.data;
 
   logger.info({ jobId: job.id, tenantId, phone, waMessageId }, '▶ Processing inbound message');
 
@@ -380,14 +381,9 @@ const handleInboundMessage = async (job) => {
     // already answered — if something went out after it, replying again means
     // the lead reads the same message twice. If nothing did, the earlier run
     // died before it could reply and finishing the job is the right call.
-    const outboundSince = await prisma.message.count({
-      where: {
-        conversationId: existingInbound.conversationId,
-        tenantId,
-        direction: 'OUTBOUND',
-        sentAt: { gte: existingInbound.sentAt },
-      },
-    });
+    // answeredAfter: set only by the token-limit release, so the cap's own
+    // farewell message isn't mistaken for an answer (outbound.repliesSince).
+    const outboundSince = await outbound.repliesSince({ tenantId, inbound: existingInbound, answeredAfter });
 
     if (outboundSince > 0) {
       logger.info({ waMessageId, conversationId: conversation.id, replay: !!replay },
@@ -792,14 +788,14 @@ const handleInboundMessage = async (job) => {
   // rather than the conversation going silent; handleHandoff disables AI, so
   // this fires once per conversation, not per message.
   try {
-    await billingService.checkPlanLimits(tenantId, 'ai_tokens');
+    await billingService.checkPlanLimits(tenantId, 'ai_tokens', { tenant });
   } catch (limitErr) {
     if (limitErr.statusCode === 402) {
       logger.warn({ tenantId, leadId: lead.id }, '💸 AI token limit reached — handing conversation to human');
       // Never silent: the lead still gets the configured farewell.
       await deliverWithNeverSilent({ tenant, conversation, tenantId, lead: { ...lead, contact }, phone: normalizedPhone, inboundMessage,
         content: tenant.aiConfig?.handoffMessage || DEFAULT_FAREWELL, tokensUsed: 0, rawResponse: null, retry: null });
-      await handleHandoff(tenant, conversation, lead, 'AI token limit reached — plan upgrade required');
+      await handleHandoff(tenant, conversation, lead, TOKEN_LIMIT_HANDOFF_REASON);
       notificationService.notifyAdmin(tenant, 'needsHuman', {
         contactName: contact.name,
         phone: normalizedPhone,
@@ -811,21 +807,25 @@ const handleInboundMessage = async (job) => {
   }
 
   // ── 8. Load message history for context ──────────────────────────
-  // Outbound AI AUDIO rows are excluded: each is just the voice-note twin of
-  // the text reply right before it (older rows even carry the identical
-  // text), so including them doubled every AI reply in the LLM's view of the
-  // conversation — and inflated the old raw messageCount the Closer's phase
-  // logic ran on. Inbound audio stays: it's the lead's actual (transcribed)
-  // message.
-  const messageHistory = (await prisma.message.findMany({
-    where: { conversationId: conversation.id, tenantId },
-    orderBy: { sentAt: 'asc' },
-    select: { id: true, sender: true, content: true, sentAt: true, type: true, direction: true, sentiment: true },
-  })).filter((m) => !(m.type === 'AUDIO' && m.direction === 'OUTBOUND'));
+  // A bounded window plus the lead's rolling summary of everything older —
+  // not the whole thread (utils/conversationContext.js). Outbound AI AUDIO
+  // rows are excluded there: each is just the voice-note twin of the text
+  // reply right before it. The message being answered is excluded by id,
+  // not position: sentAt mixes WhatsApp's own inbound timestamp with our
+  // server wall-clock outbound timestamp, so a fast follow-up can sort
+  // earlier than the AI's own just-saved reply. Payment details are redacted
+  // (bank account numbers never reach the LLM — see utils/aiHistory.js).
+  const { messageHistory, contactMessageCount, earlierSummary } = await loadConversationContext({
+    tenantId,
+    conversationId: conversation.id,
+    lead,
+    excludeMessageId: inboundMessage.id,
+    paymentDetails: tenant.aiConfig?.paymentDetails,
+  });
 
   // Sentiment of the lead's PREVIOUS message (the current one is classified by
   // the Qualifier this turn) — feeds the two-consecutive-negatives escalation.
-  const previousInbound = [...messageHistory].reverse().find((m) => m.sender === 'CONTACT' && m.id !== inboundMessage.id);
+  const previousInbound = [...messageHistory].reverse().find((m) => m.sender === 'CONTACT');
   const lastInboundSentiment = previousInbound?.sentiment || null;
 
   // ── 9. Call Claude AI Engine ──────────────────────────────────────
@@ -837,19 +837,9 @@ const handleInboundMessage = async (job) => {
       contact,
       conversation,
       newMessage: content || '[non-text message]',
-      // Exclude by id, not position: sentAt mixes WhatsApp's own inbound
-      // timestamp with our server wall-clock outbound timestamp, so a fast
-      // follow-up can sort earlier than the AI's own just-saved reply —
-      // slicing off "the last item" would then strip that reply instead
-      // of the current message, and the AI would never see it already
-      // answered.
-      // sanitizeHistoryForAI: the payment-details block lives in the Message
-      // table for the dashboard, but bank account numbers must never reach
-      // the LLM provider — see utils/aiHistory.js.
-      messageHistory: sanitizeHistoryForAI(
-        messageHistory.filter((m) => m.id !== inboundMessage.id),
-        tenant.aiConfig?.paymentDetails
-      ),
+      messageHistory,
+      earlierSummary,
+      contactMessageCount,
       handedBackToAI,
       welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact.sentWelcomeVoice),
       lastInboundSentiment,
@@ -863,6 +853,14 @@ const handleInboundMessage = async (job) => {
     await handleHandoff(tenant, conversation, lead, 'AI service error — automatic handoff');
     return;
   }
+
+  // ── 9-usage. Warn the owner at 80% / 95% of the monthly AI tokens ──
+  // processMessage has already metered this turn. Fire-and-forget: the alert
+  // is once-per-period (Redis NX) and must never delay or break the reply.
+  usageCycle.maybeAlertUsage(tenant);
+  // Fold messages that left the window into the lead's rolling summary, off
+  // the reply's critical path (never throws; guarded against double runs).
+  refreshSummaryIfDue({ tenantId, conversationId: conversation.id, lead, paymentDetails: tenant.aiConfig?.paymentDetails });
 
   // ── 9a. Won guard (belt and braces — claude.service applies it too) ──
   // For the Mastery tenant the AI may never write CLOSED_WON; only the
@@ -1165,10 +1163,10 @@ const handleInboundMessage = async (job) => {
       const shorter = await claudeService.processMessage({
         tenantId, lead, contact, conversation,
         newMessage: content || '[non-text message]',
-        messageHistory: sanitizeHistoryForAI(
-          messageHistory.filter((m) => m.id !== inboundMessage.id).slice(-6),
-          tenant.aiConfig?.paymentDetails
-        ),
+        // Already sanitized and excluding the inbound; the retry drops the
+        // summary on purpose — shortest context that can still answer.
+        messageHistory: messageHistory.slice(-6),
+        contactMessageCount,
         handedBackToAI,
         welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact.sentWelcomeVoice),
         lastInboundSentiment,
@@ -1436,6 +1434,7 @@ const schedulerWorker = new Worker(
       if (job.name === 'sheets-sync') return sheetsSyncService.syncTenant(job.data?.tenantId);
       if (job.name === 'model-health-check') return require('../services/modelHealth.service').checkAllModels();
       if (job.name === 'backlog-sweep') return require('../services/backlogSweep.service').runTick();
+      if (job.name === 'usage-tick') return usageCycle.runUsageTick();
       // 'follow-up' intentionally unhandled for now: returning cleanly drains
       // the backlog these accumulated instead of failing them in a loop.
       logger.warn({ jobName: job.name, jobId: job.id }, 'Scheduler job has no handler — draining');
@@ -1474,5 +1473,9 @@ registerModelHealthCheck()
 registerBacklogSweep()
   .then(() => logger.info('🧹 Backlog sweep scheduled — every 15 min'))
   .catch((err) => logger.warn({ err }, 'Could not register backlog sweep'));
+
+registerUsageTick()
+  .then(() => logger.info('🔄 AI usage tick scheduled — every 5 min'))
+  .catch((err) => logger.warn({ err }, 'Could not register usage tick'));
 
 module.exports = worker;

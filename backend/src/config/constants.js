@@ -12,4 +12,10 @@
 // prompts — keep the two in sync when the price changes.
 const ENROLMENT_FEE_PKR = 28000;
 
-module.exports = { ENROLMENT_FEE_PKR };
+// handoffReason written when the plan's AI-token cap pauses a conversation.
+// The usage tick (services/usageCycle.service.js) matches on it EXACTLY to
+// hand those threads back to the AI once there is headroom, and the backlog
+// sweep matches on it to leave them alone — change it in one place only.
+const TOKEN_LIMIT_HANDOFF_REASON = 'AI token limit reached — plan upgrade required';
+
+module.exports = { ENROLMENT_FEE_PKR, TOKEN_LIMIT_HANDOFF_REASON };
