@@ -28,8 +28,8 @@ const paymentGate = require('../services/paymentGate.service');
 const { detectLanguage } = require('../utils/language');
 const billingService = require('../modules/billing/billing.service');
 const usageCycle = require('../services/usageCycle.service');
+const { loadConversationContext, refreshSummaryIfDue } = require('../utils/conversationContext');
 const { toDbMessageType } = require('../utils/messageType');
-const { sanitizeHistoryForAI } = require('../utils/aiHistory');
 const logger = require('../utils/logger');
 const { requestContext } = require('../middleware/requestContext.middleware');
 const { registerWeeklyDigest, registerDailyDigest, registerAutomationTick, registerSheetsSyncTick, registerModelHealthCheck, registerBacklogSweep, registerUsageTick } = require('../queues/message.queue');
@@ -807,21 +807,25 @@ const handleInboundMessage = async (job) => {
   }
 
   // ── 8. Load message history for context ──────────────────────────
-  // Outbound AI AUDIO rows are excluded: each is just the voice-note twin of
-  // the text reply right before it (older rows even carry the identical
-  // text), so including them doubled every AI reply in the LLM's view of the
-  // conversation — and inflated the old raw messageCount the Closer's phase
-  // logic ran on. Inbound audio stays: it's the lead's actual (transcribed)
-  // message.
-  const messageHistory = (await prisma.message.findMany({
-    where: { conversationId: conversation.id, tenantId },
-    orderBy: { sentAt: 'asc' },
-    select: { id: true, sender: true, content: true, sentAt: true, type: true, direction: true, sentiment: true },
-  })).filter((m) => !(m.type === 'AUDIO' && m.direction === 'OUTBOUND'));
+  // A bounded window plus the lead's rolling summary of everything older —
+  // not the whole thread (utils/conversationContext.js). Outbound AI AUDIO
+  // rows are excluded there: each is just the voice-note twin of the text
+  // reply right before it. The message being answered is excluded by id,
+  // not position: sentAt mixes WhatsApp's own inbound timestamp with our
+  // server wall-clock outbound timestamp, so a fast follow-up can sort
+  // earlier than the AI's own just-saved reply. Payment details are redacted
+  // (bank account numbers never reach the LLM — see utils/aiHistory.js).
+  const { messageHistory, contactMessageCount, earlierSummary } = await loadConversationContext({
+    tenantId,
+    conversationId: conversation.id,
+    lead,
+    excludeMessageId: inboundMessage.id,
+    paymentDetails: tenant.aiConfig?.paymentDetails,
+  });
 
   // Sentiment of the lead's PREVIOUS message (the current one is classified by
   // the Qualifier this turn) — feeds the two-consecutive-negatives escalation.
-  const previousInbound = [...messageHistory].reverse().find((m) => m.sender === 'CONTACT' && m.id !== inboundMessage.id);
+  const previousInbound = [...messageHistory].reverse().find((m) => m.sender === 'CONTACT');
   const lastInboundSentiment = previousInbound?.sentiment || null;
 
   // ── 9. Call Claude AI Engine ──────────────────────────────────────
@@ -833,19 +837,9 @@ const handleInboundMessage = async (job) => {
       contact,
       conversation,
       newMessage: content || '[non-text message]',
-      // Exclude by id, not position: sentAt mixes WhatsApp's own inbound
-      // timestamp with our server wall-clock outbound timestamp, so a fast
-      // follow-up can sort earlier than the AI's own just-saved reply —
-      // slicing off "the last item" would then strip that reply instead
-      // of the current message, and the AI would never see it already
-      // answered.
-      // sanitizeHistoryForAI: the payment-details block lives in the Message
-      // table for the dashboard, but bank account numbers must never reach
-      // the LLM provider — see utils/aiHistory.js.
-      messageHistory: sanitizeHistoryForAI(
-        messageHistory.filter((m) => m.id !== inboundMessage.id),
-        tenant.aiConfig?.paymentDetails
-      ),
+      messageHistory,
+      earlierSummary,
+      contactMessageCount,
       handedBackToAI,
       welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact.sentWelcomeVoice),
       lastInboundSentiment,
@@ -864,6 +858,9 @@ const handleInboundMessage = async (job) => {
   // processMessage has already metered this turn. Fire-and-forget: the alert
   // is once-per-period (Redis NX) and must never delay or break the reply.
   usageCycle.maybeAlertUsage(tenant);
+  // Fold messages that left the window into the lead's rolling summary, off
+  // the reply's critical path (never throws; guarded against double runs).
+  refreshSummaryIfDue({ tenantId, conversationId: conversation.id, lead, paymentDetails: tenant.aiConfig?.paymentDetails });
 
   // ── 9a. Won guard (belt and braces — claude.service applies it too) ──
   // For the Mastery tenant the AI may never write CLOSED_WON; only the
@@ -1166,10 +1163,10 @@ const handleInboundMessage = async (job) => {
       const shorter = await claudeService.processMessage({
         tenantId, lead, contact, conversation,
         newMessage: content || '[non-text message]',
-        messageHistory: sanitizeHistoryForAI(
-          messageHistory.filter((m) => m.id !== inboundMessage.id).slice(-6),
-          tenant.aiConfig?.paymentDetails
-        ),
+        // Already sanitized and excluding the inbound; the retry drops the
+        // summary on purpose — shortest context that can still answer.
+        messageHistory: messageHistory.slice(-6),
+        contactMessageCount,
         handedBackToAI,
         welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact.sentWelcomeVoice),
         lastInboundSentiment,

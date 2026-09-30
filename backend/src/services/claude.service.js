@@ -36,7 +36,11 @@ const QUALIFIER_MODEL = modelId('qualifier');
 const CLOSER_MODEL    = modelId('closer');
 const SUPPORT_MODEL   = modelId('support');
 
-const createResponse = async ({ model, maxOutputTokens, instructions, input, jsonMode = false }) => {
+// cacheKey → prompt_cache_key: OpenAI caches the longest exact prompt prefix
+// automatically (≥1024 tokens); a stable key per tenant+agent routes a
+// tenant's calls to the same cache so that prefix (the static prompt +
+// PRODUCT CONTEXT) is actually reused turn after turn.
+const createResponse = async ({ model, maxOutputTokens, instructions, input, jsonMode = false, cacheKey = null }) => {
   const messages = [
     { role: 'system', content: instructions },
     ...(input || []),
@@ -46,6 +50,7 @@ const createResponse = async ({ model, maxOutputTokens, instructions, input, jso
     model,
     messages,
     max_completion_tokens: maxOutputTokens,
+    ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     // Qualifier/Closer prompts demand strict JSON, but the model isn't
     // always compliant on its own — it occasionally answers in plain
     // prose instead, which fails JSON.parse() downstream and falls back
@@ -56,6 +61,47 @@ const createResponse = async ({ model, maxOutputTokens, instructions, input, jso
     // opt-in per call site, not global.
     ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
   });
+};
+
+const cacheKeyFor = (tenantId, agent) => (tenantId ? `asos:${tenantId}:${agent}` : null);
+
+// ── Token metering ────────────────────────────────────────────────────
+// What a turn costs against the tenant's plan: uncached input + cached
+// input at 10% (rounded up) + output — tracking how the provider actually
+// bills, so prompt caching buys cap headroom and not just a smaller invoice.
+// AiAgentLog keeps the raw totals; only the subscription counter is metered.
+const CACHED_INPUT_WEIGHT = 0.1;
+
+const cachedTokensOf = (u) => u?.prompt_tokens_details?.cached_tokens || 0;
+
+const meteredTokens = (u) => {
+  if (!u) return 0;
+  const cached = Math.min(cachedTokensOf(u), u.prompt_tokens || 0);
+  return (u.prompt_tokens || 0) - cached + Math.ceil(cached * CACHED_INPUT_WEIGHT) + (u.completion_tokens || 0);
+};
+
+const meterUsage = (tenantId, metered) => prisma.subscription.upsert({
+  where:  { tenantId },
+  update: { aiTokensUsed: { increment: metered } },
+  create: { tenantId, aiTokensUsed: BigInt(metered) },
+}).catch(err => logger.warn({ err, tenantId }, 'Token usage update failed (non-blocking)'));
+
+// Chat-format history for an agent. With a rolling summary, the agent sees
+// the summary as the first input message — AFTER the system prompt, so the
+// cached prefix stays byte-identical — plus the whole loaded window, which
+// starts exactly where the summary ends (utils/conversationContext.js).
+// Without one, the historical per-agent slice applies.
+const toChatHistory = (messageHistory, sliceLimit, earlierSummary, newMessage) => {
+  const rows = earlierSummary ? (messageHistory || []) : (messageHistory || []).slice(-sliceLimit);
+  const history = rows.map(m => ({
+    role: m.sender === 'CONTACT' ? 'user' : 'assistant',
+    content: m.content || '[media]',
+  }));
+  if (earlierSummary) {
+    history.unshift({ role: 'user', content: `Earlier in this conversation (summary, for context only):\n${earlierSummary}` });
+  }
+  history.push({ role: 'user', content: newMessage });
+  return history;
 };
 
 // =====================================================================
@@ -209,18 +255,15 @@ ${aiConfig.systemPrompt}
 - Previous score: ${lead.aiScore}/100
 ${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? '\nNOTE: This is the lead\'s first real exchange with you, right after their welcome voice note — they have not had an actual qualifying conversation yet. Set is_enrollment_confirmed = false on this turn no matter how ready or eager they sound (e.g. "reserve my seat", "I want to pay"). Let the Closer have a real exchange first.\n' : ''}`;
 
-const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessage, welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false }) => {
+const runQualifier = async ({ tenantId, aiConfig, lead, contact, messageHistory, earlierSummary = null, newMessage, welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false }) => {
   const t0 = Date.now();
   const system = buildQualifierPrompt(aiConfig, lead, contact, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice);
-
-  const history = (messageHistory || []).slice(-15).map(m => ({
-    role: m.sender === 'CONTACT' ? 'user' : 'assistant',
-    content: m.content || '[media]',
-  }));
-  history.push({ role: 'user', content: newMessage });
+  const history = toChatHistory(messageHistory, 15, earlierSummary, newMessage);
 
   let raw = '';
   let tokens = 0;
+  let cached = 0;
+  let metered = 0;
 
   try {
     const resp = await createResponse({
@@ -229,9 +272,12 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
       instructions: system,
       input: history,
       jsonMode: true,
+      cacheKey: cacheKeyFor(tenantId, 'qualifier'),
     });
     raw = resp.choices?.[0]?.message?.content || '';
     tokens = resp.usage?.total_tokens || 0;
+    cached = cachedTokensOf(resp.usage);
+    metered = meteredTokens(resp.usage);
   } catch (err) {
     logger.error({ err, leadId: lead.id }, 'Qualifier API call failed');
     throw Object.assign(new Error('Qualifier AI unavailable'), { agent: 'qualifier', statusCode: 503 });
@@ -262,6 +308,8 @@ const runQualifier = async ({ aiConfig, lead, contact, messageHistory, newMessag
     sentiment:          SENTIMENTS.includes(parsed.sentiment) ? parsed.sentiment : 'NEUTRAL',
     signal_type:        SIGNAL_TYPES.includes(parsed.signal_type) ? parsed.signal_type : 'NONE',
     _tokens:            tokens,
+    _cached:            cached,
+    _metered:           metered,
     _model:             QUALIFIER_MODEL,
     _ms:                Date.now() - t0,
   };
@@ -510,24 +558,25 @@ const SAFE_FALLBACK_REPLY =
   'DSP AI Agent Mastery ka fee fixed hai — koi discount ya kisi aur service ka option available nahi. ' +
   'Kya main aapko seat confirm karne mein madad karun?';
 
-const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false, leadLanguage = null }) => {
+const runCloser = async ({ tenantId, aiConfig, lead, contact, messageHistory, earlierSummary = null, contactMessageCount = null, newMessage, qualifierOutput, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false, leadLanguage = null }) => {
   const t0 = Date.now();
   // The playbook's phase thresholds (lead messages 1–3 / 4–8 / 9+) count the
   // LEAD's messages only. The old raw history length counted both sides, so a
   // lead's 2nd message could arrive as "message 5" and the Closer skipped
   // straight past qualifying into the value pitch. +1 is the inbound message
   // being answered, which the worker excludes from messageHistory.
-  const messageCount = (messageHistory || []).filter((m) => m.sender === 'CONTACT').length + 1;
+  // contactMessageCount (whole thread) comes from the context loader: the
+  // history is now a bounded window, and counting only the window would pull
+  // a long-running lead back into the Phase 1 script.
+  const messageCount = (contactMessageCount ?? (messageHistory || []).filter((m) => m.sender === 'CONTACT').length) + 1;
   const system = buildCloserPrompt(aiConfig, lead, contact, qualifierOutput, messageCount, resolvedQAs, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice, leadLanguage);
 
-  const history = (messageHistory || []).slice(-20).map(m => ({
-    role: m.sender === 'CONTACT' ? 'user' : 'assistant',
-    content: m.content || '[media]',
-  }));
-  history.push({ role: 'user', content: newMessage });
+  const history = toChatHistory(messageHistory, 20, earlierSummary, newMessage);
 
   let raw = '';
   let tokens = 0;
+  let cached = 0;
+  let metered = 0;
 
   try {
     const resp = await createResponse({
@@ -536,9 +585,12 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
       instructions: system,
       input: history,
       jsonMode: true,
+      cacheKey: cacheKeyFor(tenantId, 'closer'),
     });
     raw = resp.choices?.[0]?.message?.content || '';
     tokens = resp.usage?.total_tokens || 0;
+    cached = cachedTokensOf(resp.usage);
+    metered = meteredTokens(resp.usage);
   } catch (err) {
     logger.error({ err, leadId: lead.id }, 'Closer API call failed');
     throw Object.assign(new Error('Closer AI unavailable'), { agent: 'closer', statusCode: 503 });
@@ -570,6 +622,8 @@ const runCloser = async ({ aiConfig, lead, contact, messageHistory, newMessage, 
     // had a real qualifying exchange yet, even if their message sounds ready.
     send_payment_details: !blocked && !isFirstReplyAfterWelcomeVoice && parsed.send_payment_details === true,
     _tokens:         tokens,
+    _cached:         cached,
+    _metered:        metered,
     _model:          CLOSER_MODEL,
     _ms:             Date.now() - t0,
   };
@@ -612,17 +666,15 @@ const deriveStage = (currentStage, qualifierOutput) => {
 // agent-guards/enrolled-support.js; no Qualifier, no stage change, no payment
 // details, no "reserve your seat".
 
-const runSupportReply = async ({ lead, messageHistory, newMessage, leadLanguage = null }) => {
+const runSupportReply = async ({ tenantId, lead, messageHistory, earlierSummary = null, newMessage, leadLanguage = null }) => {
   const t0 = Date.now();
   const system = enrolledSupport.buildSupportPrompt({ languageInstruction: languageInstruction(leadLanguage || lead.language) });
-  const history = (messageHistory || []).slice(-10).map(m => ({
-    role: m.sender === 'CONTACT' ? 'user' : 'assistant',
-    content: m.content || '[media]',
-  }));
-  history.push({ role: 'user', content: newMessage });
+  const history = toChatHistory(messageHistory, 10, earlierSummary, newMessage);
 
   let raw = '';
   let tokens = 0;
+  let cached = 0;
+  let metered = 0;
   let parsed = {};
   try {
     const resp = await createResponse({
@@ -631,9 +683,12 @@ const runSupportReply = async ({ lead, messageHistory, newMessage, leadLanguage 
       instructions: system,
       input: history,
       jsonMode: true,
+      cacheKey: cacheKeyFor(tenantId, 'support'),
     });
     raw = resp.choices?.[0]?.message?.content || '';
     tokens = resp.usage?.total_tokens || 0;
+    cached = cachedTokensOf(resp.usage);
+    metered = meteredTokens(resp.usage);
     parsed = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
   } catch (err) {
     logger.warn({ err: err.message, leadId: lead.id, raw }, 'Support persona call failed — using safe support reply');
@@ -651,6 +706,8 @@ const runSupportReply = async ({ lead, messageHistory, newMessage, leadLanguage 
     reply_message: reply,
     needs_human: parsed.needs_human === true,
     _tokens: tokens,
+    _cached: cached,
+    _metered: metered,
     _model: SUPPORT_MODEL,
     _ms: Date.now() - t0,
   };
@@ -698,7 +755,10 @@ const staticResult = ({ lead, reply, action, handoffReason, mode, tokens = 0, mo
 // Returns the same shape as v1 processMessage() so the worker doesn't break.
 // Adds: qualifierOutput, closerOutput, humanFollowupRequired
 
-const processMessage = async ({ tenantId, lead, contact, conversation, newMessage, messageHistory, handedBackToAI = false, welcomeVoiceAlreadySent = false, lastInboundSentiment = null, leadLanguage = null }) => {
+// earlierSummary / contactMessageCount come from utils/conversationContext.js
+// (the bounded-window loader). Both optional: callers that pass a plain
+// history keep the historical behaviour.
+const processMessage = async ({ tenantId, lead, contact, conversation, newMessage, messageHistory, earlierSummary = null, contactMessageCount = null, handedBackToAI = false, welcomeVoiceAlreadySent = false, lastInboundSentiment = null, leadLanguage = null }) => {
   const aiConfig = await prisma.aiConfig.findUnique({ where: { tenantId } });
   if (!aiConfig) throw new Error(`No AI config found for tenant ${tenantId}`);
 
@@ -723,7 +783,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   // ── 0b. ENROLLED-STUDENT MODE ─────────────────────────────────────
   // A paid Mastery student gets the support persona, never the sales prompt.
   if (enrolledSupport.isEnrolledStudent(lead)) {
-    const support = await runSupportReply({ lead, messageHistory, newMessage, leadLanguage });
+    const support = await runSupportReply({ tenantId, lead, messageHistory, earlierSummary, newMessage, leadLanguage });
     const result = staticResult({
       lead,
       reply: support.reply_message,
@@ -738,15 +798,12 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
         tenantId, leadId: lead.id, conversationId: conversation.id,
         qualifierOutput: { mode: 'enrolled_support' }, qualifierTokens: 0, qualifierModel: null, qualifierMs: 0,
         closerOutput: { reply_message: support.reply_message, closing_type: 'support', urgency_trigger: '' },
-        closerTokens: support._tokens, closerModel: support._model, closerMs: support._ms,
+        closerTokens: support._tokens, closerCachedTokens: support._cached || 0, closerModel: support._model, closerMs: support._ms,
         finalAction: result.action, errorReason: null,
       },
     }).catch(err => logger.warn({ err }, 'AiAgentLog write failed (non-blocking)'));
-    await prisma.subscription.upsert({
-      where:  { tenantId },
-      update: { aiTokensUsed: { increment: support._tokens || 0 } },
-      create: { tenantId, aiTokensUsed: BigInt(support._tokens || 0) },
-    }).catch(err => logger.warn({ err, tenantId }, 'Token usage update failed (non-blocking)'));
+    await meterUsage(tenantId, support._metered || 0);
+    result.meteredTokens = support._metered || 0;
     logger.info({ leadId: lead.id, action: result.action }, '🎓 Enrolled-student support reply');
     return result;
   }
@@ -762,7 +819,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   // ── 1. QUALIFIER ────────────────────────────────────────────
   let qualifierOutput;
   try {
-    qualifierOutput = await runQualifier({ aiConfig, lead, contact, messageHistory, newMessage, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice });
+    qualifierOutput = await runQualifier({ tenantId, aiConfig, lead, contact, messageHistory, earlierSummary, newMessage, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice });
   } catch (err) {
     // Qualifier failed — use safe defaults and let the Closer keep selling.
     // A Qualifier error must NEVER cause a handoff; the lead deserves a reply.
@@ -777,7 +834,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
       is_enrollment_confirmed: false,
       sentiment:               'NEUTRAL',
       signal_type:             'NONE',
-      _tokens: 0, _model: QUALIFIER_MODEL, _ms: 0,
+      _tokens: 0, _cached: 0, _metered: 0, _model: QUALIFIER_MODEL, _ms: 0,
     };
   }
 
@@ -844,7 +901,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   let closerError = null;
   if (!forceHandoff) {
     try {
-      closerOutput = await runCloser({ aiConfig, lead, contact, messageHistory, newMessage, qualifierOutput, resolvedQAs, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice, leadLanguage });
+      closerOutput = await runCloser({ tenantId, aiConfig, lead, contact, messageHistory, earlierSummary, contactMessageCount, newMessage, qualifierOutput, resolvedQAs, welcomeVoiceAlreadySent, isFirstReplyAfterWelcomeVoice, leadLanguage });
     } catch (err) {
       logger.error({ err, leadId: lead.id }, 'Closer failed — using safe fallback reply');
       closerError = err.message;
@@ -862,7 +919,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
         urgency_trigger: '',
         knowledge_gap:   '',
         send_payment_details: false,
-        _tokens: 0, _model: CLOSER_MODEL, _ms: 0,
+        _tokens: 0, _cached: 0, _metered: 0, _model: CLOSER_MODEL, _ms: 0,
       };
       closerError = null; // treat as non-fatal
     }
@@ -919,6 +976,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
         next_action:     qualifierOutput.next_action,
       },
       qualifierTokens: qualifierOutput._tokens,
+      qualifierCachedTokens: qualifierOutput._cached || 0,
       qualifierModel:  qualifierOutput._model,
       qualifierMs:     qualifierOutput._ms,
       closerOutput:    closerOutput ? {
@@ -927,6 +985,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
         urgency_trigger: closerOutput.urgency_trigger,
       } : null,
       closerTokens:    closerOutput?._tokens || 0,
+      closerCachedTokens: closerOutput?._cached || 0,
       closerModel:     closerOutput?._model || null,
       closerMs:        closerOutput?._ms || 0,
       finalAction:     action,
@@ -935,16 +994,14 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
   }).catch(err => logger.warn({ err }, 'AiAgentLog write failed (non-blocking)'));
 
   // ── 8. Update token usage for billing ───────────────────────
+  // Raw total for the audit trail; the plan is charged the METERED amount
+  // (cached input discounted — see meteredTokens). upsert, not update: a
+  // tenant with no Subscription row made this throw on every message, and
+  // the empty catch swallowed it — so AI spend silently stopped being
+  // recorded and the monthly budget cap stopped being enforceable.
   const totalTokens = (qualifierOutput._tokens || 0) + (closerOutput?._tokens || 0);
-  // upsert, not update: a tenant with no Subscription row made this throw on
-  // every message, and the empty catch swallowed it — so AI spend silently
-  // stopped being recorded and the monthly budget cap stopped being
-  // enforceable. Every other column has a default, so tenantId is enough.
-  await prisma.subscription.upsert({
-    where:  { tenantId },
-    update: { aiTokensUsed: { increment: totalTokens } },
-    create: { tenantId, aiTokensUsed: BigInt(totalTokens) },
-  }).catch(err => logger.warn({ err, tenantId }, 'Token usage update failed (non-blocking)'));
+  const totalMetered = (qualifierOutput._metered || 0) + (closerOutput?._metered || 0);
+  await meterUsage(tenantId, totalMetered);
 
   // ── 9. Return v1-compatible shape (+ v1.5 extras) ───────────
   return {
@@ -983,6 +1040,7 @@ const processMessage = async ({ tenantId, lead, contact, conversation, newMessag
 
     // bookkeeping
     tokensUsed:        totalTokens,
+    meteredTokens:     totalMetered,
     qualifierTokens:   qualifierOutput._tokens,
     closerTokens:      closerOutput?._tokens || 0,
     qualifierMs:       qualifierOutput._ms,
@@ -1059,25 +1117,50 @@ const classifyPaymentProofImage = async (buffer, mimeType) => {
 // SUMMARY (unchanged from v1 — used by Conversations page)
 // =====================================================================
 
-const generateSummary = async ({ tenantId: _tenantId, messageHistory }) => {
-  const messages = (messageHistory || []).slice(-30).map(m => ({
+// rolling: the worker's context compaction (utils/conversationContext.js).
+// Folds `messageHistory` (the messages that just left the verbatim window —
+// the caller bounds it) into `priorSummary`, and meters its own tokens
+// against the plan. The default (UI) mode is unchanged: CRM bullets over the
+// last 30 messages, returned to the Conversations page.
+const ROLLING_SUMMARY_INSTRUCTIONS = 'You maintain the running summary of a WhatsApp sales conversation, used as memory by the sales AI. ' +
+  'Update the running summary with the new messages. Keep it under 150 words. Keep every fact the lead stated about themselves ' +
+  '(name, city, background, goal), their questions and objections, what they were already told (fee, dates, links), payment status, ' +
+  'and any promise made to them. Drop greetings and small talk. Write it in English, plain sentences, no bullets.';
+
+const generateSummary = async ({ tenantId, messageHistory, priorSummary = null, rolling = false }) => {
+  const rows = rolling ? (messageHistory || []) : (messageHistory || []).slice(-30);
+  const messages = rows.map(m => ({
     role: m.sender === 'CONTACT' ? 'user' : 'assistant',
     content: m.content || '[media]',
   }));
+  if (rolling) {
+    messages.unshift({ role: 'user', content: priorSummary ? `Running summary so far:\n${priorSummary}` : 'Running summary so far: (none yet)' });
+  }
 
   const response = await createResponse({
     model: modelId('summary'),
     maxOutputTokens: modelParams('summary').maxOutputTokens,
-    instructions: 'You are a CRM assistant. Summarize this sales conversation in 3-5 bullet points. Focus on: lead need, budget signals, objections, and next steps. Respond in the same language as the conversation.',
+    instructions: rolling
+      ? ROLLING_SUMMARY_INSTRUCTIONS
+      : 'You are a CRM assistant. Summarize this sales conversation in 3-5 bullet points. Focus on: lead need, budget signals, objections, and next steps. Respond in the same language as the conversation.',
     input: messages,
+    cacheKey: rolling ? cacheKeyFor(tenantId, 'summary') : null,
   });
 
+  if (rolling) {
+    if (tenantId) await meterUsage(tenantId, meteredTokens(response.usage));
+    return response.choices?.[0]?.message?.content?.trim() || null;
+  }
   return response.choices?.[0]?.message?.content || 'Unable to generate summary.';
 };
 
 module.exports = {
   processMessage,
   generateSummary,
+  meteredTokens,
+  // Read-only measurement hooks for scripts/token-burn-report.js — they build
+  // prompts exactly as a live turn would; nothing here writes anything.
+  _internals: { buildQualifierPrompt, buildCloserPrompt, toChatHistory, createResponse, QUALIFIER_MODEL, CLOSER_MODEL },
   // exposed for direct use / testing
   runQualifier,
   runCloser,

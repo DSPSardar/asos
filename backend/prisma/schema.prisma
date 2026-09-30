@@ -291,6 +291,13 @@ model Lead {
   // ── v1.5 — Dual AI agent fields ──
   intent                  String?    // "high" | "medium" | "low" — from Qualifier AI
   problemSummary          String?    @map("problem_summary")
+  // Rolling summary of the messages that have left the AI's verbatim window
+  // (utils/conversationContext.js). Count = how many of the conversation's
+  // messages, oldest first, it covers; only valid for that conversation.
+  historySummary               String?   @map("history_summary")
+  historySummaryCount          Int       @default(0) @map("history_summary_count")
+  historySummaryConversationId String?   @map("history_summary_conversation_id")
+  historySummaryAt             DateTime? @map("history_summary_at")
   nextAction              String?    @map("next_action")
   humanFollowupRequired   Boolean    @default(false) @map("human_followup_required")
   leadTemperature         String?    @default("WARM") @map("lead_temperature")
@@ -671,12 +678,14 @@ model AiAgentLog {
   // Qualifier AI output
   qualifierOutput Json     @map("qualifier_output")    // { lead_status, score, intent, problem_summary, next_action }
   qualifierTokens Int      @default(0) @map("qualifier_tokens")
+  qualifierCachedTokens Int @default(0) @map("qualifier_cached_tokens") // prompt-cache hits within qualifierTokens
   qualifierModel  String?  @map("qualifier_model")
   qualifierMs     Int      @default(0) @map("qualifier_ms")
 
   // Closer AI output
   closerOutput    Json?    @map("closer_output")       // { reply_message, closing_type, urgency_trigger }
   closerTokens    Int      @default(0) @map("closer_tokens")
+  closerCachedTokens Int   @default(0) @map("closer_cached_tokens")    // prompt-cache hits within closerTokens
   closerModel     String?  @map("closer_model")
   closerMs        Int      @default(0) @map("closer_ms")
 

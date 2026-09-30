@@ -38,7 +38,7 @@ const neverSilent = require('./agent-guards/never-silent');
 const { isEnrolledStudent } = require('./agent-guards/enrolled-support');
 const { isPaymentPending } = require('./agent-guards/form-submitted');
 const { guardAiStageTransition, isMasteryGuardedTenant } = require('./agent-guards/won-guard');
-const { sanitizeHistoryForAI } = require('../utils/aiHistory');
+const { loadConversationContext } = require('../utils/conversationContext');
 const { requestContext, runWithSystemScope } = require('../middleware/requestContext.middleware');
 const { TOKEN_LIMIT_HANDOFF_REASON } = require('../config/constants');
 const usageCycle = require('./usageCycle.service');
@@ -167,13 +167,12 @@ const replyToThread = async (tenant, { conversation, lead, last, verdict }, { dr
     return { ...result, sent: r.sent, reason: r.reason };
   }
 
-  // Sales / payment-pending without proof → a real AI turn on their last message.
-  const history = (await prisma.message.findMany({
-    where: { conversationId: conversation.id, tenantId },
-    orderBy: { sentAt: 'asc' },
-    select: { id: true, sender: true, content: true, sentAt: true, type: true, direction: true, sentiment: true },
-  })).filter((m) => !(m.type === 'AUDIO' && m.direction === 'OUTBOUND'));
-  const previousInbound = [...history].reverse().find((m) => m.sender === 'CONTACT' && m.id !== last.id);
+  // Sales / payment-pending without proof → a real AI turn on their last
+  // message, on the same bounded context the worker uses.
+  const { messageHistory, contactMessageCount, earlierSummary } = await loadConversationContext({
+    tenantId, conversationId: conversation.id, lead, excludeMessageId: last.id, paymentDetails: tenant.aiConfig?.paymentDetails,
+  });
+  const previousInbound = [...messageHistory].reverse().find((m) => m.sender === 'CONTACT');
   const contact = lead.contact;
 
   let ai;
@@ -181,7 +180,9 @@ const replyToThread = async (tenant, { conversation, lead, last, verdict }, { dr
     ai = await claudeService.processMessage({
       tenantId, lead, contact, conversation,
       newMessage: last.content || '[non-text message]',
-      messageHistory: sanitizeHistoryForAI(history.filter((m) => m.id !== last.id), tenant.aiConfig?.paymentDetails),
+      messageHistory,
+      earlierSummary,
+      contactMessageCount,
       handedBackToAI: true,
       welcomeVoiceAlreadySent: !!(tenant.aiConfig?.welcomeVoiceEnabled && contact?.sentWelcomeVoice),
       lastInboundSentiment: previousInbound?.sentiment || null,
@@ -289,6 +290,7 @@ const loadCandidates = async (tenantId, now) => {
       paymentDetailsSentAt: true, paymentProofDetected: true,
       lead: { select: { id: true, tenantId: true, stage: true, product: true, scoreLabel: true, aiScore: true, intent: true, problemSummary: true,
         nextAction: true, businessUnit: true, language: true, alreadyEnrolledAt: true, formSubmittedAt: true, qualificationData: true,
+        historySummary: true, historySummaryCount: true, historySummaryConversationId: true,
         contact: { select: { id: true, name: true, phone: true, optedOutAt: true, sentWelcomeVoice: true } } } },
       messages: { orderBy: { sentAt: 'desc' }, take: 1, select: { id: true, direction: true, content: true, sentAt: true } },
     },
