@@ -24,6 +24,14 @@ const prisma = require('../config/database');
 const logger = require('../utils/logger');
 const { requestContext, runWithSystemScope } = require('../middleware/requestContext.middleware');
 
+// ── Exemption ─────────────────────────────────────────────────────────
+
+// Internal tenants (DSP): tokens are still metered on the subscription, the
+// cap is never enforced. Strict boolean — a stringly "true" is not exempt.
+// Set by an operator only (migration / SQL); settings.service strips it from
+// tenant-admin writes so no one can exempt their own account.
+const isBillingExempt = (tenant) => tenant?.settings?.billingExempt === true;
+
 // ── Period arithmetic (pure) ──────────────────────────────────────────
 
 // base + k months, day clamped to the month's length (Jan 31 + 1 → Feb 28).
@@ -101,6 +109,7 @@ const runUsageTick = ({ now = new Date() } = {}) => runWithSystemScope(async () 
 });
 
 module.exports = {
+  isBillingExempt,
   addMonthsClamped,
   rollPeriod,
   periodContaining,

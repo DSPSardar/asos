@@ -3,6 +3,7 @@
 const prisma  = require('../../config/database');
 const logger  = require('../../utils/logger');
 const env     = require('../../config/env');
+const { isBillingExempt } = require('../../services/usageCycle.service');
 
 let stripe;
 const getStripe = () => {
@@ -327,7 +328,9 @@ const activatePlan = async (tenantId, plan, stripeSubId) => {
 
 // ── Plan limit enforcement middleware ─────────────────────────
 
-const checkPlanLimits = async (tenantId, resource) => {
+// opts.tenant: pass the already-loaded tenant to skip a lookup for the
+// billingExempt check (the worker has it in hand on every message).
+const checkPlanLimits = async (tenantId, resource, opts = {}) => {
   const sub = await prisma.subscription.findUnique({ where: { tenantId } });
   if (!sub) return;
 
@@ -342,6 +345,9 @@ const checkPlanLimits = async (tenantId, resource) => {
   }
 
   if (resource === 'ai_tokens') {
+    const tenant = opts.tenant
+      || await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, settings: true } });
+    if (isBillingExempt(tenant)) return;
     if (sub.aiTokensUsed >= sub.aiTokensLimit) {
       throw Object.assign(
         new Error('AI token limit reached for this billing period. Upgrade your plan.'),

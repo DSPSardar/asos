@@ -792,7 +792,7 @@ const handleInboundMessage = async (job) => {
   // rather than the conversation going silent; handleHandoff disables AI, so
   // this fires once per conversation, not per message.
   try {
-    await billingService.checkPlanLimits(tenantId, 'ai_tokens');
+    await billingService.checkPlanLimits(tenantId, 'ai_tokens', { tenant });
   } catch (limitErr) {
     if (limitErr.statusCode === 402) {
       logger.warn({ tenantId, leadId: lead.id }, '💸 AI token limit reached — handing conversation to human');
