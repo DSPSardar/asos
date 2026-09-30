@@ -98,7 +98,7 @@ const loadLastInbound = async (tenantId, conversationIds) => {
     SELECT DISTINCT ON (conversation_id) conversation_id AS "conversationId", sent_at AS "sentAt", content
     FROM messages
     WHERE tenant_id = ${tenantId} AND direction = 'INBOUND' AND conversation_id IN (${Prisma.join(conversationIds)})
-    ORDER BY conversation_id, sent_at DESC
+    ORDER BY conversation_id, sent_at DESC, id DESC
   `);
   return new Map(rows.map((r) => [r.conversationId, r]));
 };
@@ -118,7 +118,7 @@ const collectQueue = async (tenantId, { viewer = null, now = new Date(), include
   const convSelect = {
     id: true, status: true, aiEnabled: true, lastMessageAt: true, paymentProofDetected: true,
     lead: { select: { id: true, stage: true, aiScore: true, scoreLabel: true, problemSummary: true, assignedTo: true, contact: { select: { name: true, phone: true } } } },
-    messages: { orderBy: { sentAt: 'desc' }, take: 1, select: { id: true, direction: true, sender: true, sentAt: true, content: true } },
+    messages: { orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { id: true, direction: true, sender: true, sentAt: true, content: true } },
   };
   const [recent, olderOwed, openLeads, snoozed, dismissed] = await Promise.all([
     // Follow-up candidates: anything with activity in the 14-day window.
@@ -151,7 +151,7 @@ const collectQueue = async (tenantId, { viewer = null, now = new Date(), include
           orderBy: { lastMessageAt: 'desc' }, take: 1,
           select: {
             id: true, status: true, aiEnabled: true, lastMessageAt: true,
-            messages: { orderBy: { sentAt: 'desc' }, take: 1, select: { id: true, direction: true, sender: true, sentAt: true, content: true } },
+            messages: { orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { id: true, direction: true, sender: true, sentAt: true, content: true } },
           },
         },
       },

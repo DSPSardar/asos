@@ -25,7 +25,7 @@ const DUPLICATE_REPLY_WINDOW_MS = 5 * 60 * 1000;
 const isRepeatOfLastReply = async ({ conversation, tenantId, content }) => {
   const lastOutbound = await prisma.message.findFirst({
     where: { conversationId: conversation.id, tenantId, direction: 'OUTBOUND', type: 'TEXT' },
-    orderBy: { sentAt: 'desc' },
+    orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
     select: { content: true, sentAt: true },
   });
 

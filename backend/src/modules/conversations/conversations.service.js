@@ -68,7 +68,7 @@ const listConversations = async ({ tenantId, status, page = 1, limit = 20, searc
       include: {
         contact: { select: { name: true, phone: true, waProfilePic: true } },
         lead:    { select: { id: true, stage: true, scoreLabel: true, aiScore: true, humanFollowupRequired: true } },
-        messages: { orderBy: { sentAt: 'desc' }, take: 1, select: { content: true, sender: true, sentAt: true, status: true, direction: true } },
+        messages: { orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { content: true, sender: true, sentAt: true, status: true, direction: true } },
       },
     }),
     prisma.conversation.count({ where }),
@@ -99,7 +99,7 @@ const getConversation = async (tenantId, conversationId) => {
           agent:    { select: { fullName: true, email: true } },
         },
       },
-      messages: { orderBy: { sentAt: 'asc' } },
+      messages: { orderBy: [{ sentAt: 'asc' }, { id: 'asc' }] },
     },
   });
   if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404, expose: true });
@@ -245,7 +245,7 @@ const handback = async (tenantId, conversationId, userId) => {
   try {
     const lastMsg = await prisma.message.findFirst({
       where: { conversationId, tenantId },
-      orderBy: { sentAt: 'desc' },
+      orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
       select: { direction: true, sender: true, content: true, waMessageId: true, sentAt: true },
     });
 
@@ -381,7 +381,7 @@ const getSummary = async (tenantId, conversationId) => {
   const [messages, aiConfig] = await Promise.all([
     prisma.message.findMany({
       where: { conversationId, tenantId },
-      orderBy: { sentAt: 'desc' },
+      orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
       take: 30,
       select: { sender: true, content: true },
     }).then((r) => r.reverse()),
@@ -403,7 +403,7 @@ const getSuggestedReply = async (tenantId, conversationId) => {
   if (!conv) throw Object.assign(new Error('Conversation not found'), { statusCode: 404, expose: true });
   const messages = (await prisma.message.findMany({
     where: { tenantId, conversationId },
-    orderBy: { sentAt: 'desc' },
+    orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
     take: 20,
     select: { sender: true, content: true },
   })).reverse();

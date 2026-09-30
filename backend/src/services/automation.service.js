@@ -72,9 +72,9 @@ const leadSelect = {
 // 24h-window check and the sequence cancel rules.
 const conversationFacts = async (conversationId) => {
   const [last, lastInbound, lastAgent] = await Promise.all([
-    prisma.message.findFirst({ where: { conversationId }, orderBy: { sentAt: 'desc' }, select: { direction: true, sentAt: true } }),
-    prisma.message.findFirst({ where: { conversationId, direction: 'INBOUND' }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
-    prisma.message.findFirst({ where: { conversationId, direction: 'OUTBOUND', sender: 'AGENT' }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
+    prisma.message.findFirst({ where: { conversationId }, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], select: { direction: true, sentAt: true } }),
+    prisma.message.findFirst({ where: { conversationId, direction: 'INBOUND' }, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], select: { sentAt: true } }),
+    prisma.message.findFirst({ where: { conversationId, direction: 'OUTBOUND', sender: 'AGENT' }, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], select: { sentAt: true } }),
   ]);
   return { last, lastInboundAt: lastInbound?.sentAt || null, lastAgentAt: lastAgent?.sentAt || null };
 };

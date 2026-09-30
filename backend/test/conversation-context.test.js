@@ -141,3 +141,18 @@ test('a failed summarizer leaves the old summary intact and reports false', asyn
   assert.equal(ok, false);
   assert.equal(lead().historySummary, 'keep me');
 });
+
+test('messages sharing a timestamp (WhatsApp whole-second bursts) are never duplicated or dropped at the summary boundary', async () => {
+  db._tables.lead.push({ id: 'l1', tenantId: 't1', stage: 'QUALIFYING', historySummary: null, historySummaryCount: 0, historySummaryConversationId: null });
+  const same = new Date(t0);
+  for (let i = 1; i <= 30; i += 1) {
+    const id = `m${String(i).padStart(2, '0')}`;
+    db._tables.message.push({ id, tenantId: 't1', conversationId: 'c1', sentAt: same, sender: i % 2 ? 'CONTACT' : 'AI', direction: i % 2 ? 'INBOUND' : 'OUTBOUND', type: 'TEXT', content: id });
+  }
+  const s = summarizer();
+  await refresh(s.fn);
+  const summarized = s.calls[0].ids;
+  const window = (await load()).messageHistory.map((m) => m.id);
+  assert.deepEqual(summarized, ['m01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09', 'm10']);
+  assert.deepEqual(window, Array.from({ length: 20 }, (_, i) => `m${String(i + 11).padStart(2, '0')}`));
+});

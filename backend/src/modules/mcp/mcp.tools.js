@@ -270,7 +270,7 @@ const conversation = async (tenantId, args = {}) => {
   if (!conv) return { error: 'No conversation with that id in this account. Use find_lead or needs_me to get one.' };
   const messages = (await prisma.message.findMany({
     where: { conversationId: id, tenantId },
-    orderBy: { sentAt: 'desc' },
+    orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
     take,
     select: { direction: true, sender: true, type: true, content: true, sentAt: true },
   })).reverse();

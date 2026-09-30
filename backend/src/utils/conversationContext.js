@@ -55,7 +55,7 @@ const loadConversationContext = async ({ tenantId, conversationId, lead, exclude
   ]);
   const take = summary ? Math.max(window, total - summary.count) : window;
 
-  const newestFirst = await prisma.message.findMany({ where, orderBy: { sentAt: 'desc' }, take, select: HISTORY_SELECT });
+  const newestFirst = await prisma.message.findMany({ where, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take, select: HISTORY_SELECT });
   return {
     messageHistory: sanitizeHistoryForAI(newestFirst.reverse(), paymentDetails),
     contactMessageCount,
@@ -80,7 +80,7 @@ const refreshSummaryIfDue = async ({ tenantId, conversationId, lead, paymentDeta
     if (target - summarized < every) return false;
 
     const fresh = await prisma.message.findMany({
-      where, orderBy: { sentAt: 'asc' }, skip: summarized, take: target - summarized, select: HISTORY_SELECT,
+      where, orderBy: [{ sentAt: 'asc' }, { id: 'asc' }], skip: summarized, take: target - summarized, select: HISTORY_SELECT,
     });
     const text = await summarize({
       tenantId,

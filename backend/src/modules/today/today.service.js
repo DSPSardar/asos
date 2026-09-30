@@ -46,8 +46,8 @@ const threadFacts = async (tenantId, conversationId) => {
   });
   if (!conv) throw notFound();
   const [latest, lastInbound] = await Promise.all([
-    prisma.message.findFirst({ where: { conversationId, tenantId }, orderBy: { sentAt: 'desc' }, select: { id: true, sentAt: true } }),
-    prisma.message.findFirst({ where: { conversationId, tenantId, direction: 'INBOUND' }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
+    prisma.message.findFirst({ where: { conversationId, tenantId }, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], select: { id: true, sentAt: true } }),
+    prisma.message.findFirst({ where: { conversationId, tenantId, direction: 'INBOUND' }, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], select: { sentAt: true } }),
   ]);
   const lastInboundAt = lastInbound?.sentAt || null;
   return { conv, latestMessageId: latest?.id || 'none', lastInboundAt, insideWindow: !!lastInboundAt && (Date.now() - new Date(lastInboundAt)) < WA_WINDOW_MS };
@@ -101,7 +101,7 @@ const getContext = async (tenantId, conversationId, viewer, take = 6) => {
   assertVisible(facts.conv, viewer);
   const messages = (await prisma.message.findMany({
     where: { conversationId, tenantId },
-    orderBy: { sentAt: 'desc' }, take,
+    orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take,
     select: { id: true, direction: true, sender: true, type: true, content: true, sentAt: true, status: true },
   })).reverse();
   return { messages, insideWindow: facts.insideWindow, lastInboundAt: facts.lastInboundAt, status: facts.conv.status, aiEnabled: facts.conv.aiEnabled };

@@ -74,7 +74,7 @@ const threadReport = async (conversationId, aiConfig) => {
   });
   const all = sanitizeHistoryForAI((await prisma.message.findMany({
     where: { conversationId, tenantId: TENANT, NOT: { type: 'AUDIO', direction: 'OUTBOUND' } },
-    orderBy: { sentAt: 'asc' },
+    orderBy: [{ sentAt: 'asc' }, { id: 'asc' }],
     select: { id: true, sender: true, content: true, sentAt: true },
   })), aiConfig.paymentDetails);
 

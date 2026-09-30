@@ -58,7 +58,7 @@ const getSignals = async (tenantId, limit = 20) => {
   const since = new Date(Date.now() - 7 * DAY_MS);
   const msgs = await prisma.message.findMany({
     where: { tenantId, direction: 'INBOUND', sentAt: { gte: since }, signalType: { not: null } },
-    orderBy: { sentAt: 'desc' },
+    orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
     take: limit,
     select: {
       id: true, content: true, signalType: true, sentiment: true, sentAt: true,

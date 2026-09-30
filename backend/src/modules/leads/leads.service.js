@@ -398,7 +398,7 @@ const getHotLeads = async (tenantId, limit = 20) => {
           // to AI". A buying signal is what the buyer said.
           messages: {
             where: { direction: 'INBOUND' },
-            orderBy: { sentAt: 'desc' },
+            orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
             take: 1,
             select: { content: true, sentiment: true, signalType: true, sentAt: true },
           },

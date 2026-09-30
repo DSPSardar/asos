@@ -292,7 +292,7 @@ const loadCandidates = async (tenantId, now) => {
         nextAction: true, businessUnit: true, language: true, alreadyEnrolledAt: true, formSubmittedAt: true, qualificationData: true,
         historySummary: true, historySummaryCount: true, historySummaryConversationId: true,
         contact: { select: { id: true, name: true, phone: true, optedOutAt: true, sentWelcomeVoice: true } } } },
-      messages: { orderBy: { sentAt: 'desc' }, take: 1, select: { id: true, direction: true, content: true, sentAt: true } },
+      messages: { orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { id: true, direction: true, content: true, sentAt: true } },
     },
   });
 };

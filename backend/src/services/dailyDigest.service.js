@@ -380,7 +380,7 @@ const leadInclude = {
     orderBy: { lastMessageAt: 'desc' }, take: 1,
     select: {
       id: true, status: true, aiEnabled: true, lastMessageAt: true,
-      messages: { where: { direction: 'INBOUND' }, orderBy: { sentAt: 'desc' }, take: 1, select: { content: true, sentAt: true } },
+      messages: { where: { direction: 'INBOUND' }, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { content: true, sentAt: true } },
     },
   },
 };
@@ -424,7 +424,7 @@ const collectSections = async (tenantId, tenant, now = new Date()) => {
       select: {
         id: true, status: true, aiEnabled: true, lastMessageAt: true,
         lead: { select: { id: true, stage: true, aiScore: true, scoreLabel: true, problemSummary: true, contact: { select: { name: true, phone: true } } } },
-        messages: { orderBy: { sentAt: 'desc' }, take: 1, select: { direction: true, sentAt: true, content: true } },
+        messages: { orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { direction: true, sentAt: true, content: true } },
       },
     }),
     // 4. Stall candidates: every open lead in a stage that can stall.

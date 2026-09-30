@@ -258,7 +258,7 @@ const releaseTokenLimitHolds = async (tenant, { now = new Date(), limit = RELEAS
     try {
       const last = await prisma.message.findFirst({
         where: { conversationId: c.id, tenantId, direction: 'INBOUND', sender: 'CONTACT', waMessageId: { not: null } },
-        orderBy: { sentAt: 'desc' },
+        orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
       });
       if (!last || !isInsideWindow(last.sentAt, now)) continue;
       const answeredAfter = c.handoffAt ? new Date(c.handoffAt).toISOString() : null;
