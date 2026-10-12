@@ -14,6 +14,7 @@ const prisma = require('../config/database');
 const claudeService = require('../services/claude.service');
 const whatsappService = require('../services/whatsapp.service');
 const welcomeVoiceService = require('../modules/ai-config/welcomeVoice.service');
+const { sendWelcomeFollowup } = require('../services/welcomeFollowup.service');
 const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
@@ -518,6 +519,12 @@ const handleInboundMessage = async (job) => {
             status: welcomeWaMessageId ? 'SENT' : 'FAILED',
           },
         });
+
+        if (welcomeWaMessageId) {
+          // Optional link/text straight after the note (tenant.settings.welcomeFollowupText).
+          // Only on a successful note, so a retried note never doubles the link.
+          await sendWelcomeFollowup({ tenant, phone: normalizedPhone, conversationId: conversation.id, prisma, whatsappService, logger });
+        }
 
         if (!welcomeWaMessageId) {
           // Meta rejected the send (expired media id, bad token, outage…).
