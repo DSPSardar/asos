@@ -115,8 +115,23 @@ const isSuppressed = (lead, { sales = true } = {}) => {
   return false;
 };
 
+// ── Quiet hours ───────────────────────────────────────────────────────
+// Opt-in per tenant: tenant.settings.quietHours = { start: 22, end: 9, tz: 'Asia/Karachi' }.
+// During quiet hours SALES rules (follow-ups, re-engage, reminders) are not
+// evaluated at all, so matches stay eligible and go out on the first tick
+// after quiet hours end. Lifecycle nudges for enrolled students are unaffected.
+const isQuietHours = (tenant, now = new Date()) => {
+  const q = tenant?.settings?.quietHours;
+  if (!q || !Number.isInteger(q.start) || !Number.isInteger(q.end) || q.start === q.end) return false;
+  let hour;
+  try {
+    hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone: q.tz || 'Asia/Karachi' }).format(now));
+  } catch { return false; }
+  return q.start < q.end ? hour >= q.start && hour < q.end : hour >= q.start || hour < q.end;
+};
+
 module.exports = {
   UNIT_MS, delayMs, UNTOUCHABLE_CONV, CANCEL_REASONS, MAX_STEPS, LOST_REASON_SUPPRESS,
   normalizeSteps, validateSteps, planAfterTouch, cancelReasonFor, isChaseTrigger,
-  isSalesRule, suppressionWhere, isSuppressed,
+  isSalesRule, suppressionWhere, isSuppressed, isQuietHours,
 };
