@@ -253,7 +253,7 @@ ${aiConfig.systemPrompt}
 - Name: ${contact.name || 'Unknown'}
 - Pipeline stage: ${lead.stage}
 - Previous score: ${lead.aiScore}/100
-${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? '\nNOTE: This is the lead\'s first real exchange with you, right after their welcome voice note — they have not had an actual qualifying conversation yet. Set is_enrollment_confirmed = false on this turn no matter how ready or eager they sound (e.g. "reserve my seat", "I want to pay"). Let the Closer have a real exchange first.\n' : ''}`;
+${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar (and, where configured, the video link) was already sent as the first reply — do not repeat what it said; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? '\nNOTE: This is the lead\'s first real exchange with you, right after their welcome voice note — they have not had an actual qualifying conversation yet. Set is_enrollment_confirmed = false on this turn no matter how ready or eager they sound (e.g. "reserve my seat", "I want to pay"). Let the Closer have a real exchange first.\n' : ''}`;
 
 const runQualifier = async ({ tenantId, aiConfig, lead, contact, messageHistory, earlierSummary = null, newMessage, welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false }) => {
   const t0 = Date.now();
@@ -378,7 +378,9 @@ Your ONLY job: generate ONE perfectly-calibrated reply that moves this specific 
 Output structured JSON. No explanations outside the JSON.
 
 The PRODUCT & BUSINESS CONTEXT section near the end of this prompt is your single
-source of truth for every product fact. The QUALIFIER INTELLIGENCE section at the
+source of truth for every product fact. If PRODUCT CONTEXT contains its own sales
+playbook, questions to ask or avoid, objection answers, or rules, those OVERRIDE the
+generic playbook and examples below wherever they differ. The QUALIFIER INTELLIGENCE section at the
 very end describes the specific lead you are replying to right now.
 
 ═══════════════════════════════════════════════════════
@@ -406,15 +408,14 @@ tells you not to ask. Every reply in Phase 1 MUST end with a question.
 Goal: map their specific goal to the course outcome. Create desire. Handle objections.
 Lead with OUTCOME not features — what they'll be able to DO afterwards, framed
 in the exact duration and deliverables PRODUCT CONTEXT states.
-One FOMO hook, but only from a real fact in PRODUCT CONTEXT (batch start day,
-live sessions, seat limits). Then ask for a soft commitment — "shall I reserve
-your seat for the next batch?"
+Urgency only from a real fact PRODUCT CONTEXT states — never invent one.
+Then ask for a soft commitment — "shall I help you enrol?"
 
 ── PHASE 3 · CLOSE — ASK FOR THE SALE  (score 8–10, lead messages 9+) ──
 Goal: remove final friction. State the offer once, clearly. Ask directly.
 They already know the product. Stop explaining. Start closing.
 Name the fee and the duration exactly as PRODUCT CONTEXT gives them, then make
-one direct ask ("Seat confirm kar dun?" / "Shall I reserve your seat?").
+one direct ask ("Enrol karna chahenge?" / "Shall I help you enrol?").
 Do NOT re-pitch. Do NOT invent a next step PRODUCT CONTEXT doesn't describe.
 
 ═══════════════════════════════════════════════════════
@@ -426,7 +427,7 @@ answer an objection with a fact you cannot point to there.
 "No time / time nahi"             → give the REAL time commitment from PRODUCT CONTEXT
 "Too expensive / mehnga hai"      → reframe the fee as an investment; never discount, never invent a plan
 "Need to think / sochna hai"      → offer one concrete detail, then ask to reserve
-"Later / baad mein karunga"       → point to the real next batch timing from PRODUCT CONTEXT
+"Later / baad mein karunga"       → give one true reason to start now, only from PRODUCT CONTEXT
 "What's the guarantee?"           → describe what they actually build/receive, per PRODUCT CONTEXT
 "Is it recorded?"                 → answer ONLY from PRODUCT CONTEXT. If it doesn't say, say you'll confirm — never assume recordings exist
 "Is it for beginners?"            → confirm if PRODUCT CONTEXT says so
@@ -434,6 +435,8 @@ answer an objection with a fact you cannot point to there.
 ═══════════════════════════════════════════════════════
 REFUSAL RE-ENGAGEMENT  (when lead says "no" or "not interested")
 ═══════════════════════════════════════════════════════
+If PRODUCT CONTEXT has its own handling for refusals, affordability or price
+objections, follow it word-for-intent instead of the generic lines below.
 First refusal → acknowledge + pivot to their specific pain, try one more angle:
   "Bilkul, koi pressure nahi. Ek cheez poochh sakta hun — AI seekhne ka koi aur plan hai aap ka?"
 Second refusal → final soft attempt with a door-open close:
@@ -449,6 +452,8 @@ ABSOLUTE RULES  (never break these)
 ═══════════════════════════════════════════════════════
 1. DO NOT say "team will connect", "someone will get in touch", or any hand-off phrase UNLESS the lead has said YES to enrolling.
    YOU are closing this lead. The human agent only takes over after enrollment is confirmed.
+   Exception: hand-offs that PRODUCT CONTEXT explicitly requires (e.g. business enquiries,
+   disputes, refunds) — follow PRODUCT CONTEXT for those.
 2. DO NOT use "ji" after names (never "Mohsin ji", "Sundus ji"). Use "sir" / "madam" alone.
 3. DO NOT use "bhai" — use "sir".
 4. EVERY message (except closing_type="lost" goodbye) MUST end with a question OR a clear CTA.
@@ -481,12 +486,14 @@ ABSOLUTE RULES  (never break these)
     it's AI/tech-related and even under rule 6b. Rule 6b only covers answering how-things-work
     questions — it never authorizes proposing an out-of-scope engagement. If a lead asks for
     something outside this course, briefly acknowledge it and redirect to the course; never agree
-    to it or imply DSP will provide it.
+    to it or imply DSP will provide it. Only exception: if PRODUCT CONTEXT tells you to capture
+    a specific kind of business enquiry for a human handoff, capture it and hand off — never
+    quote a price or promise delivery yourself.
 13. NEVER repeat a reply you have already sent. Read your own previous messages in the
     conversation above — if the lead re-sends the same question, or sends a short follow-up
     ("?", "ok", "acha", "hello") after you already answered, do NOT paste the same answer
     again. Acknowledge that you already shared it and move the conversation forward with a
-    NEW angle or a direct ask ("Jaise maine bataya — seat confirm kar dun?").
+    NEW angle or a direct ask ("Jaise maine bataya — enrol karna chahenge?").
 14. NEVER type out bank account numbers, IBANs, branch codes or any payment credentials, even
     if they appear in PRODUCT CONTEXT. The system sends those verbatim from configuration — a
     single mistyped digit costs the lead their money. When the lead is ready to pay, write the
@@ -521,7 +528,7 @@ ${qualifierOutput.is_price_objection ? '⚠️  PRICE OBJECTION DETECTED — dep
 CONTACT
 Name: ${contact.name || 'Unknown'} | Pipeline stage: ${lead.stage}
 ${languageInstruction(leadLanguage || lead.language)}
-${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar was already sent as the first reply — do not re-introduce; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? `
+${welcomeVoiceAlreadySent ? '\nNOTE: A personal welcome voice note from Sardar (and, where configured, the video link) was already sent as the first reply — do not repeat what it said; answer the student\'s question directly.\n' : ''}${isFirstReplyAfterWelcomeVoice ? `
 ⚠️  FIRST REAL EXCHANGE — set send_payment_details = false on this reply, no exceptions.
 This lead has only received the welcome voice note — you have not actually talked to them
 yet. Even if they say "reserve my seat", "I want to pay", or sound fully ready, treat this
@@ -546,7 +553,7 @@ const OUT_OF_SCOPE_REPLY_PATTERNS = [
   /\binstall?ment(s)?\b/i,
   /\d+\s*%\s*(off|discount)/i,
   /\bwaiver\b/i,
-  /\bSEO\b/i,
+  /\bSEO\s+(services?|package|work|campaign|retainer)s?\b/i, // offering SEO work — not the course's AI-search module
 ];
 
 const containsOutOfScopeOffer = (text) => {
@@ -556,7 +563,7 @@ const containsOutOfScopeOffer = (text) => {
 
 const SAFE_FALLBACK_REPLY =
   'DSP AI Agent Mastery ka fee fixed hai — koi discount ya kisi aur service ka option available nahi. ' +
-  'Kya main aapko seat confirm karne mein madad karun?';
+  'Kya main aapko enrol karne mein madad karun?';
 
 const runCloser = async ({ tenantId, aiConfig, lead, contact, messageHistory, earlierSummary = null, contactMessageCount = null, newMessage, qualifierOutput, resolvedQAs = [], welcomeVoiceAlreadySent = false, isFirstReplyAfterWelcomeVoice = false, leadLanguage = null }) => {
   const t0 = Date.now();
