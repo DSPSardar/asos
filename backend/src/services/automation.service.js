@@ -45,7 +45,7 @@ const { requestContext, runWithSystemScope } = require('../middleware/requestCon
 const {
   UNIT_MS, delayMs, UNTOUCHABLE_CONV, CANCEL_REASONS,
   normalizeSteps, validateSteps, planAfterTouch, cancelReasonFor, isChaseTrigger,
-  isSalesRule, suppressionWhere,
+  isSalesRule, suppressionWhere, isQuietHours,
 } = require('./automation.steps');
 
 const TICK_MINUTES = 10;
@@ -350,7 +350,9 @@ const runTenant = async (tenantId) => requestContext.run({ requestId: `automatio
     else summary.skipped += 1;
   };
 
+  const quiet = isQuietHours(tenant);
   for (const rule of rules) {
+    if (quiet && isSalesRule(rule)) { summary.skipped += 1; continue; }
     // 1. Due follow-up touches first, so a fresh blast can't starve them.
     let budget = MAX_SENDS_PER_RULE_PER_TICK;
     try {
