@@ -14,7 +14,7 @@ const prisma = require('../config/database');
 const claudeService = require('../services/claude.service');
 const whatsappService = require('../services/whatsapp.service');
 const welcomeVoiceService = require('../modules/ai-config/welcomeVoice.service');
-const { sendWelcomeFollowup } = require('../services/welcomeFollowup.service');
+const { sendWelcomeFollowup, sendCatchUpWelcome } = require('../services/welcomeFollowup.service');
 const transcriptionService = require('../services/transcription.service');
 const metaService = require('../services/meta.service');
 const notificationService = require('../services/notification.service');
@@ -550,6 +550,14 @@ const handleInboundMessage = async (job) => {
       }
       return;
     }
+  }
+
+  // ── 6b-bis. Catch-up: an existing lead who never got the video link gets
+  // the welcome voice note + link once on this message; the AI still replies.
+  try {
+    await sendCatchUpWelcome({ tenant, contact, lead, phone: normalizedPhone, conversationId: conversation.id, prisma, whatsappService, welcomeVoiceService, logger });
+  } catch (err) {
+    logger.error({ err, contactId: contact.id }, 'Catch-up welcome failed — continuing to AI reply');
   }
 
   // ── 6c. Payment proof ─────────────────────────────────────────────
