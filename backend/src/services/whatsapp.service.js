@@ -33,7 +33,7 @@ const isMockMode = (tenant) => {
 
 // ── Send text message ─────────────────────────────────────────────────
 
-const sendText = async (tenant, to, text) => {
+const sendText = async (tenant, to, text, opts = {}) => {
   // ── Mock mode: skip Meta API, log to console ──────────────────────
   if (isMockMode(tenant)) {
     const mockId = `mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -49,7 +49,7 @@ const sendText = async (tenant, to, text) => {
       recipient_type: 'individual',
       to: normalizePhone(to),
       type: 'text',
-      text: { body: text, preview_url: false },
+      text: { body: text, preview_url: opts.previewUrl === true },
     });
 
     logger.info({ to, tenantId: tenant.id, waMessageId: res.data?.messages?.[0]?.id }, 'WA text message sent');
