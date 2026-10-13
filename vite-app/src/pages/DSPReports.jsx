@@ -84,6 +84,9 @@ export default function DSPReports() {
       analyticsAPI.conversions({ from, to }),
     ]).then(([ovRes, fnRes, revRes, srcRes, convRes]) => {
 
+      // All-time revenue, shared by the KPI card and the trend line below.
+      let allTimeRevenue = null;
+
       // KPIs from overview
       if (ovRes.status === 'fulfilled') {
         const ov = ovRes.value.data?.data || ovRes.value.data;
@@ -96,6 +99,7 @@ export default function DSPReports() {
           // Falls back to the period-only fields on an older backend.
           const allStudents = ov.enrollment?.allTime?.students ?? ov.leads?.enrolled ?? won;
           const allRevenue  = ov.enrollment?.allTime?.revenue  ?? ov.revenue?.total ?? 0;
+          allTimeRevenue = ov.enrollment?.allTime?.revenue ?? null;
           const perStudents = ov.enrollment?.period?.students  ?? ov.leads?.enrolled ?? won;
           const perRevenue  = ov.enrollment?.period?.revenue   ?? ov.revenue?.total ?? 0;
           const cohort  = ov.leads?.cohortEnrolled ?? perStudents;
@@ -131,7 +135,11 @@ export default function DSPReports() {
       if (revRes.status === 'fulfilled') {
         const timeline = revRes.value.data?.data?.timeline || revRes.value.data?.timeline || [];
         if (timeline.length > 0) {
-          let cum = 0;
+          // Always show the FULL amount earned so far: start the line at the
+          // revenue earned before this window, so it ends at the all-time
+          // total on the Revenue card (not just the last N days).
+          const inWindow = timeline.reduce((n, r) => n + (Number(r.revenue) || 0), 0);
+          let cum = allTimeRevenue != null ? Math.max(0, allTimeRevenue - inWindow) : 0;
           const trend = timeline.map(r => {
             cum += Number(r.revenue) || 0;
             return { date: (r.date||'').slice(5) || r.date, revenue: cum, enrollments: 0 };
@@ -302,7 +310,7 @@ export default function DSPReports() {
 
         {/* ── Row 2: Revenue trend ─────────────────────────────────── */}
         <div className="bg-surface/60 border border-slate-800/60 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-slate-200 mb-4">Revenue Trend (Last {period} days)</h3>
+          <h3 className="text-sm font-semibold text-slate-200 mb-4">Total Revenue Earned (last {period} days shown)</h3>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={revTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
