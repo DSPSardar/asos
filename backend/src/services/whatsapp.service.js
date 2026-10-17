@@ -331,6 +331,9 @@ const parseInboundMessage = (webhookBody) => {
         status: value.statuses[0].status.toUpperCase(),
         phone: value.statuses[0].recipient_id,
         timestamp: value.statuses[0].timestamp,
+        // Meta attaches the reason only on `failed` — without it a FAILED
+        // row says nothing about *why* (blocked, 24h window, rate cap…).
+        errors: value.statuses[0].errors || null,
       };
     }
 

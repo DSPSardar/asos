@@ -1286,7 +1286,7 @@ const extractAdAttribution = (referral) => {
 // ─────────────────────────────────────────────────────────────────────
 
 const processStatusUpdate = async (job) => {
-  const { waMessageId, status, tenantId } = job.data;
+  const { waMessageId, status, tenantId, errors } = job.data;
 
   const statusMap = {
     SENT: 'SENT', DELIVERED: 'DELIVERED', READ: 'READ', FAILED: 'FAILED',
@@ -1303,8 +1303,20 @@ const processStatusUpdate = async (job) => {
       status: mappedStatus,
       ...(mappedStatus === 'DELIVERED' && { deliveredAt: new Date() }),
       ...(mappedStatus === 'READ'      && { readAt: new Date() }),
+      ...(mappedStatus === 'FAILED'    && { failureReason: formatWaErrors(errors) }),
     },
   });
+};
+
+// "131049: This message was not delivered to maintain healthy ecosystem
+// engagement. (…details)" — compact enough for a column, complete enough
+// to act on.
+const formatWaErrors = (errors) => {
+  if (!Array.isArray(errors) || !errors.length) return 'Meta reported failure with no error detail';
+  return errors.map((e) => {
+    const detail = e?.error_data?.details ? ` (${e.error_data.details})` : '';
+    return `${e?.code ?? '?'}: ${e?.title || e?.message || 'unknown'}${detail}`;
+  }).join(' | ').slice(0, 500);
 };
 
 // ─────────────────────────────────────────────────────────────────────

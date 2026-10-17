@@ -120,11 +120,21 @@ router.post('/', async (req, res) => {
     // ── 4. Route by event type ────────────────────────────────────
     if (parsed.type === 'status') {
       // Status update: sent → delivered → read → failed
+      if (parsed.status === 'FAILED') {
+        logger.warn({
+          event: 'wa.message.failed',
+          tenantId: tenant.id,
+          phone: parsed.phone,
+          waMessageId: parsed.waMessageId,
+          errors: parsed.errors,
+        }, 'WA message FAILED at Meta');
+      }
       await publishStatusUpdate({
         waMessageId: parsed.waMessageId,
         status: parsed.status,
         phone: parsed.phone,
         tenantId: tenant.id,
+        errors: parsed.errors,
       });
       return;
     }
