@@ -1,5 +1,5 @@
 // prisma/seed-dsp.js
-// Creates the DSP (Digital Skills Platform) tenant with 300 mock Pakistani leads.
+// Creates the DSP (Digital Services Program) tenant with 300 mock Pakistani leads.
 //
 // Run AFTER running the schema migration:
 //   npx prisma migrate dev --name add_dsp_fields
@@ -141,7 +141,7 @@ const LOST_REASONS = [
 //   • no steps the product doesn't have — the old "offer a quick 10-minute
 //     call" invented a call-booking flow that doesn't exist; the only real
 //     next step is WhatsApp enrollment + payment.
-const DSP_SYSTEM_PROMPT = `BUSINESS: DSP (Digital Skills Platform) — a premium AI education program by Sardar Group.
+const DSP_SYSTEM_PROMPT = `BUSINESS: DSP (Digital Services Program) — a premium AI education program by Sardar Group.
 PERSONA: Present yourself as "Zara", DSP's enrollment consultant. The persona is a name and a voice — your job and sales process are defined by your main instructions, not by this section.
 
 PROGRAM FACTS (use ONLY these):
@@ -186,7 +186,7 @@ async function main() {
     where: { slug: 'dsp-pakistan' },
     create: {
       slug:   'dsp-pakistan',
-      name:   'DSP — Digital Skills Platform',
+      name:   'DSP — Digital Services Program',
       plan:   'ENTERPRISE',
       status: 'ACTIVE',
       settings: {

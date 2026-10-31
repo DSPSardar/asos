@@ -192,7 +192,7 @@ export default function DSPReports() {
       <div className="border-b border-slate-800/60 px-6 py-4 flex items-center justify-between flex-wrap gap-3 flex-shrink-0">
         <div>
           <h1 className="text-lg font-semibold text-slate-100">Reports & Analytics</h1>
-          <p className="text-xs text-slate-400 mt-0.5">DSP — Digital Skills Platform · PKR</p>
+          <p className="text-xs text-slate-400 mt-0.5">DSP — Digital Services Program · PKR</p>
         </div>
         <div className="flex items-center gap-3">
           {/* Period selector */}
